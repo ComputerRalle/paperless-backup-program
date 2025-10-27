@@ -1,0 +1,47 @@
+procedure DockerComposeYmlLadenAnalysieren();
+
+
+procedure TForm1.DockerComposeYmlLadenAnalysieren(); //Aktuell nicht verwendet
+var
+  Yml: TStringList;
+  i: Integer;
+  InVolumeSelection: Boolean;
+  VolumeNames: TStringList;
+  VolumeName: string;
+begin
+  Yml := TStringList.Create;
+  VolumeNames := TStringList.Create;
+  try
+    Yml.LoadFromFile(ComposePfad + '\docker-compose.yml');
+    InVolumeSelection := False;
+
+    for i := 0 to Yml.Count - 1 do
+    begin
+      if Trim(Yml[i]) = '#Backup-Markierung' then
+      begin
+        InVolumeSelection := True;
+        Continue;
+      end;
+
+      if InVolumeSelection then
+      begin
+        if Trim(Yml[i]) = 'volumes:' then
+          Continue;
+        if (Trim(Yml[i]) = '') or (not Yml[i].StartsWith('  ')) then Break;
+        VolumeName := Trim(StringReplace(Yml[i], ':', '', []));
+        VolumeNames.Add(VolumeName);
+        if VolumeName = 'data' then
+          VolumeData := ComposeName + '_data'
+        else if VolumeName = 'media' then
+          VolumeMedia := ComposeName + '_media'
+        else if VolumeName = 'export' then
+          VolumeExport := ComposeName + '_export'
+        else if VolumeName = 'db_data' then
+          VolumeDB := ComposeName + '_db_data';
+      end;
+    end;
+  finally
+    Yml.Free;
+    VolumeNames.Free;
+  end;
+end;
