@@ -273,23 +273,35 @@ var
   ProgramVersion: String;
   VersionInIni: String;
 begin
-	try
- 		Ss := TStringStream.Create;
-  	NetHTTPClient1.Get('https://ralf-peter-kleinert.de/paperless-backup-programm-update/update.ini', Ss);
-    Ss.SaveToFile(AppDataFolder + '\update.ini');
-	finally
-  	Ss.Free;
-	end;
-
-	Sl := TStringList.Create;
-	try
-  	Sl.LoadFromFile(AppDataFolder + '\update.ini');
-  	VersionInIni := Trim(Sl[0]);
-	finally
-  	Sl.Free;
-	end;
 
   ProgramVersion := GetExeVersion;
+
+  if not FileExists(AppDataFolder + '\update.ini') then
+  VersionInIni := ProgramVersion;
+
+	try
+  	Ss := TStringStream.Create;
+  	try
+    	NetHTTPClient1.Get('https://ralf-peter-kleinert.de/paperless-backup-programm-update/update.ini', Ss);
+    	Ss.SaveToFile(AppDataFolder + '\update.ini');
+  	finally
+    	Ss.Free;
+  	end;
+	except
+  	VersionInIni := ProgramVersion; // no Update if Server down
+  	Exit;
+	end;
+
+  if FileExists(AppDataFolder + '\update.ini') then
+		begin
+			Sl := TStringList.Create;
+			try
+  			Sl.LoadFromFile(AppDataFolder + '\update.ini');
+  			VersionInIni := Trim(Sl[0]);
+			finally
+  			Sl.Free;
+			end;
+    end;
 
   //Test
   //ShowMessage(ProgramVersion);
@@ -310,8 +322,6 @@ begin
     ProgramUpdateLbl.Font.Color := clYellow;
   end;
 end;
-
-
 
 // Stores the default versions of all Docker components immediately in "Einstellungen.ini".
 procedure TMainformFrm.WriteStandardVersionAfterInstallation();
@@ -502,8 +512,6 @@ begin
     Ini.Free;
   end;
 
-
-
   ErzeugeBackupScript(ExtractFilePath(ComposePfad));
   ErzeugeBackupPlanScript(ExtractFilePath(ComposePfad));
 
@@ -516,7 +524,6 @@ begin
   //Falls txt vorhanden, löschen
   TxtPfad := IncludeTrailingPathDelimiter(AppDataFolder) + 'DockerComposePfad.txt';
   if FileExists(TxtPfad) then DeleteFile(TxtPfad);
-
 end;
 
 

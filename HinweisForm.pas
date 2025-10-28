@@ -88,7 +88,7 @@ var
 	PaperlessContainerLaeuft: Boolean;
   DockerVorhanden: Boolean;
   BeendeApplicationBeiClose: Boolean;
-  //Versionen der Images
+  //Version of Images
   paperless_ngx_version: string;
   postgresql_version: string;
   redis_version: string;
