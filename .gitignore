@@ -40,3 +40,6 @@ iOS/
 # Packages Cache
 __history/
 __recovery/
+
+# Private
+*Entfernte Prozeduren.txt
