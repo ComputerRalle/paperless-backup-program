@@ -96,6 +96,8 @@
         <VerInfo_MinorVer>25</VerInfo_MinorVer>
         <VerInfo_Release>10</VerInfo_Release>
         <VerInfo_Build>103</VerInfo_Build>
+        <DCC_ExeOutput>C:\Users\konta\Desktop\</DCC_ExeOutput>
+        <DCC_Define>Release;$(DCC_Define)</DCC_Define>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_2)'!=''">
         <DCC_LocalDebugSymbols>false</DCC_LocalDebugSymbols>
@@ -117,7 +119,7 @@
         <DelphiCompile Include="$(MainSource)">
             <MainSource>MainSource</MainSource>
         </DelphiCompile>
-        <DCCReference Include="MainForm.pas">
+        <DCCReference Include="Mainform.pas">
             <Form>Form1</Form>
             <FormType>dfm</FormType>
         </DCCReference>

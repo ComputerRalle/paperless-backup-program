@@ -61374,4 +61374,9 @@ object MainformFrm: TMainformFrm
       end
     end
   end
+  object NetHTTPClient1_UpdateInfo: TNetHTTPClient
+    UserAgent = 'Embarcadero URI Client/1.0'
+    Left = 876
+    Top = 453
+  end
 end

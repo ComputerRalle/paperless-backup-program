@@ -215,10 +215,10 @@ var
   Ini: TIniFile;
 begin
   BeendeApplicationBeiClose := False;
-  if not DirectoryExists(Mainform.AppDataOrdner) then ForceDirectories(AppDataOrdner);
+  if not DirectoryExists(Mainform.AppDataFolder) then ForceDirectories(AppDataFolder);
   //Verlagerung der Dateien in die ini
   //TFile.WriteAllText(IncludeTrailingPathDelimiter(Hauptformular.AppDataOrdner) + 'HinweisVerstanden.txt', 'ja', TEncoding.UTF8);
-  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(Mainform.AppDataOrdner) + 'Einstellungen.ini');
+  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + 'Einstellungen.ini');
    try
     try
       Ini.WriteString('Einrichtung', 'Hinweis verstanden', 'Ja');
@@ -294,7 +294,7 @@ begin
   	DockerVorhanden := True;
   end;
 
-  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(Mainform.AppDataOrdner) + 'Einstellungen.ini');
+  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + 'Einstellungen.ini');
   try
    	try
   		// Vor dem Auslösen des Skriptes den Pfad speichern
@@ -423,7 +423,7 @@ var
 begin
 
   //Versionen der Images auslesen, wenn leer Standard
-  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataOrdner) + 'Einstellungen.ini');
+  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
   try
 		MainformFrm.redis_version_edit.Text := Ini.ReadString('Versionen', 'Redis-Version', '');
 		if MainformFrm.redis_version_edit.Text = '' then
@@ -465,7 +465,7 @@ begin
     ini.Free;
   end;
 
-  ComposePfad := IncludeTrailingPathDelimiter(AppDataOrdner) + 'docker-compose.yml';
+  ComposePfad := IncludeTrailingPathDelimiter(AppDataFolder) + 'docker-compose.yml';
 
   Inhalt :=
     '#compose Datei fuer den Einsatz des "Paperless Backup Programm" von ComputerRalle' + sLineBreak +
@@ -557,7 +557,7 @@ begin
   TFile.WriteAllText(ComposePfad, Inhalt, TEncoding.UTF8);
 
   // DockerCoposePfad.txt zum einlesen des Pfades schreibenm wird bei Start geprüft
-  TFile.WriteAllText(IncludeTrailingPathDelimiter(AppDataOrdner) + 'DockerComposePfad.txt', ComposePfad);
+  TFile.WriteAllText(IncludeTrailingPathDelimiter(AppDataFolder) + 'DockerComposePfad.txt', ComposePfad);
 
 
   //Wenn neue docker-compose.yml im AppDataOrdner angelegt werden muss, wird das ausgeschaltet
@@ -565,13 +565,13 @@ begin
   if (NeueComposeSchreiben = False) and (IstEsUpdate = False) then
   begin
   	//CMD Skript zum starten von docker-compose.yml erstellen und speichern
-  	CmdZielPfad := IncludeTrailingPathDelimiter(AppDataOrdner) + 'starte_paperless.cmd';
+  	CmdZielPfad := IncludeTrailingPathDelimiter(AppDataFolder) + 'starte_paperless.cmd';
 		if not FileExists(CmdZielPfad) then
   	begin
     	CmdDatei := TStringList.Create;
     	try
       	CmdDatei.Add('@echo off');
-      	CmdDatei.Add('cd /d "' + AppDataOrdner + '"');
+      	CmdDatei.Add('cd /d "' + AppDataFolder + '"');
       	CmdDatei.Add('docker compose -f docker-compose.yml up -d');
       	CmdDatei.Add('echo Systeme starten. Fenster wird gleich geschlossen ...');
       	CmdDatei.Add('for /L %%i in (10,-1,1) do (echo %%i & timeout /t 1 >nul)');
@@ -591,13 +591,13 @@ begin
     MainformFrm.LeseContainerNamenAusDatei;
     //ShowMessage(PaperlessDBName);
     //CMD Skript zum Neustart von Docker mit der neuen compose erstellen und speichern
-  	CmdZielPfad := IncludeTrailingPathDelimiter(AppDataOrdner) + 'update_paperless.cmd';
+  	CmdZielPfad := IncludeTrailingPathDelimiter(AppDataFolder) + 'update_paperless.cmd';
 		if not FileExists(CmdZielPfad) OR IstEsUpdate = True then
   	begin
     	CmdDatei := TStringList.Create;
     	try
       	CmdDatei.Add('@echo off');
-      	CmdDatei.Add('cd /d "' + AppDataOrdner + '"');
+      	CmdDatei.Add('cd /d "' + AppDataFolder + '"');
         CmdDatei.Add('docker compose -f docker-compose.yml down');
       	CmdDatei.Add('echo Neustart wird kurz abgewartrt ...');
       	CmdDatei.Add('for /L %%i in (5,-1,1) do (echo %%i & timeout /t 1 >nul)');
@@ -763,7 +763,7 @@ begin
   if not DirectoryExists(FinalPfad) then
     ForceDirectories(FinalPfad);
 
-  IniPfad := IncludeTrailingPathDelimiter(Mainform.AppDataOrdner) + 'Einstellungen.ini';
+  IniPfad := IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + 'Einstellungen.ini';
   if not FileExists(IniPfad) then Exit;
 
   Ini := TIniFile.Create(IniPfad);
