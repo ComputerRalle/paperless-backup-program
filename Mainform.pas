@@ -233,6 +233,7 @@ type
     procedure LoadUpdateIniFile();
     function GetExeVersion: string;
     procedure ProgramUpdateLblClick(Sender: TObject);
+    function VersionToInt(const V: string): string;
 
   private
     procedure ErzeugeBackupScript(const ComposePfad: string);
@@ -272,6 +273,7 @@ var
   Sl: TStringList;
   ProgramVersion: String;
   VersionInIni: String;
+  test1, test2 : String;
 begin
 
   ProgramVersion := GetExeVersion;
@@ -306,8 +308,9 @@ begin
   //Test
   //ShowMessage(ProgramVersion);
   //ShowMessage(VersionInIni);
+  //ShowMessage(VersionToInt(VersionInIni) + ' ' + VersionToInt(ProgramVersion));
 
-  if VersionInIni > ProgramVersion then
+  if VersionToInt(VersionInIni) > VersionToInt(ProgramVersion) then
   begin
     ProgramUpdateLbl.ParentColor := False;
     ProgramUpdateLbl.Caption := 'Update vorhanden - hier klicken';
@@ -2994,5 +2997,16 @@ begin
   end;
 end;
 
-
+// Converts dotted version (x.x.x.x) into a fixed-width sortable string for correct version comparison
+function TMainformFrm.VersionToInt(const V: string): string;
+var
+  P: TArray<string>;
+begin
+  P := V.Split(['.']);
+  Result :=
+    IntToStr(StrToIntDef(P[0], 0)) +
+    Format('%.3d', [StrToIntDef(P[1], 0)]) +
+    Format('%.3d', [StrToIntDef(P[2], 0)]) +
+    Format('%.3d', [StrToIntDef(P[3], 0)]);
+end;
 end.
