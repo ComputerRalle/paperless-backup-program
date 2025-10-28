@@ -56,6 +56,23 @@ object MainformFrm: TMainformFrm
       BevelOuter = bvNone
       ParentBackground = False
       TabOrder = 0
+      object ProgramUpdateLbl: TLabel
+        Left = 294
+        Top = 502
+        Width = 137
+        Height = 18
+        Cursor = crHandPoint
+        Caption = 'ProgramUpdateLbl'
+        Color = clBtnFace
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWindowText
+        Font.Height = -15
+        Font.Name = 'Verdana'
+        Font.Style = []
+        ParentColor = False
+        ParentFont = False
+        OnClick = ProgramUpdateLblClick
+      end
       object Panel2: TPanel
         Left = 0
         Top = 233
@@ -60376,11 +60393,10 @@ object MainformFrm: TMainformFrm
       end
     end
     object BackupPlanPan: TPanel
-      Left = 4
+      Left = 1000
       Top = 29
       Width = 836
       Height = 559
-      Align = alClient
       BevelOuter = bvNone
       ParentBackground = False
       TabOrder = 1
@@ -60642,11 +60658,10 @@ object MainformFrm: TMainformFrm
       end
     end
     object RetentionPan: TPanel
-      Left = 4
+      Left = 1000
       Top = 29
       Width = 836
       Height = 559
-      Align = alClient
       BevelOuter = bvNone
       ParentBackground = False
       TabOrder = 2
@@ -60770,11 +60785,10 @@ object MainformFrm: TMainformFrm
       end
     end
     object EMailSettingsPan: TPanel
-      Left = 4
+      Left = 1000
       Top = 29
       Width = 836
       Height = 559
-      Align = alClient
       BevelOuter = bvNone
       ParentBackground = False
       ParentColor = True
@@ -60958,11 +60972,10 @@ object MainformFrm: TMainformFrm
       end
     end
     object SettingsPan: TPanel
-      Left = 4
+      Left = 1000
       Top = 29
       Width = 836
       Height = 559
-      Align = alClient
       BevelOuter = bvNone
       ParentBackground = False
       ParentColor = True
@@ -61211,11 +61224,10 @@ object MainformFrm: TMainformFrm
       end
     end
     object HelpPan: TPanel
-      Left = 4
+      Left = 1000
       Top = 29
       Width = 836
       Height = 559
-      Align = alClient
       BevelOuter = bvNone
       ParentBackground = False
       ParentColor = True
@@ -61374,7 +61386,7 @@ object MainformFrm: TMainformFrm
       end
     end
   end
-  object NetHTTPClient1_UpdateInfo: TNetHTTPClient
+  object NetHTTPClient1: TNetHTTPClient
     UserAgent = 'Embarcadero URI Client/1.0'
     Left = 876
     Top = 453

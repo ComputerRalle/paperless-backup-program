@@ -179,7 +179,8 @@ type
     busybox_version_edit: TEdit;
     Memo1: TMemo;
     CheckBox1: TCheckBox;
-    NetHTTPClient1_UpdateInfo: TNetHTTPClient;
+    NetHTTPClient1: TNetHTTPClient;
+    ProgramUpdateLbl: TLabel;
     procedure PaperlessBackupStartenBtnClick(Sender: TObject);
     //procedure ComposeOrdnerWaehlenBtnClick(Sender: TObject);
     procedure BuyMeACoffeBtnClick(Sender: TObject);
@@ -229,6 +230,10 @@ type
     procedure CheckBox1Click(Sender: TObject);
     procedure WriteStandardVersionAfterInstallation();
 
+    procedure LoadUpdateIniFile();
+    function GetExeVersion: string;
+    procedure ProgramUpdateLblClick(Sender: TObject);
+
   private
     procedure ErzeugeBackupScript(const ComposePfad: string);
   public
@@ -260,19 +265,55 @@ implementation
 
 {$R *.dfm}
 
-// --------------------------------------------------------------
-// Diese Prozedur schreibt direkt nach der Installation von Paperless
-// die aktuellen Standard-Versionen aller verwendeten Docker-Komponenten
-// in die Datei "Einstellungen.ini".
-// Dadurch stehen die Versionsnummern sofort für Backups zur Verfügung,
-// ohne dass der Benutzer erst auf "Einstellungen speichern" klicken muss.
-//
-// This procedure writes the current default versions of all used
-// Docker components into the "Einstellungen.ini" file immediately
-// after the Paperless installation.
-// This ensures that version numbers are available for backups
-// without requiring the user to click "Save Settings" first.
-// --------------------------------------------------------------
+// Load update.ini from web server, display update available
+procedure TMainformFrm.LoadUpdateIniFile();
+var
+  Ss: TStringStream;
+  Sl: TStringList;
+  ProgramVersion: String;
+  VersionInIni: String;
+begin
+	try
+ 		Ss := TStringStream.Create;
+  	NetHTTPClient1.Get('https://ralf-peter-kleinert.de/paperless-backup-programm-update/update.ini', Ss);
+    Ss.SaveToFile(AppDataFolder + '\update.ini');
+	finally
+  	Ss.Free;
+	end;
+
+	Sl := TStringList.Create;
+	try
+  	Sl.LoadFromFile(AppDataFolder + '\update.ini');
+  	VersionInIni := Trim(Sl[0]);
+	finally
+  	Sl.Free;
+	end;
+
+  ProgramVersion := GetExeVersion;
+
+  //Test
+  //ShowMessage(ProgramVersion);
+  //ShowMessage(VersionInIni);
+
+  if VersionInIni > ProgramVersion then
+  begin
+    ProgramUpdateLbl.ParentColor := False;
+    ProgramUpdateLbl.Caption := 'Update vorhanden - hier klicken';
+    ProgramUpdateLbl.StyleElements := StyleElements - [seFont];
+    ProgramUpdateLbl.Font.Color := clYellow;
+    ProgramUpdateLbl.Font.Style := [fsBold];
+  end else
+  begin
+  	ProgramUpdateLbl.ParentColor := False;
+  	ProgramUpdateLbl.Caption := 'Programm aktuell';
+    ProgramUpdateLbl.StyleElements := StyleElements - [seFont];
+    ProgramUpdateLbl.Font.Color := clYellow;
+  end;
+end;
+
+
+
+// Stores the default versions of all Docker components immediately in "Einstellungen.ini".
 procedure TMainformFrm.WriteStandardVersionAfterInstallation();
 var
   Ini: TIniFile;
@@ -1046,6 +1087,9 @@ begin
   finally
     ini.Free;
   end;
+
+
+  LoadUpdateIniFile();
 end;
 
 procedure TMainformFrm.AutostartBackup();
@@ -2912,8 +2956,36 @@ begin
   ShellExecute(0, 'open', 'https://dashboard.mailerlite.com/forms/1051644/128840345310988026/share', nil, nil, SW_SHOWNORMAL);
 end;
 
+procedure TMainformFrm.ProgramUpdateLblClick(Sender: TObject);
+begin
+  ShellExecute(0, 'open', 'https://downloads.ralf-peter-kleinert.de/download/paperless-backup-program', nil, nil, SW_SHOWNORMAL);
+end;
 
-
+// Returns the version of the running executable as string
+function TMainformFrm.GetExeVersion: string;
+var
+  Size, Handle: DWORD;
+  Buffer: Pointer;
+  FileInfo: PVSFixedFileInfo;
+begin
+  Result := '';
+  Size := GetFileVersionInfoSize(PChar(ParamStr(0)), Handle);
+  if Size > 0 then
+  begin
+    GetMem(Buffer, Size);
+    try
+      if GetFileVersionInfo(PChar(ParamStr(0)), Handle, Size, Buffer) and
+         VerQueryValue(Buffer, '\', Pointer(FileInfo), Size) then
+        Result :=
+          IntToStr(FileInfo.dwFileVersionMS shr 16) + '.' +
+          IntToStr(FileInfo.dwFileVersionMS and $FFFF) + '.' +
+          IntToStr(FileInfo.dwFileVersionLS shr 16) + '.' +
+          IntToStr(FileInfo.dwFileVersionLS and $FFFF);
+    finally
+      FreeMem(Buffer);
+    end;
+  end;
+end;
 
 
 end.
