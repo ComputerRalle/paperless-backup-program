@@ -60393,10 +60393,11 @@ object MainformFrm: TMainformFrm
       end
     end
     object BackupPlanPan: TPanel
-      Left = 1000
+      Left = 4
       Top = 29
       Width = 836
       Height = 559
+      Align = alClient
       BevelOuter = bvNone
       ParentBackground = False
       TabOrder = 1
@@ -60658,10 +60659,11 @@ object MainformFrm: TMainformFrm
       end
     end
     object RetentionPan: TPanel
-      Left = 1000
+      Left = 4
       Top = 29
       Width = 836
       Height = 559
+      Align = alClient
       BevelOuter = bvNone
       ParentBackground = False
       TabOrder = 2
@@ -60785,10 +60787,11 @@ object MainformFrm: TMainformFrm
       end
     end
     object EMailSettingsPan: TPanel
-      Left = 1000
+      Left = 4
       Top = 29
       Width = 836
       Height = 559
+      Align = alClient
       BevelOuter = bvNone
       ParentBackground = False
       ParentColor = True
@@ -60972,10 +60975,11 @@ object MainformFrm: TMainformFrm
       end
     end
     object SettingsPan: TPanel
-      Left = 1000
+      Left = 4
       Top = 29
       Width = 836
       Height = 559
+      Align = alClient
       BevelOuter = bvNone
       ParentBackground = False
       ParentColor = True
@@ -61224,10 +61228,11 @@ object MainformFrm: TMainformFrm
       end
     end
     object HelpPan: TPanel
-      Left = 1000
+      Left = 4
       Top = 29
       Width = 836
       Height = 559
+      Align = alClient
       BevelOuter = bvNone
       ParentBackground = False
       ParentColor = True

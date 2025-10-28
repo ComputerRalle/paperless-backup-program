@@ -427,31 +427,31 @@ begin
   try
 		MainformFrm.redis_version_edit.Text := Ini.ReadString('Versionen', 'Redis-Version', '');
 		if MainformFrm.redis_version_edit.Text = '' then
-  	MainformFrm.redis_version_edit.Text := '7.4.4-alpine3.21';
+  	MainformFrm.redis_version_edit.Text := '7';
 
 		MainformFrm.paperless_version_edit.Text := Ini.ReadString('Versionen', 'Paperless-Version', '');
 		if MainformFrm.paperless_version_edit.Text = '' then
-  	MainformFrm.paperless_version_edit.Text := '2.18.1';
+  	MainformFrm.paperless_version_edit.Text := '2.19.1';
 
 		MainformFrm.postgres_version_edit.Text := Ini.ReadString('Versionen', 'Postgres-Version', '');
 		if MainformFrm.postgres_version_edit.Text = '' then
-  	MainformFrm.postgres_version_edit.Text := '17.6';
+  	MainformFrm.postgres_version_edit.Text := '17';
 
 		MainformFrm.gotenberg_version_edit.Text := Ini.ReadString('Versionen', 'Gotenberg-Version', '');
 		if MainformFrm.gotenberg_version_edit.Text = '' then
-  	MainformFrm.gotenberg_version_edit.Text := '8.21.1';
+  	MainformFrm.gotenberg_version_edit.Text := '8';
 
 		MainformFrm.tika_version_edit.Text := Ini.ReadString('Versionen', 'Tika-Version', '');
 		if MainformFrm.tika_version_edit.Text = '' then
-  	MainformFrm.tika_version_edit.Text := '2.9.1-full';
+  	MainformFrm.tika_version_edit.Text := 'latest';
 
 		MainformFrm.alpine_version_edit.Text := Ini.ReadString('Versionen', 'Alpine-Version', '');
 		if MainformFrm.alpine_version_edit.Text = '' then
-  	MainformFrm.alpine_version_edit.Text := '3.22.2';
+  	MainformFrm.alpine_version_edit.Text := '3';
 
 		MainformFrm.busybox_version_edit.Text := Ini.ReadString('Versionen', 'Busybox-Version', '');
 		if MainformFrm.busybox_version_edit.Text = '' then
-  	MainformFrm.busybox_version_edit.Text := '1.37.0';
+  	MainformFrm.busybox_version_edit.Text := '1';
 
   	redis_version := MainformFrm.redis_version_edit.Text;
   	paperless_ngx_version := MainformFrm.paperless_version_edit.Text;
@@ -491,7 +491,7 @@ begin
     '    environment:' + sLineBreak +
     '      DISABLE_GOOGLE_CHROME: "1"' + sLineBreak + sLineBreak +
     '  tika:' + sLineBreak +
-    '    image: ghcr.io/paperless-ngx/tika:' + tika_version + sLineBreak +  //var tika_version
+    '    image: apache/tika:' + tika_version + sLineBreak +  //var tika_version
     '    restart: always' + sLineBreak + sLineBreak +
     '# alpine wird vom Paperless Backup Program benötigt' + sLineBreak +
     '  alpine:' + sLineBreak +
@@ -794,8 +794,5 @@ begin
     Txt.Free;
   end;
 end;
-
-
-
 
 end.

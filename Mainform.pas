@@ -336,12 +336,12 @@ begin
   Ini := TIniFile.Create(Pfad);
   try
     Ini.WriteString('Versionen', 'Paperless-Version', '2.19.2');
-    Ini.WriteString('Versionen', 'Postgres-Version', '17.6');
-    Ini.WriteString('Versionen', 'Redis-Version', '7.4.4-alpine3.21');
-    Ini.WriteString('Versionen', 'Gotenberg-Version', '8.21.1');
-    Ini.WriteString('Versionen', 'Tika-Version', '2.9.1-full');
-    Ini.WriteString('Versionen', 'Alpine-Version', '3.22.2');
-    Ini.WriteString('Versionen', 'Busybox-Version', '1.37.0');
+    Ini.WriteString('Versionen', 'Postgres-Version', '17');
+    Ini.WriteString('Versionen', 'Redis-Version', '7');
+    Ini.WriteString('Versionen', 'Gotenberg-Version', '8');
+    Ini.WriteString('Versionen', 'Tika-Version', 'latest');
+    Ini.WriteString('Versionen', 'Alpine-Version', '3');
+    Ini.WriteString('Versionen', 'Busybox-Version', '1');
     Ini.UpdateFile;
   finally
     Ini.Free;
@@ -1061,31 +1061,31 @@ begin
   try
 		redis_version_edit.Text := Ini.ReadString('Versionen', 'Redis-Version', '');
 		if redis_version_edit.Text = '' then
-    redis_version_edit.Text := '7.4.4-alpine3.21';
+    redis_version_edit.Text := '7';
 
 		paperless_version_edit.Text := Ini.ReadString('Versionen', 'Paperless-Version', '');
 		if paperless_version_edit.Text = '' then
-  	paperless_version_edit.Text := '2.18.1';
+  	paperless_version_edit.Text := '2.19.1';
 
 		postgres_version_edit.Text := Ini.ReadString('Versionen', 'Postgres-Version', '');
 		if postgres_version_edit.Text = '' then
-  	postgres_version_edit.Text := '17.6';
+  	postgres_version_edit.Text := '17';
 
 		gotenberg_version_edit.Text := Ini.ReadString('Versionen', 'Gotenberg-Version', '');
 		if gotenberg_version_edit.Text = '' then
-  	gotenberg_version_edit.Text := '8.21.1';
+  	gotenberg_version_edit.Text := '8';
 
 		tika_version_edit.Text := Ini.ReadString('Versionen', 'Tika-Version', '');
 		if tika_version_edit.Text = '' then
-  	tika_version_edit.Text := '2.9.1-full';
+  	tika_version_edit.Text := 'latest';
 
 		alpine_version_edit.Text := Ini.ReadString('Versionen', 'Alpine-Version', '');
 		if alpine_version_edit.Text = '' then
-  	alpine_version_edit.Text := '3.22.2';
+  	alpine_version_edit.Text := '3';
 
 		busybox_version_edit.Text := Ini.ReadString('Versionen', 'Busybox-Version', '');
 		if busybox_version_edit.Text = '' then
-  	busybox_version_edit.Text := '1.37.0';
+  	busybox_version_edit.Text := '1';
 
 		redis_version := redis_version_edit.Text;
   	paperless_ngx_version := paperless_version_edit.Text;
@@ -2968,7 +2968,7 @@ end;
 
 procedure TMainformFrm.ProgramUpdateLblClick(Sender: TObject);
 begin
-  ShellExecute(0, 'open', 'https://downloads.ralf-peter-kleinert.de/download/paperless-backup-program', nil, nil, SW_SHOWNORMAL);
+  ShellExecute(0, 'open', 'https://downloads.ralf-peter-kleinert.de/software/paperless-backup-programm.html', nil, nil, SW_SHOWNORMAL);
 end;
 
 // Returns the version of the running executable as string
