@@ -1,0 +1,40 @@
+# Build-Ausgaben
+Win32/
+Win64/
+Linux/
+macOS/
+Android/
+iOS/
+
+# Delphi erzeugte Dateien
+*.dcu
+*.~*
+*.ddp
+*.hpp
+*.bak
+*.map
+*.drc
+*.dmp
+*.local
+*.identcache
+*.tvsconfig
+
+# Projekt-Session Dateien
+*.dsk
+
+# Backup/Temp
+*.tmp
+*.log
+
+# Binaries
+*.exe
+*.dll
+*.bpl
+*.bpi
+*.lib
+*.apk
+*.ipa
+
+# Packages Cache
+__history/
+__recovery/

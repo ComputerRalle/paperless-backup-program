@@ -88,11 +88,14 @@
         <AppDPIAwarenessMode>PerMonitorV2</AppDPIAwarenessMode>
         <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
         <VerInfo_Locale>1031</VerInfo_Locale>
-        <VerInfo_Keys>CompanyName=DIGITAL-easy ComputerRalle;FileDescription=$(MSBuildProjectName);FileVersion=2.0.0.0;InternalName=Paperless Backup Program;LegalCopyright=DIGITAL-easy ComputerRalle;LegalTrademarks=Paperless Backup Program;OriginalFilename=Paperless Backup Program;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=2.0.0.0;Comments=Kein Gewähr auf Funktionalität. Verwednung auf eigene Gefahr.</VerInfo_Keys>
-        <Icon_MainIcon>Paperless_Windows_Backup_Icon5.ico</Icon_MainIcon>
-        <UWP_DelphiLogo44>C:\Users\Ralf-Peter Kleinert\Desktop\Desktop\ralf-fuer-delphi-backup-tool-paperless.png</UWP_DelphiLogo44>
-        <UWP_DelphiLogo150>C:\Users\Ralf-Peter Kleinert\Desktop\Desktop\ralf-fuer-delphi-backup-tool-paperless.png</UWP_DelphiLogo150>
-        <VerInfo_MajorVer>2</VerInfo_MajorVer>
+        <VerInfo_Keys>CompanyName=DIGITAL-easy ComputerRalle;FileDescription=$(MSBuildProjectName);FileVersion=4.25.10.103;InternalName=Paperless Backup Program;LegalCopyright=DIGITAL-easy ComputerRalle;LegalTrademarks=Paperless Backup Program;OriginalFilename=Paperless Backup Program;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=4.25.10.100;Comments=Kein Gewähr auf Funktionalität. Verwednung auf eigene Gefahr.</VerInfo_Keys>
+        <Icon_MainIcon>assets\Paperless_Windows_Backup_Icon5.ico</Icon_MainIcon>
+        <UWP_DelphiLogo44>assets\ralf-fuer-delphi-backup-tool-paperless.png</UWP_DelphiLogo44>
+        <UWP_DelphiLogo150>assets\ralf-fuer-delphi-backup-tool-paperless.png</UWP_DelphiLogo150>
+        <VerInfo_MajorVer>4</VerInfo_MajorVer>
+        <VerInfo_MinorVer>25</VerInfo_MinorVer>
+        <VerInfo_Release>10</VerInfo_Release>
+        <VerInfo_Build>103</VerInfo_Build>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_2)'!=''">
         <DCC_LocalDebugSymbols>false</DCC_LocalDebugSymbols>
@@ -102,6 +105,13 @@
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_2_Win32)'!=''">
         <AppDPIAwarenessMode>PerMonitorV2</AppDPIAwarenessMode>
+        <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
+        <VerInfo_MajorVer>4</VerInfo_MajorVer>
+        <VerInfo_MinorVer>25</VerInfo_MinorVer>
+        <VerInfo_Release>10</VerInfo_Release>
+        <VerInfo_Build>103</VerInfo_Build>
+        <VerInfo_Locale>1031</VerInfo_Locale>
+        <VerInfo_Keys>CompanyName=Ralf-Peter Kleinert DIGITAL-easy ComputerRalle;FileDescription=$(MSBuildProjectName);FileVersion=4.25.10.103;InternalName=PaperlessBackupProgram;LegalCopyright=DIGITAL-easy ComputerRalle;LegalTrademarks=Paperless Backup Programm;OriginalFilename=Paperless Backup Program;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=4.25.10.100;Comments=</VerInfo_Keys>
     </PropertyGroup>
     <ItemGroup>
         <DelphiCompile Include="$(MainSource)">
@@ -141,16 +151,16 @@
                 </Excluded_Packages>
             </Delphi.Personality>
             <Deployment Version="4">
-                <DeployFile LocalName="C:\Users\Ralf-Peter Kleinert\Desktop\Desktop\ralf-fuer-delphi-backup-tool-paperless.png" Configuration="Debug" Class="UWP_DelphiLogo44">
-                    <Platform Name="Win32">
-                        <RemoteDir>Assets\</RemoteDir>
-                        <RemoteName>Logo44x44.png</RemoteName>
-                        <Overwrite>true</Overwrite>
-                    </Platform>
-                </DeployFile>
                 <DeployFile LocalName="Win32\Debug\PaperlessBackupProgram.exe" Configuration="Debug" Class="ProjectOutput">
                     <Platform Name="Win32">
                         <RemoteName>PaperlessBackupProgram.exe</RemoteName>
+                        <Overwrite>true</Overwrite>
+                    </Platform>
+                </DeployFile>
+                <DeployFile LocalName="assets\ralf-fuer-delphi-backup-tool-paperless.png" Configuration="Debug" Class="UWP_DelphiLogo44">
+                    <Platform Name="Win32">
+                        <RemoteDir>Assets\</RemoteDir>
+                        <RemoteName>Logo44x44.png</RemoteName>
                         <Overwrite>true</Overwrite>
                     </Platform>
                 </DeployFile>
@@ -1115,6 +1125,7 @@
                 <Platform value="Win32">True</Platform>
                 <Platform value="Win64">False</Platform>
             </Platforms>
+            <ModelSupport>False</ModelSupport>
         </BorlandProject>
         <ProjectFileVersion>12</ProjectFileVersion>
     </ProjectExtensions>
