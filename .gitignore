@@ -1,4 +1,4 @@
-# Build-Ausgaben
+# Builds
 Win32/
 Win64/
 Linux/
@@ -6,7 +6,7 @@ macOS/
 Android/
 iOS/
 
-# Delphi erzeugte Dateien
+# Delphi generated Files
 *.dcu
 *.~*
 *.ddp
@@ -18,8 +18,10 @@ iOS/
 *.local
 *.identcache
 *.tvsconfig
+*.res
+*.dproj.local
 
-# Projekt-Session Dateien
+# Projekt-Session Files
 *.dsk
 
 # Backup/Temp
