@@ -88,7 +88,7 @@
         <AppDPIAwarenessMode>PerMonitorV2</AppDPIAwarenessMode>
         <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
         <VerInfo_Locale>1031</VerInfo_Locale>
-        <VerInfo_Keys>CompanyName=DIGITAL-easy ComputerRalle;FileDescription=$(MSBuildProjectName);FileVersion=5.25.10.100;InternalName=Paperless Backup Program;LegalCopyright=DIGITAL-easy ComputerRalle;LegalTrademarks=Paperless Backup Program;OriginalFilename=Paperless Backup Program;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=4.25.10.100;Comments=Kein Gewähr auf Funktionalität. Verwednung auf eigene Gefahr.</VerInfo_Keys>
+        <VerInfo_Keys>CompanyName=DIGITAL-easy ComputerRalle;FileDescription=$(MSBuildProjectName);FileVersion=5.25.10.100;InternalName=Paperless Backup Program;LegalCopyright=DIGITAL-easy ComputerRalle;LegalTrademarks=Paperless Backup Program;OriginalFilename=Paperless Backup Program;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=5.25.10.100;Comments=Kein Gewähr auf Funktionalität. Verwednung auf eigene Gefahr. Entwicklung unter MIT Lizenz gestellt.</VerInfo_Keys>
         <Icon_MainIcon>assets\Paperless_Windows_Backup_Icon5.ico</Icon_MainIcon>
         <UWP_DelphiLogo44>assets\ralf-fuer-delphi-backup-tool-paperless.png</UWP_DelphiLogo44>
         <UWP_DelphiLogo150>assets\ralf-fuer-delphi-backup-tool-paperless.png</UWP_DelphiLogo150>
