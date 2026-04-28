@@ -306,10 +306,10 @@ begin
   SettingsIniPath := IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + 'Einstellungen.ini';
   Ini := TIniFile.Create(SettingsIniPath);
   try
-    Ini.WriteString('Versionen', 'Paperless-Version', '2.19.2');
+    Ini.WriteString('Versionen', 'Paperless-Version', '2.20.15');
     Ini.WriteString('Versionen', 'Postgres-Version', '17');
-    Ini.WriteString('Versionen', 'Redis-Version', '7');
-    Ini.WriteString('Versionen', 'Gotenberg-Version', '8');
+    Ini.WriteString('Versionen', 'Redis-Version', '8');
+    Ini.WriteString('Versionen', 'Gotenberg-Version', '8.25');
     Ini.WriteString('Versionen', 'Tika-Version', 'latest');
     Ini.WriteString('Versionen', 'Alpine-Version', '3');
     Ini.WriteString('Versionen', 'Busybox-Version', '1');
@@ -501,7 +501,6 @@ begin
   TextFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + 'DockerComposePfad.txt';
   if FileExists(TextFilePath) then DeleteFile(TextFilePath);
 end;
-
 // Create paperless-backup.cmd for a manual backup.
 // The script dumps PostgreSQL first, then archives the Docker volumes.
 procedure TMainformFrm.CreateBackupScript(const ComposePath: string);
@@ -515,7 +514,6 @@ begin
   end;
 
   if not DirectoryExists(BackupPath) then ForceDirectories(BackupPath);
-
   CmdTargetPath := IncludeTrailingPathDelimiter(ComposePath) + 'paperless-backup.cmd';
   Volumes.Data := Volume_data;
   Volumes.DbData := Volume_db_data;
@@ -564,7 +562,7 @@ var
   StoredPath: string;
   TextFilePath: String;
 begin
-  CurrentTestedPaperlessVersion := 'v2.19.2';
+  CurrentTestedPaperlessVersion := 'v2.20.15';
   Label3.Caption :=  'Getestet mit: Paperless-ngx ' + CurrentTestedPaperlessVersion;
   Label6.Caption :=  'Getestet mit: Paperless-ngx ' + CurrentTestedPaperlessVersion;
   Label9.Caption :=  'Getestet mit: Paperless-ngx ' + CurrentTestedPaperlessVersion;
@@ -1096,7 +1094,6 @@ end;
 // --------------------------------------------------------------
 // Schedule
 // --------------------------------------------------------------
-
 // Validate the trash-retention input while the user types.
 procedure TMainformFrm.TrashRetentionEditChange(Sender: TObject);
 var
@@ -1319,7 +1316,6 @@ begin
   ProgramPath := ParamStr(0);
   SaveScheduleSettings;
   // Check prerequisites.
-
   // Read the docker-compose path from the INI file.
   Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
   try
@@ -1327,7 +1323,6 @@ begin
   finally
     Ini.Free;
   end;
-
   // Stop when the compose path is missing.
   if (ComposePathFromIni = '') or
      not FileExists(ComposePathFromIni) then
@@ -1749,7 +1744,6 @@ begin
   // Build the path for the planned backup CMD file.
   CmdTargetPath := IncludeTrailingPathDelimiter(ComposePath) +
                  'paperless-backup-geplant.cmd';
-
   // Use the saved backup folder, or fall back to Desktop\FallbackBackup.
   Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
   try
@@ -1761,26 +1755,21 @@ begin
     BackupPath := IncludeTrailingPathDelimiter(GetEnvironmentVariable('USERPROFILE')) + 'Desktop\FallbackBackup\'
   else
     BackupPath := IncludeTrailingPathDelimiter(LastBackupFolder);
-
   Volumes.Data := Volume_data;
   Volumes.DbData := Volume_db_data;
   Volumes.ExportData := Volume_export;
   Volumes.Media := Volume_media;
   CreatePlannedBackupCmdScript(CmdTargetPath, ComposePath, BackupPath, AppDataFolder, PaperlessDBName, Volumes);
   ScriptSavedLbl.Caption := 'Plan gespeichert: ' + CmdTargetPath;
-
   // Delete old backup folders when a retention limit is set.
   MaxBackupFolders := KeepBackupsSpE.Value;
-
   if (MaxBackupFolders > 0) and DirectoryExists(BackupPath) then
   begin
     BackupFolderList := TDirectory.GetDirectories(BackupPath);
-
     TArray.Sort<string>(BackupFolderList, TComparer<string>.Construct(
       function(const L, R: string): Integer
       var
         DL, DR: TDateTime;
-
         function FolderNameToDateTime(const Folder: string): TDateTime;
         var
           Name: string;
@@ -1800,13 +1789,11 @@ begin
             Result := 0;
           end;
         end;
-
       begin
         DL := FolderNameToDateTime(L);
         DR := FolderNameToDateTime(R);
         Result := CompareDateTime(DL, DR); // Ascending: oldest first.
       end));
-
     if Length(BackupFolderList) > MaxBackupFolders then
     begin
       for var i := 0 to Length(BackupFolderList) - MaxBackupFolders - 1 do
@@ -1816,7 +1803,6 @@ begin
     end;
   end;
 end;
-
 
 // Run the planned backup script without showing a console window.
 procedure TMainformFrm.StartBackupPlanScriptSilent;
@@ -1854,7 +1840,6 @@ end;
 // --------------------------------------------------------------
 // Restore
 // --------------------------------------------------------------
-
 // Let the user select a backup folder and create the restore script.
 procedure TMainformFrm.RestorePaperlessBackupBtnClick(Sender: TObject);
 var
@@ -1918,7 +1903,6 @@ begin
     ShowMessage('Fehler: Es wurde kein gültiger Compose-Pfad gewählt.');
     Exit;
   end;
-
   CmdTargetPath := IncludeTrailingPathDelimiter(ExtractFilePath(ComposePath)) + 'paperless-restore.cmd';
   Volumes.Data := Volume_data;
   Volumes.DbData := Volume_db_data;
@@ -2193,7 +2177,6 @@ begin
   HelpPan.Visible := False;
   SettingsSavedLbl.Visible:=False;
 end;
-
 // Enable scheduling only after compose file and backup target are known.
 procedure TMainformFrm.CheckScheduleAllowed;
 var
@@ -2456,7 +2439,6 @@ procedure TMainformFrm.Web1LblClick(Sender: TObject);
 begin
  ShellExecute(0, 'open', 'https://ralf-peter-kleinert.de', nil, nil, SW_SHOWNORMAL);
 end;
-
 procedure TMainformFrm.Web2LblClick(Sender: TObject);
 begin
  ShellExecute(0, 'open', 'https://blog.ralf-peter-kleinert.de', nil, nil, SW_SHOWNORMAL);

@@ -61316,7 +61316,7 @@ object MainformFrm: TMainformFrm
       object Web1Lbl: TLabel
         Left = 31
         Top = 424
-        Width = 150
+        Width = 153
         Height = 18
         Cursor = crHandPoint
         Caption = 'ralf-peter-kleinert.de'
@@ -61325,7 +61325,7 @@ object MainformFrm: TMainformFrm
       object Web2Lbl: TLabel
         Left = 31
         Top = 454
-        Width = 190
+        Width = 189
         Height = 18
         Cursor = crHandPoint
         Caption = 'blog.ralf-peter-kleinert.de'
