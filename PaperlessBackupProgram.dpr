@@ -5,6 +5,7 @@ uses
   MainForm in 'MainForm.pas' {Form1},
   Vcl.Themes,
   Vcl.Styles,
+  ScriptGenerator in 'ScriptGenerator.pas',
   HinweisForm in 'HinweisForm.pas' {HinweisFrm};
 
 {$R *.res}

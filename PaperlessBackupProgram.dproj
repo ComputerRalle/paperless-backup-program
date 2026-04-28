@@ -127,6 +127,7 @@
             <Form>HinweisFrm</Form>
             <FormType>dfm</FormType>
         </DCCReference>
+        <DCCReference Include="ScriptGenerator.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

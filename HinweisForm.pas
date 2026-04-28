@@ -6,7 +6,6 @@
 // YouTube: https://www.youtube.com/@ralf-peter-kleinert
 // Copyright (c) 2025 Ralf-Peter Kleinert
 // MIT License - see LICENSE file in the repository
-// MIT License – see LICENSE file in the repository
 // --------------------------------------------------------------
 
 unit HinweisForm;
@@ -59,6 +58,7 @@ type
 
 var
   HinweisFrm: THinweisFrm;
+  // Current Docker/Paperless status shown on the notice form.
   PaperlessContainerExists: Boolean;
   PaperlessContainerRunning: Boolean;
   DockerAvailable: Boolean;
@@ -79,11 +79,13 @@ implementation
 uses
   Mainform;
 
+// Close the whole program when the notice form was opened as the first form.
 procedure THinweisFrm.FormClose(Sender: TObject; var Action: TCloseAction);
 begin
   if TerminateApplicationOnClose = True then Application.Terminate;
 end;
 
+// Make this form appear as a normal window in the Windows taskbar.
 procedure THinweisFrm.FormCreate(Sender: TObject);
 begin
   SetWindowLong(Handle, GWL_EXSTYLE,
@@ -91,6 +93,7 @@ begin
   SetWindowLong(Handle, GWL_HWNDPARENT, 0);
 end;
 
+// Prepare the notice window and show the correct installation state.
 procedure THinweisFrm.FormShow(Sender: TObject);
 begin
   TerminateApplicationOnClose := True;
@@ -205,6 +208,7 @@ begin
    Close;
 end;
 
+// Start the first Paperless setup after the user confirms it.
 procedure THinweisFrm.InstallPaperlessBtnClick(Sender: TObject);
 var
   InstallErfolgreich: Boolean;
@@ -284,6 +288,7 @@ begin
   IsPaperlessInstallation:= False;
 end;
 
+// Check whether Docker can answer "docker info".
 procedure THinweisFrm.CheckDockerAvailable;
 var
   ExitCode: Cardinal;
@@ -315,6 +320,7 @@ begin
 
 end;
 
+// Start an external command, wait for it, and return its exit code.
 function THinweisFrm.RunCommand(const ExeName, Params: string; out ExitCode: Cardinal): Boolean;
 var
   SEInfo: TShellExecuteInfo;
@@ -358,6 +364,7 @@ begin
   end;
 end;
 
+// Check whether Windows can find docker.exe through the PATH variable.
 function THinweisFrm.IsDockerInPath: Boolean;
 var
   Buffer: array[0..MAX_PATH - 1] of Char;
@@ -368,11 +375,13 @@ begin
 end;
 
 
+// Open the KeePassXC help video.
 procedure THinweisFrm.KeePassXCLblClick(Sender: TObject);
 begin
   ShellExecute(0, 'open', 'https://www.youtube.com/watch?v=j4DWjU9XucI', nil, nil, SW_SHOWNORMAL);
 end;
 
+// Open either Paperless or Docker, depending on the current form state.
 procedure THinweisFrm.LinkClickLblClick(Sender: TObject);
 begin
   // During installation the link opens Paperless; otherwise it opens Docker.
@@ -381,13 +390,14 @@ begin
   ShellExecute(0, 'open', 'https://www.docker.com/products/docker-desktop/', nil, nil, SW_SHOWNORMAL);
 end;
 
+// Open the ComputerRalle website.
 procedure THinweisFrm.ComputerRalleLblClick(Sender: TObject);
 begin
   ShellExecute(0, 'open', 'https://ralf-peter-kleinert.de', nil, nil, SW_SHOWNORMAL);
 end;
 
+// Create docker-compose.yml and, depending on the mode, start or restart Paperless.
 procedure THinweisFrm.CreateDockerComposeFile;
-// Create the main docker-compose.yml file.
 var
   ComposePath, ComposeContent: string;
   CmdFile: TStringList;
@@ -440,16 +450,16 @@ begin
   ComposePath := IncludeTrailingPathDelimiter(AppDataFolder) + 'docker-compose.yml';
 
   ComposeContent :=
-    '#compose Datei fuer den Einsatz des "Paperless Backup Programm" von ComputerRalle' + sLineBreak +
+    '# Compose file for the Paperless Backup Program by ComputerRalle' + sLineBreak +
     '# ralf-peter-kleinert.de' + sLineBreak +
-    '#Name des Containers, wird vor die Volumes gesetzt' + sLineBreak +
+    '# The compose project name is also used as prefix for the Docker volumes' + sLineBreak +
     'name: paperless-ngx' + sLineBreak + sLineBreak +
     'services:' + sLineBreak +
     '  broker:' + sLineBreak +
-    '    image: docker.io/library/redis:'+ redis_version + sLineBreak +   //var redis_version
+    '    image: docker.io/library/redis:'+ redis_version + sLineBreak +
     '    restart: always' + sLineBreak + sLineBreak +
     '  db:' + sLineBreak +
-    '    image: docker.io/library/postgres:' + postgresql_version + sLineBreak + //var postgresql_version
+    '    image: docker.io/library/postgres:' + postgresql_version + sLineBreak +
     '    restart: always' + sLineBreak +
     '    volumes:' + sLineBreak +
     '      - db_data:/var/lib/postgresql/data' + sLineBreak +
@@ -458,21 +468,21 @@ begin
     '      POSTGRES_USER: paperless' + sLineBreak +
     '      POSTGRES_PASSWORD: paperless' + sLineBreak + sLineBreak +
     '  gotenberg:' + sLineBreak +
-    '    image: gotenberg/gotenberg:' + gotenberg_version + sLineBreak +  //var gotenberg_version
+    '    image: gotenberg/gotenberg:' + gotenberg_version + sLineBreak +
     '    restart: always' + sLineBreak +
     '    environment:' + sLineBreak +
     '      DISABLE_GOOGLE_CHROME: "1"' + sLineBreak + sLineBreak +
     '  tika:' + sLineBreak +
-    '    image: docker.io/apache/tika:' + tika_version + sLineBreak +  //var tika_version
+    '    image: docker.io/apache/tika:' + tika_version + sLineBreak +
     '    restart: always' + sLineBreak + sLineBreak +
-    '# alpine wird vom Paperless Backup Program benötigt' + sLineBreak +
+    '# Alpine is used by the backup program for volume archives' + sLineBreak +
     '  alpine:' + sLineBreak +
-    '    image: alpine:' + alpine_version + sLineBreak +   //var alpine_version
+    '    image: alpine:' + alpine_version + sLineBreak +
     '    container_name: alpine_helper' + sLineBreak +
     '    entrypoint: sh' + sLineBreak +
     '    stdin_open: true' + sLineBreak +
     '    tty: true' + sLineBreak + sLineBreak +
-    '# busybox als zusätzliche Umgebung' + sLineBreak +
+    '# BusyBox is available as an additional helper environment' + sLineBreak +
     '  busybox:'   + sLineBreak +
     '    image: busybox:' + busybox_version + sLineBreak +
     '    container_name: busybox_helper' + sLineBreak +
@@ -480,7 +490,7 @@ begin
     '    stdin_open: true' + sLineBreak +
     '    tty: true' + sLineBreak + sLineBreak +
     '  paperless:' + sLineBreak +
-    '    image: ghcr.io/paperless-ngx/paperless-ngx:' + paperless_ngx_version + sLineBreak +  //var paperless_ngx_version
+    '    image: ghcr.io/paperless-ngx/paperless-ngx:' + paperless_ngx_version + sLineBreak +
     '    depends_on:' + sLineBreak +
     '      - db' + sLineBreak +
     '      - broker' + sLineBreak +
@@ -517,7 +527,7 @@ begin
     '      PAPERLESS_CONSUMER_RECURSIVE: "true"' + sLineBreak +
     '      PAPERLESS_EMPTY_TRASH_DELAY: "' + IntToStr(TrashRetentionDays) + '"' + sLineBreak +
     '      PAPERLESS_OCR_LANGUAGE: deu+eng' + sLineBreak +
-    '      #Dokument Export benennt die Doks Nach Jahr, Monat, Tag, Name' + sLineBreak +
+    '      # Exported documents are named by year, month, day, and title' + sLineBreak +
     '      PAPERLESS_FILENAME_FORMAT: "{{ created_year }}-{{ created_month }}-{{ created_day }}_{{ title }}"' + sLineBreak +
     'volumes:' + sLineBreak +
     '  data:' + sLineBreak +
@@ -595,6 +605,7 @@ begin
 
 end;
 
+// Start Paperless from the generated docker-compose.yml file.
 procedure THinweisFrm.StartDockerCompose;
 var
   ExitCode: Cardinal;
@@ -616,6 +627,7 @@ begin
   end;
 end;
 
+// Detect whether a Paperless container exists and whether it is running.
 procedure THinweisFrm.CheckPaperlessContainerStatus;
 var
   ComposePath: string;
@@ -654,6 +666,7 @@ begin
   end;
 end;
 
+// Start a command hidden and capture its console output.
 function THinweisFrm.RunCommandAndCapture(const ExeName: string; const Params: array of string; Output: TStrings): Boolean;
 var
   CmdLine: string;
@@ -718,6 +731,7 @@ begin
   end;
 end;
 
+// Write the Docker image versions that were used for a backup.
 procedure THinweisFrm.WriteImageVersion(const TargetPath: string);
 var
   Ini: TIniFile;
