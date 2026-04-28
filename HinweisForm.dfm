@@ -69,7 +69,7 @@ object HinweisFrm: THinweisFrm
     Font.Name = 'Verdana'
     Font.Style = [fsBold, fsUnderline]
     ParentFont = False
-    OnClick = LinkKlickLblClick
+    OnClick = LinkClickLblClick
   end
   object Label1: TLabel
     Left = 20
@@ -141,7 +141,7 @@ object HinweisFrm: THinweisFrm
     Height = 60
     Caption = 'Hinweis verstanden'
     TabOrder = 1
-    OnClick = HinweisVerstandenBtnClick
+    OnClick = NoticeAcceptedBtnClick
   end
   object Panel14: TPanel
     Left = 0
@@ -200,7 +200,7 @@ object HinweisFrm: THinweisFrm
     Caption = 'Paperless installieren'
     Default = True
     TabOrder = 0
-    OnClick = PaperlessInstallierenBtnClick
+    OnClick = InstallPaperlessBtnClick
   end
   object HinweisMemo: TMemo
     Left = 20

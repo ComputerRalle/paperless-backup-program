@@ -5,7 +5,7 @@
 // Website: https://ralf-peter-kleinert.de
 // YouTube: https://www.youtube.com/@ralf-peter-kleinert
 // Copyright (c) 2025 Ralf-Peter Kleinert
-// MIT License – siehe LICENSE Datei im Repository
+// MIT License - see LICENSE file in the repository
 // MIT License – see LICENSE file in the repository
 // --------------------------------------------------------------
 
@@ -34,37 +34,36 @@ type
     KeePassXCLbl: TLabel;
     WillkommenLbl: TLabel;
     ComputerRalleLbl: TLabel;
-    procedure HinweisVerstandenBtnClick(Sender: TObject);
+    procedure NoticeAcceptedBtnClick(Sender: TObject);
     procedure FormShow(Sender: TObject);
-    procedure PaperlessInstallierenBtnClick(Sender: TObject);
+    procedure InstallPaperlessBtnClick(Sender: TObject);
     function RunCommand(const ExeName, Params: string; out ExitCode: Cardinal): Boolean;
-    function IstDockerImPfad: Boolean;
-    procedure ErzeugeDockerComposeDatei;
-    procedure StarteDockerCompose;
-    procedure LinkKlickLblClick(Sender: TObject);
+    function IsDockerInPath: Boolean;
+    procedure CreateDockerComposeFile;
+    procedure StartDockerCompose;
+    procedure LinkClickLblClick(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     function RunCommandAndCapture(const ExeName: string; const Params: array of string; Output: TStrings): Boolean;
-    procedure PruefePaperlessContainerStatus;
+    procedure CheckPaperlessContainerStatus;
     procedure KeePassXCLblClick(Sender: TObject);
-    procedure IstDockerVorhanden;
+    procedure CheckDockerAvailable;
     procedure ComputerRalleLblClick(Sender: TObject);
     procedure FormClose(Sender: TObject; var Action: TCloseAction);
-    procedure WriteImageVersion(const ZielPfad: string);
+    procedure WriteImageVersion(const TargetPath: string);
 
   private
-    { Private-Deklarationen }
+    { Private declarations }
   public
-    { Public-Deklarationen }
+    { Public declarations }
   end;
 
 var
   HinweisFrm: THinweisFrm;
-  Pfad: string;
-  PaperlessContainerVorhanden: Boolean;
-	PaperlessContainerLaeuft: Boolean;
-  DockerVorhanden: Boolean;
-  BeendeApplicationBeiClose: Boolean;
-  //Version of Images
+  PaperlessContainerExists: Boolean;
+  PaperlessContainerRunning: Boolean;
+  DockerAvailable: Boolean;
+  TerminateApplicationOnClose: Boolean;
+  // Docker image versions
   paperless_ngx_version: string;
   postgresql_version: string;
   redis_version: string;
@@ -82,58 +81,58 @@ uses
 
 procedure THinweisFrm.FormClose(Sender: TObject; var Action: TCloseAction);
 begin
-	if BeendeApplicationBeiClose = True then Application.Terminate;
+  if TerminateApplicationOnClose = True then Application.Terminate;
 end;
 
 procedure THinweisFrm.FormCreate(Sender: TObject);
 begin
   SetWindowLong(Handle, GWL_EXSTYLE,
-	GetWindowLong(Handle, GWL_EXSTYLE) or WS_EX_APPWINDOW);
-	SetWindowLong(Handle, GWL_HWNDPARENT, 0);
+  GetWindowLong(Handle, GWL_EXSTYLE) or WS_EX_APPWINDOW);
+  SetWindowLong(Handle, GWL_HWNDPARENT, 0);
 end;
 
 procedure THinweisFrm.FormShow(Sender: TObject);
 begin
-  BeendeApplicationBeiClose := True;
-  WillInstallieren := False;
-  DockerVorhanden := False;
-  PaperlessOefnnen := False;
- 	Panel14.ParentBackground := False;
+  TerminateApplicationOnClose := True;
+  WantsInstall := False;
+  DockerAvailable := False;
+  ShouldOpenPaperless := False;
+   Panel14.ParentBackground := False;
   Panel14.StyleElements := Panel14.StyleElements - [seClient];
   Panel14.Color := $00234D11;
   StatusBar1.Panels.Clear;
   StatusBar1.Height:= 25;
   StatusBar1.Font.Size:= 10;
   StatusBar1.Font.Style:= [fsBold];
-  StatusBar1.Panels.Add.Text := ' ' + ' #ComputerRalle - Paperless Backup Programm ' + MainformFrm.HoleDateiVersion(Application.ExeName);
+  StatusBar1.Panels.Add.Text := ' ' + ' #ComputerRalle - Paperless Backup Programm ' + MainformFrm.GetFileVersion(Application.ExeName);
 
-  //Einfärben der Labels / wegen Darkmode
+  // Make link labels readable in dark mode.
   with LinkKlickLbl do
-	begin
-  	StyleElements := StyleElements - [seFont];
-  	Transparent := True;
-  	Font.Color := clYellow;
-	end;
+  begin
+    StyleElements := StyleElements - [seFont];
+    Transparent := True;
+    Font.Color := clYellow;
+  end;
 
   with ComputerRalleLbl do
-	begin
-  	StyleElements := StyleElements - [seFont];
-  	Transparent := True;
-  	Font.Color := clYellow;
-	end;
-
-  if FileExists(HinweisDatei) then
   begin
-   	PaperlessInstallierenBtn.Enabled := False;
+    StyleElements := StyleElements - [seFont];
+    Transparent := True;
+    Font.Color := clYellow;
+  end;
+
+  if FileExists(NoticeFilePath) then
+  begin
+     PaperlessInstallierenBtn.Enabled := False;
   end
   else
   begin
-  	PaperlessInstallierenBtn.Enabled := True;
+    PaperlessInstallierenBtn.Enabled := True;
   end;
 
-  //Prüfung ob Docker und Paperless vorhanden sind
-  IstDockerVorhanden;
-  if DockerVorhanden = True then
+  // Check whether Docker and Paperless are already available.
+  CheckDockerAvailable;
+  if DockerAvailable = True then
   begin
     SieBenoetigenDockerLbl.Caption := 'Docker ist Installiert. Sie können Paperless installieren.';
     WillkommenLbl.Visible := True;
@@ -144,56 +143,55 @@ begin
     ComputerRalleLbl.Visible := True;
   end;
 
-  PruefePaperlessContainerStatus;
-  if PaperlessContainerVorhanden = True then
+  CheckPaperlessContainerStatus;
+  if PaperlessContainerExists = True then
   begin
-    //Wird geändert, damit Paperless direkt gestartet werden kann, wenn installiert
+    // Paperless is installed, so the user can open it directly.
     DockerGefundenLbl.Caption := 'Paperless Container gefunden. Installation nicht notwendig.';
     WillkommenLbl.Visible := True;
     ComputerRalleLbl.Visible := True;
     LinkKlickLbl.Caption:= 'http://localhost:8000';
-    IstEsPaperlessInstallation := True;
+    IsPaperlessInstallation := True;
     Label1.Caption:= 'Paperless öffnen:';
     DockerGefundenLbl.Visible := True;
-		with PaperlessInstallierenBtn do
-		begin
-  		Enabled := False;
-  		Default := False;
-  		Cancel := False;
-  		Visible := True;
-		end;
+    with PaperlessInstallierenBtn do
+    begin
+      Enabled := False;
+      Default := False;
+      Cancel := False;
+      Visible := True;
+    end;
     HinweisVerstandenBtn.Default := True;
     HinweisVerstandenBtn.SetFocus;
   end;
 
-  if PaperlessContainerLaeuft = True then
+  if PaperlessContainerRunning = True then
   begin
-    //Wird geändert, damit Paperless direkt gestartet werden kann, wenn installiert
+    // Paperless is running, so the user can open it directly.
     DockerGefundenLbl.Caption := 'Paperless Container gefunden. Installation nicht notwendig.';
     LinkKlickLbl.Caption:= 'http://localhost:8000';
-    IstEsPaperlessInstallation := True;
+    IsPaperlessInstallation := True;
     Label1.Caption:= 'Paperless öffnen:';
     DockerGefundenLbl.Visible := True;
-		with PaperlessInstallierenBtn do
-		begin
-  		Enabled := False;
-  		Default := False;
-  		Cancel := False;
-  		Visible := True;
-		end;
+    with PaperlessInstallierenBtn do
+    begin
+      Enabled := False;
+      Default := False;
+      Cancel := False;
+      Visible := True;
+    end;
     HinweisVerstandenBtn.Default := True;
     HinweisVerstandenBtn.SetFocus;
   end;
 end;
 
-procedure THinweisFrm.HinweisVerstandenBtnClick(Sender: TObject);
+procedure THinweisFrm.NoticeAcceptedBtnClick(Sender: TObject);
 var
   Ini: TIniFile;
 begin
-  BeendeApplicationBeiClose := False;
+  TerminateApplicationOnClose := False;
   if not DirectoryExists(Mainform.AppDataFolder) then ForceDirectories(AppDataFolder);
-  //Verlagerung der Dateien in die ini
-  //TFile.WriteAllText(IncludeTrailingPathDelimiter(Hauptformular.AppDataOrdner) + 'HinweisVerstanden.txt', 'ja', TEncoding.UTF8);
+  // Store this state in the INI file.
   Ini := TIniFile.Create(IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + 'Einstellungen.ini');
    try
     try
@@ -207,46 +205,46 @@ begin
    Close;
 end;
 
-procedure THinweisFrm.PaperlessInstallierenBtnClick(Sender: TObject);
+procedure THinweisFrm.InstallPaperlessBtnClick(Sender: TObject);
 var
-	InstallErfolgreich: Boolean;
+  InstallErfolgreich: Boolean;
   ExitCode: Cardinal;
   Ini:TiniFile;
 begin
-  WillInstallieren := True;
-	// Schritt 1: Prüfen, ob Docker überhaupt im Systempfad gefunden wird
-	if not IstDockerImPfad then
-	begin
-  	MessageBox(0,
-  	'Docker wurde nicht gefunden.' + #13#10 +
-  	'Bitte installieren Sie Docker Desktop ganz normal,' + #13#10 +
-  	'ohne „Als Administrator ausführen“ zu verwenden.' + #13#10 +
-  	'Starten Sie danach den Computer neu und wiederholen Sie die Installation mit Paperless Backup Programm',
-  	'Fehler',
-  	MB_OK or MB_ICONERROR or MB_TOPMOST);
-    WillInstallieren := False;
+  WantsInstall := True;
+  // Step 1: Check whether Docker is available in the system PATH.
+  if not IsDockerInPath then
+  begin
+    MessageBox(0,
+    'Docker wurde nicht gefunden.' + #13#10 +
+    'Bitte installieren Sie Docker Desktop ganz normal,' + #13#10 +
+    'ohne „Als Administrator ausführen“ zu verwenden.' + #13#10 +
+    'Starten Sie danach den Computer neu und wiederholen Sie die Installation mit Paperless Backup Programm',
+    'Fehler',
+    MB_OK or MB_ICONERROR or MB_TOPMOST);
+    WantsInstall := False;
     ComputerRalleLbl.Visible := False;
     HinweisVerstandenBtn.Enabled := False;
     WillkommenLbl.Visible := False;
     LinkKlickLbl.Visible := False;
-  	Exit;
-	end else
+    Exit;
+  end else
   begin
-  	DockerGefundenLbl.Visible := True;
-  	DockerVorhanden := True;
+    DockerGefundenLbl.Visible := True;
+    DockerAvailable := True;
   end;
-  // Schritt 2: Sicherheitsabfrage vor Installation
+  // Step 2: Ask for confirmation before installation.
   if MessageDlg('Möchten Sie Paperless jetzt installieren?', mtConfirmation, [mbYes, mbNo], 0) = mrNo then
     Exit;
 
-  IstEsPaperlessInstallation := True;
-  PaperlessOefnnen := True;
+  IsPaperlessInstallation := True;
+  ShouldOpenPaperless := True;
 
-  //Ordner Paperless-Input auf Desktop abfragen, und bei nichtvorhandensein anlegen
+  // Create the desktop consume folder if it does not exist.
   PaperlessInput := IncludeTrailingPathDelimiter(GetEnvironmentVariable('USERPROFILE')) + 'Desktop\Paperless-Input';
   if not DirectoryExists(PaperlessInput) then ForceDirectories(PaperlessInput);
 
-  // Schritt 3: Prüfung, ob docker korrekt funktioniert
+  // Step 3: Check whether Docker is working.
   if not Self.RunCommand('docker', 'info', ExitCode) or (ExitCode <> 0) then
   begin
     MessageBox(0,
@@ -255,42 +253,42 @@ begin
       'Installieren und starten sie Docker Desktop. Sie werden zusätzlich zur Downloadseite von Docker Desktop geleitet.',
       'Fehler',
       MB_OK or MB_ICONERROR or MB_TOPMOST);
-      WillInstallieren := False;
+      WantsInstall := False;
       ComputerRalleLbl.Visible := False;
       HinweisVerstandenBtn.Enabled := False;
       WillkommenLbl.Visible := False;
       LinkKlickLbl.Visible := False;
       ShellExecute(0, 'open', 'https://www.docker.com/products/docker-desktop/', nil, nil, SW_SHOWNORMAL);
-  		Application.Terminate;
-    	// optional, falls noch Code nach dem Aufruf folgen sollte
-  		Exit;
+      Application.Terminate;
+      // Keep this Exit in case code is added below later.
+      Exit;
   end else
   begin
-    //Variable auf True setzen
-  	DockerVorhanden := True;
+    // Docker is ready.
+    DockerAvailable := True;
   end;
 
   Ini := TIniFile.Create(IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + 'Einstellungen.ini');
   try
-   	try
-  		// Vor dem Auslösen des Skriptes den Pfad speichern
-  		Ini.WriteString('Einrichtung', 'Installation abgeschlossen', 'Ja');
-   	except
-     	ShowMessage('Einstellungen.ini kann nicht geschrieben werden. Rechte?');
-   	end;
+     try
+      // Save the installation state before running the script.
+      Ini.WriteString('Einrichtung', 'Installation abgeschlossen', 'Ja');
+     except
+       ShowMessage('Einstellungen.ini kann nicht geschrieben werden. Rechte?');
+     end;
   finally
-   	Ini.Free;
+     Ini.Free;
   end;
 
-  ErzeugeDockerComposeDatei;
-  IstEsPaperlessInstallation:= False;
+  CreateDockerComposeFile;
+  IsPaperlessInstallation:= False;
 end;
 
-procedure THinweisFrm.IstDockerVorhanden;
+procedure THinweisFrm.CheckDockerAvailable;
 var
   ExitCode: Cardinal;
 begin
-  //Prüfung, ob docker korrekt funktioniert
+  // Check whether Docker is working.
   if not Self.RunCommand('docker', 'info', ExitCode) or (ExitCode <> 0) then
   begin
     MessageBox(0,
@@ -299,22 +297,20 @@ begin
       'Installieren und starten sie Docker Desktop. Sie werden zusätzlich zur Downloadseite von Docker Desktop geleitet.',
       'Fehler',
       MB_OK or MB_ICONERROR or MB_TOPMOST);
-    	DockerVorhanden := False;
-    	WillInstallieren := False;
-    	ComputerRalleLbl.Visible := False;
-    	HinweisVerstandenBtn.Enabled := False;
-    	WillkommenLbl.Visible := False;
-    	LinkKlickLbl.Visible := False;
-    	//ShowMessage('nicht Vorhanden');
+      DockerAvailable := False;
+      WantsInstall := False;
+      ComputerRalleLbl.Visible := False;
+      HinweisVerstandenBtn.Enabled := False;
+      WillkommenLbl.Visible := False;
+      LinkKlickLbl.Visible := False;
       ShellExecute(0, 'open', 'https://www.docker.com/products/docker-desktop/', nil, nil, SW_SHOWNORMAL);
-  		Application.Terminate;
-    	// optional, falls noch Code nach dem Aufruf folgen sollte
-  		Exit;
+      Application.Terminate;
+      // Keep this Exit in case code is added below later.
+      Exit;
   end
   else
   begin
-    DockerVorhanden := True;
-    //ShowMessage('Vorhanden');
+    DockerAvailable := True;
   end;
 
 end;
@@ -324,50 +320,50 @@ var
   SEInfo: TShellExecuteInfo;
   ProcHandle: THandle;
 begin
-  // ShellExecuteInfo-Struktur vollständig mit Nullen initialisieren
+  // Clear the ShellExecuteInfo structure before use.
   ZeroMemory(@SEInfo, SizeOf(SEInfo));
-  // Größe der Struktur setzen
+  // Set the structure size.
   SEInfo.cbSize := SizeOf(TShellExecuteInfo);
-  // Maske setzen: Prozess-Handle bleibt offen, damit wir auf das Ende warten können
+  // Keep the process handle open so we can wait for the command to finish.
   SEInfo.fMask := SEE_MASK_NOCLOSEPROCESS;
-  // Kein zugehöriges Fenster
+  // No owner window.
   SEInfo.Wnd := 0;
-  // startet das Programm wie durch Doppelklick
+  // Start the program like a normal shell launch.
   SEInfo.lpVerb := 'open';
-  // Name der ausführbaren Datei (z. B. "docker")
+  // Executable name, for example "docker".
   SEInfo.lpFile := PChar(ExeName);
-  // Übergabeparameter, z. B. "--version"
+  // Command parameters, for example "--version".
   SEInfo.lpParameters := PChar(Params);
-  // Arbeitsverzeichnis (hier: kein spezielles)
+  // No special working directory.
   SEInfo.lpDirectory := nil;
-  // Anzeigeoption: Fenster versteckt starten
+  // Start hidden.
   SEInfo.nShow := SW_HIDE;
-  // Versuche, den Prozess zu starten
+  // Try to start the process.
   Result := ShellExecuteEx(@SEInfo);
   if Result then
   begin
-    // Prozesshandle auslesen
+    // Read the process handle.
     ProcHandle := SEInfo.hProcess;
-    // Auf Beendigung des Prozesses warten
+    // Wait until the process exits.
     WaitForSingleObject(ProcHandle, INFINITE);
-    // ExitCode des gestarteten Prozesses ermitteln
+    // Read the process exit code.
     GetExitCodeProcess(ProcHandle, ExitCode);
-    // Prozess-Handle schließen
+    // Close the process handle.
     CloseHandle(ProcHandle);
   end
   else
   begin
-    // Wenn Start fehlschlug, ExitCode auf -1 setzen
+    // Use -1 when the process could not be started.
     ExitCode := DWORD(-1);
   end;
 end;
 
-function THinweisFrm.IstDockerImPfad: Boolean;
+function THinweisFrm.IsDockerInPath: Boolean;
 var
   Buffer: array[0..MAX_PATH - 1] of Char;
   Dummy: PChar;
 begin
-  // Sucht 'docker.exe' im aktuellen PATH
+  // Search for docker.exe in the current PATH.
   Result := SearchPath(nil, 'docker.exe', nil, MAX_PATH, Buffer, Dummy) > 0;
 end;
 
@@ -377,10 +373,10 @@ begin
   ShellExecute(0, 'open', 'https://www.youtube.com/watch?v=j4DWjU9XucI', nil, nil, SW_SHOWNORMAL);
 end;
 
-procedure THinweisFrm.LinkKlickLblClick(Sender: TObject);
+procedure THinweisFrm.LinkClickLblClick(Sender: TObject);
 begin
-  //Wenn Paperlessinstallation wird der Link für Paperless geändert
-  if PaperlessOefnnen then
+  // During installation the link opens Paperless; otherwise it opens Docker.
+  if ShouldOpenPaperless then
   ShellExecute(0, 'open', 'http://localhost:8000/', nil, nil, SW_SHOWNORMAL) else
   ShellExecute(0, 'open', 'https://www.docker.com/products/docker-desktop/', nil, nil, SW_SHOWNORMAL);
 end;
@@ -390,70 +386,70 @@ begin
   ShellExecute(0, 'open', 'https://ralf-peter-kleinert.de', nil, nil, SW_SHOWNORMAL);
 end;
 
-procedure THinweisFrm.ErzeugeDockerComposeDatei;
-// docker-compose docker compose Hauptdatei
+procedure THinweisFrm.CreateDockerComposeFile;
+// Create the main docker-compose.yml file.
 var
-  ComposePfad, Inhalt: string;
-  CmdDatei: TStringList;
+  ComposePath, ComposeContent: string;
+  CmdFile: TStringList;
   Ini: TIniFile;
 begin
 
-  //Versionen der Images auslesen, wenn leer Standard
+  // Read image versions from the INI file and apply defaults when empty.
   Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
   try
-		MainformFrm.redis_version_edit.Text := Ini.ReadString('Versionen', 'Redis-Version', '');
-		if MainformFrm.redis_version_edit.Text = '' then
-  	MainformFrm.redis_version_edit.Text := '7';
+    MainformFrm.redis_version_edit.Text := Ini.ReadString('Versionen', 'Redis-Version', '');
+    if MainformFrm.redis_version_edit.Text = '' then
+      MainformFrm.redis_version_edit.Text := '8';
 
-		MainformFrm.paperless_version_edit.Text := Ini.ReadString('Versionen', 'Paperless-Version', '');
-		if MainformFrm.paperless_version_edit.Text = '' then
-  	MainformFrm.paperless_version_edit.Text := '2.19.1';
+    MainformFrm.paperless_version_edit.Text := Ini.ReadString('Versionen', 'Paperless-Version', '');
+    if MainformFrm.paperless_version_edit.Text = '' then
+      MainformFrm.paperless_version_edit.Text := '2.20.15';
 
-		MainformFrm.postgres_version_edit.Text := Ini.ReadString('Versionen', 'Postgres-Version', '');
-		if MainformFrm.postgres_version_edit.Text = '' then
-  	MainformFrm.postgres_version_edit.Text := '17';
+    MainformFrm.postgres_version_edit.Text := Ini.ReadString('Versionen', 'Postgres-Version', '');
+    if MainformFrm.postgres_version_edit.Text = '' then
+      MainformFrm.postgres_version_edit.Text := '17';
 
-		MainformFrm.gotenberg_version_edit.Text := Ini.ReadString('Versionen', 'Gotenberg-Version', '');
-		if MainformFrm.gotenberg_version_edit.Text = '' then
-  	MainformFrm.gotenberg_version_edit.Text := '8';
+    MainformFrm.gotenberg_version_edit.Text := Ini.ReadString('Versionen', 'Gotenberg-Version', '');
+    if MainformFrm.gotenberg_version_edit.Text = '' then
+      MainformFrm.gotenberg_version_edit.Text := '8.25';
 
-		MainformFrm.tika_version_edit.Text := Ini.ReadString('Versionen', 'Tika-Version', '');
-		if MainformFrm.tika_version_edit.Text = '' then
-  	MainformFrm.tika_version_edit.Text := 'latest';
+    MainformFrm.tika_version_edit.Text := Ini.ReadString('Versionen', 'Tika-Version', '');
+    if MainformFrm.tika_version_edit.Text = '' then
+      MainformFrm.tika_version_edit.Text := 'latest';
 
-		MainformFrm.alpine_version_edit.Text := Ini.ReadString('Versionen', 'Alpine-Version', '');
-		if MainformFrm.alpine_version_edit.Text = '' then
-  	MainformFrm.alpine_version_edit.Text := '3';
+    MainformFrm.alpine_version_edit.Text := Ini.ReadString('Versionen', 'Alpine-Version', '');
+    if MainformFrm.alpine_version_edit.Text = '' then
+      MainformFrm.alpine_version_edit.Text := '3';
 
-		MainformFrm.busybox_version_edit.Text := Ini.ReadString('Versionen', 'Busybox-Version', '');
-		if MainformFrm.busybox_version_edit.Text = '' then
-  	MainformFrm.busybox_version_edit.Text := '1';
+    MainformFrm.busybox_version_edit.Text := Ini.ReadString('Versionen', 'Busybox-Version', '');
+    if MainformFrm.busybox_version_edit.Text = '' then
+      MainformFrm.busybox_version_edit.Text := '1';
 
-  	redis_version := MainformFrm.redis_version_edit.Text;
-  	paperless_ngx_version := MainformFrm.paperless_version_edit.Text;
-  	postgresql_version := MainformFrm.postgres_version_edit.Text;
-  	gotenberg_version := MainformFrm.gotenberg_version_edit.Text;
-  	tika_version := MainformFrm.tika_version_edit.Text;
-  	alpine_version := MainformFrm.alpine_version_edit.Text;
-  	busybox_version := MainformFrm.busybox_version_edit.Text;
+    redis_version := MainformFrm.redis_version_edit.Text;
+    paperless_ngx_version := MainformFrm.paperless_version_edit.Text;
+    postgresql_version := MainformFrm.postgres_version_edit.Text;
+    gotenberg_version := MainformFrm.gotenberg_version_edit.Text;
+    tika_version := MainformFrm.tika_version_edit.Text;
+    alpine_version := MainformFrm.alpine_version_edit.Text;
+    busybox_version := MainformFrm.busybox_version_edit.Text;
 
   finally
-    ini.Free;
+    Ini.Free;
   end;
 
-  ComposePfad := IncludeTrailingPathDelimiter(AppDataFolder) + 'docker-compose.yml';
+  ComposePath := IncludeTrailingPathDelimiter(AppDataFolder) + 'docker-compose.yml';
 
-  Inhalt :=
+  ComposeContent :=
     '#compose Datei fuer den Einsatz des "Paperless Backup Programm" von ComputerRalle' + sLineBreak +
     '# ralf-peter-kleinert.de' + sLineBreak +
     '#Name des Containers, wird vor die Volumes gesetzt' + sLineBreak +
     'name: paperless-ngx' + sLineBreak + sLineBreak +
     'services:' + sLineBreak +
     '  broker:' + sLineBreak +
-    '    image: redis:'+ redis_version + sLineBreak +   //var redis_version
+    '    image: docker.io/library/redis:'+ redis_version + sLineBreak +   //var redis_version
     '    restart: always' + sLineBreak + sLineBreak +
     '  db:' + sLineBreak +
-    '    image: postgres:' + postgresql_version + sLineBreak + //var postgresql_version
+    '    image: docker.io/library/postgres:' + postgresql_version + sLineBreak + //var postgresql_version
     '    restart: always' + sLineBreak +
     '    volumes:' + sLineBreak +
     '      - db_data:/var/lib/postgresql/data' + sLineBreak +
@@ -467,7 +463,7 @@ begin
     '    environment:' + sLineBreak +
     '      DISABLE_GOOGLE_CHROME: "1"' + sLineBreak + sLineBreak +
     '  tika:' + sLineBreak +
-    '    image: apache/tika:' + tika_version + sLineBreak +  //var tika_version
+    '    image: docker.io/apache/tika:' + tika_version + sLineBreak +  //var tika_version
     '    restart: always' + sLineBreak + sLineBreak +
     '# alpine wird vom Paperless Backup Program benötigt' + sLineBreak +
     '  alpine:' + sLineBreak +
@@ -519,7 +515,7 @@ begin
     '      PAPERLESS_CONSUMER_POLLING_RETRY_COUNT: "3"' + sLineBreak +
     '      PAPERLESS_CONSUMER_DELETE_DUPLICATES: "true"' + sLineBreak +
     '      PAPERLESS_CONSUMER_RECURSIVE: "true"' + sLineBreak +
-    '      PAPERLESS_EMPTY_TRASH_DELAY: "' + IntToStr(PapierkorbAufbewahrung) + '"' + sLineBreak +
+    '      PAPERLESS_EMPTY_TRASH_DELAY: "' + IntToStr(TrashRetentionDays) + '"' + sLineBreak +
     '      PAPERLESS_OCR_LANGUAGE: deu+eng' + sLineBreak +
     '      #Dokument Export benennt die Doks Nach Jahr, Monat, Tag, Name' + sLineBreak +
     '      PAPERLESS_FILENAME_FORMAT: "{{ created_year }}-{{ created_month }}-{{ created_day }}_{{ title }}"' + sLineBreak +
@@ -529,83 +525,81 @@ begin
     '  export:' + sLineBreak +
     '  db_data:';
 
-  // docker-compose.yml Datei schreiben
-  TFile.WriteAllText(ComposePfad, Inhalt, TEncoding.UTF8);
+  // Write docker-compose.yml.
+  TFile.WriteAllText(ComposePath, ComposeContent, TEncoding.UTF8);
 
-  // DockerCoposePfad.txt zum einlesen des Pfades schreibenm wird bei Start geprüft
-  TFile.WriteAllText(IncludeTrailingPathDelimiter(AppDataFolder) + 'DockerComposePfad.txt', ComposePfad);
+  // Write the compose path marker file. It is migrated into the INI on startup.
+  TFile.WriteAllText(IncludeTrailingPathDelimiter(AppDataFolder) + 'DockerComposePfad.txt', ComposePath);
 
 
-  //Wenn neue docker-compose.yml im AppDataOrdner angelegt werden muss, wird das ausgeschaltet
-  //HauptFormular suche nach: //Prüfen ob der neue ComposePfad bereits vorhanden ist
-  if (NeueComposeSchreiben = False) and (IstEsUpdate = False) then
+  // Do not start here when the main form only needs to create a new compose file.
+  if (ShouldWriteNewCompose = False) and (IsUpdate = False) then
   begin
-  	//CMD Skript zum starten von docker-compose.yml erstellen und speichern
-  	CmdZielPfad := IncludeTrailingPathDelimiter(AppDataFolder) + 'starte_paperless.cmd';
-		if not FileExists(CmdZielPfad) then
-  	begin
-    	CmdDatei := TStringList.Create;
-    	try
-      	CmdDatei.Add('@echo off');
-      	CmdDatei.Add('cd /d "' + AppDataFolder + '"');
-      	CmdDatei.Add('docker compose -f docker-compose.yml up -d');
-      	CmdDatei.Add('echo Systeme starten. Fenster wird gleich geschlossen ...');
-      	CmdDatei.Add('for /L %%i in (10,-1,1) do (echo %%i & timeout /t 1 >nul)');
-      	CmdDatei.Add('endlocal');
-      	CmdDatei.Add('exit');
-      	CmdDatei.SaveToFile(CmdZielPfad, TEncoding.ANSI);
-    	finally
-      	CmdDatei.Free;
-    	end;
-  	end;
-  	MainformFrm.CmdSkriptStartenUndUeberwachen;
+    // Create and save the CMD script that starts docker-compose.yml.
+    CmdTargetPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'starte_paperless.cmd';
+    if not FileExists(CmdTargetPath) then
+    begin
+      CmdFile := TStringList.Create;
+      try
+        CmdFile.Add('@echo off');
+        CmdFile.Add('cd /d "' + AppDataFolder + '"');
+        CmdFile.Add('docker compose -f docker-compose.yml up -d');
+        CmdFile.Add('echo Systeme starten. Fenster wird gleich geschlossen ...');
+        CmdFile.Add('for /L %%i in (10,-1,1) do (echo %%i & timeout /t 1 >nul)');
+        CmdFile.Add('endlocal');
+        CmdFile.Add('exit');
+        CmdFile.SaveToFile(CmdTargetPath, TEncoding.ANSI);
+      finally
+        CmdFile.Free;
+      end;
+    end;
+    MainformFrm.StartAndMonitorCmdScript;
   end;
 
-  //Wenn die IstEsUpdate aktiviert wurde
-  if IstEsUpdate = True then
+  // Update mode: rebuild the compose setup and restart Paperless.
+  if IsUpdate = True then
   begin
-    MainformFrm.LeseContainerNamenAusDatei;
-    //ShowMessage(PaperlessDBName);
-    //CMD Skript zum Neustart von Docker mit der neuen compose erstellen und speichern
-  	CmdZielPfad := IncludeTrailingPathDelimiter(AppDataFolder) + 'update_paperless.cmd';
-		if not FileExists(CmdZielPfad) OR IstEsUpdate = True then
-  	begin
-    	CmdDatei := TStringList.Create;
-    	try
-      	CmdDatei.Add('@echo off');
-      	CmdDatei.Add('cd /d "' + AppDataFolder + '"');
-        CmdDatei.Add('docker compose -f docker-compose.yml down');
-      	CmdDatei.Add('echo Neustart wird kurz abgewartrt ...');
-      	CmdDatei.Add('for /L %%i in (5,-1,1) do (echo %%i & timeout /t 1 >nul)');
-        //Hier wrden die  Imgaes gezogen
-      	CmdDatei.Add('docker compose -f docker-compose.yml pull && docker compose -f docker-compose.yml up -d');
-        CmdDatei.Add('echo Repariere Django ContentType-Struktur...');
-				CmdDatei.Add('docker exec -i paperless-ngx-paperless-1 python3 manage.py migrate contenttypes');
-				CmdDatei.Add('echo Aktualisiere PostgreSQL Collation Version...');
-				CmdDatei.Add(Format('docker exec -i %s psql -U paperless -d paperless -c "ALTER DATABASE paperless REFRESH COLLATION VERSION;"', [PaperlessDBName]));
-    		CmdDatei.Add('echo Nicht mehr verwendete Volumes werden geloescht');
-    		CmdDatei.Add('for /L %%i in (3,-1,1) do (echo %%i & timeout /t 1 >nul)');
-    		CmdDatei.Add('docker volume prune -f');
-    		CmdDatei.Add('for /L %%i in (3,-1,1) do (echo %%i & timeout /t 1 >nul)');
-      	CmdDatei.Add('echo Systeme starten. Fenster wird gleich geschlossen ...');
-      	CmdDatei.Add('for /L %%i in (10,-1,1) do (echo %%i & timeout /t 1 >nul)');
-      	CmdDatei.Add('endlocal');
-      	CmdDatei.Add('exit');
-      	CmdDatei.SaveToFile(CmdZielPfad, TEncoding.ANSI);
-    	finally
-      	CmdDatei.Free;
-    	end;
-  	end;
-  	MainformFrm.CmdSkriptStartenUndUeberwachen;
+    MainformFrm.ReadContainerNamesFromFile;
+    // Create and save the CMD script for the Docker restart.
+    CmdTargetPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'update_paperless.cmd';
+    if not FileExists(CmdTargetPath) OR IsUpdate = True then
+    begin
+      CmdFile := TStringList.Create;
+      try
+        CmdFile.Add('@echo off');
+        CmdFile.Add('cd /d "' + AppDataFolder + '"');
+        CmdFile.Add('docker compose -f docker-compose.yml down');
+        CmdFile.Add('echo Neustart wird kurz abgewartrt ...');
+        CmdFile.Add('for /L %%i in (5,-1,1) do (echo %%i & timeout /t 1 >nul)');
+        // Pull updated images here.
+        CmdFile.Add('docker compose -f docker-compose.yml pull && docker compose -f docker-compose.yml up -d');
+        CmdFile.Add('echo Repariere Django ContentType-Struktur...');
+        CmdFile.Add('docker exec -i paperless-ngx-paperless-1 python3 manage.py migrate contenttypes');
+        CmdFile.Add('echo Aktualisiere PostgreSQL Collation Version...');
+        CmdFile.Add(Format('docker exec -i %s psql -U paperless -d paperless -c "ALTER DATABASE paperless REFRESH COLLATION VERSION;"', [PaperlessDBName]));
+        CmdFile.Add('echo Nicht mehr verwendete Volumes werden geloescht');
+        CmdFile.Add('for /L %%i in (3,-1,1) do (echo %%i & timeout /t 1 >nul)');
+        CmdFile.Add('docker volume prune -f');
+        CmdFile.Add('for /L %%i in (3,-1,1) do (echo %%i & timeout /t 1 >nul)');
+        CmdFile.Add('echo Systeme starten. Fenster wird gleich geschlossen ...');
+        CmdFile.Add('for /L %%i in (10,-1,1) do (echo %%i & timeout /t 1 >nul)');
+        CmdFile.Add('endlocal');
+        CmdFile.Add('exit');
+        CmdFile.SaveToFile(CmdTargetPath, TEncoding.ANSI);
+      finally
+        CmdFile.Free;
+      end;
+    end;
+    MainformFrm.StartAndMonitorCmdScript;
   end;
 
 end;
 
-procedure THinweisFrm.StarteDockerCompose;
+procedure THinweisFrm.StartDockerCompose;
 var
   ExitCode: Cardinal;
 begin
-  if not RunCommand('docker', 'compose -f "' + ComposePfad + '" up -d', ExitCode) or (ExitCode <> 0) then
+  if not RunCommand('docker', 'compose -f "' + ComposePath + '" up -d', ExitCode) or (ExitCode <> 0) then
   begin
     MessageBox(0,
       'Fehler beim Start von Docker Compose.' + #13#10 +
@@ -622,16 +616,16 @@ begin
   end;
 end;
 
-procedure THinweisFrm.PruefePaperlessContainerStatus;
+procedure THinweisFrm.CheckPaperlessContainerStatus;
 var
   ComposePath: string;
   Output: TStringList;
 begin
-  // Standardmäßig alles auf False setzen
-  PaperlessContainerVorhanden := False;
-  PaperlessContainerLaeuft := False;
+  // Reset status flags first.
+  PaperlessContainerExists := False;
+  PaperlessContainerRunning := False;
 
-  // Prüfen, ob die docker-compose.yml existiert
+  // Check whether docker-compose.yml exists.
   ComposePath := IncludeTrailingPathDelimiter(GetEnvironmentVariable('USERPROFILE')) +
                  'Paperless Backup Programm\docker-compose.yml';
   if not FileExists(ComposePath) then
@@ -639,22 +633,22 @@ begin
 
   Output := TStringList.Create;
   try
-    // Ist ein Container mit "paperless" im Namen vorhanden?
+    // Check whether a container with "paperless" in its name exists.
     if RunCommandAndCapture(
          'docker',
          ['ps', '-a', '--filter', 'name=paperless', '--format', '{{.Names}}'],
          Output
        ) and (Trim(Output.Text) <> '') then
-      PaperlessContainerVorhanden := True;
+      PaperlessContainerExists := True;
 
-    // Läuft dieser Container?
+    // Check whether that container is running.
     Output.Clear;
     if RunCommandAndCapture(
          'docker',
          ['ps', '--filter', 'name=paperless', '--filter', 'status=running', '--format', '{{.Names}}'],
          Output
        ) and (Trim(Output.Text) <> '') then
-      PaperlessContainerLaeuft := True;
+      PaperlessContainerRunning := True;
   finally
     Output.Free;
   end;
@@ -675,18 +669,18 @@ begin
   Result := False;
   Output.Clear;
 
-  // Befehlskette zusammenbauen
+  // Build the command line.
   CmdLine := '"' + ExeName + '"';
   for I := Low(Params) to High(Params) do
     CmdLine := CmdLine + ' ' + Params[I];
 
-  // Sicherheitsattribute vorbereiten
+  // Prepare inheritable pipe handles.
   ZeroMemory(@SecurityAttr, SizeOf(SecurityAttr));
   SecurityAttr.nLength := SizeOf(SecurityAttr);
   SecurityAttr.bInheritHandle := True;
   SecurityAttr.lpSecurityDescriptor := nil;
 
-  // Pipe erzeugen
+  // Create the pipe used to capture output.
   if not CreatePipe(ReadPipe, WritePipe, @SecurityAttr, 0) then Exit;
   try
     ZeroMemory(@StartupInfo, SizeOf(StartupInfo));
@@ -700,7 +694,7 @@ begin
 
     if CreateProcess(nil, PChar(CmdLine), nil, nil, True, 0, nil, nil, StartupInfo, ProcessInfo) then
     begin
-      CloseHandle(WritePipe); // Schreiben beenden
+      CloseHandle(WritePipe); // Stop writing so the reader can finish.
 
       TotalOutput := '';
       repeat
@@ -724,25 +718,25 @@ begin
   end;
 end;
 
-procedure THinweisFrm.WriteImageVersion(const ZielPfad: string);
+procedure THinweisFrm.WriteImageVersion(const TargetPath: string);
 var
   Ini: TIniFile;
   Txt: TStringList;
   Keys, Versions: array[0..6] of string;
   I: Integer;
-  IniPfad, FinalPfad: string;
+  IniPath, FinalPath: string;
 begin
-  // Zielpfad auf absolute Form bringen
-  FinalPfad := ExpandFileName(ZielPfad);
+  // Normalize the target path.
+  FinalPath := ExpandFileName(TargetPath);
 
-  // Sicherstellen, dass der Ordner existiert
-  if not DirectoryExists(FinalPfad) then
-    ForceDirectories(FinalPfad);
+  // Make sure the folder exists.
+  if not DirectoryExists(FinalPath) then
+    ForceDirectories(FinalPath);
 
-  IniPfad := IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + 'Einstellungen.ini';
-  if not FileExists(IniPfad) then Exit;
+  IniPath := IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + 'Einstellungen.ini';
+  if not FileExists(IniPath) then Exit;
 
-  Ini := TIniFile.Create(IniPfad);
+  Ini := TIniFile.Create(IniPath);
   Txt := TStringList.Create;
   try
     Keys[0] := 'Paperless-Version';
@@ -763,8 +757,8 @@ begin
     Txt.Add('');
     Txt.Add('Backup erstellt am: ' + DateTimeToStr(Now));
 
-    // Ganz wichtig: jetzt explizit ins Unterverzeichnis schreiben
-    Txt.SaveToFile(IncludeTrailingPathDelimiter(FinalPfad) + 'image_versionen.txt', TEncoding.UTF8);
+    // Write the version file into the backup subfolder.
+    Txt.SaveToFile(IncludeTrailingPathDelimiter(FinalPath) + 'image_versionen.txt', TEncoding.UTF8);
   finally
     Ini.Free;
     Txt.Free;
