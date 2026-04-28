@@ -88,13 +88,13 @@
         <AppDPIAwarenessMode>PerMonitorV2</AppDPIAwarenessMode>
         <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
         <VerInfo_Locale>1031</VerInfo_Locale>
-        <VerInfo_Keys>CompanyName=DIGITAL-easy ComputerRalle;FileDescription=$(MSBuildProjectName);FileVersion=5.25.10.100;InternalName=Paperless Backup Program;LegalCopyright=DIGITAL-easy ComputerRalle;LegalTrademarks=Paperless Backup Program;OriginalFilename=Paperless Backup Program;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=5.25.10.100;Comments=Kein Gewähr auf Funktionalität. Verwednung auf eigene Gefahr. Entwicklung unter MIT Lizenz gestellt.</VerInfo_Keys>
+        <VerInfo_Keys>CompanyName=DIGITAL-easy ComputerRalle;FileDescription=$(MSBuildProjectName);FileVersion=5.26.4.100;InternalName=Paperless Backup Program;LegalCopyright=DIGITAL-easy ComputerRalle;LegalTrademarks=Paperless Backup Program;OriginalFilename=Paperless Backup Program;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=5.26.4.100;Comments=Kein Gewähr auf Funktionalität. Verwednung auf eigene Gefahr. Entwicklung unter MIT Lizenz gestellt.</VerInfo_Keys>
         <Icon_MainIcon>assets\Paperless_Windows_Backup_Icon5.ico</Icon_MainIcon>
         <UWP_DelphiLogo44>assets\ralf-fuer-delphi-backup-tool-paperless.png</UWP_DelphiLogo44>
         <UWP_DelphiLogo150>assets\ralf-fuer-delphi-backup-tool-paperless.png</UWP_DelphiLogo150>
         <VerInfo_MajorVer>5</VerInfo_MajorVer>
-        <VerInfo_MinorVer>25</VerInfo_MinorVer>
-        <VerInfo_Release>10</VerInfo_Release>
+        <VerInfo_MinorVer>26</VerInfo_MinorVer>
+        <VerInfo_Release>4</VerInfo_Release>
         <VerInfo_Build>100</VerInfo_Build>
         <DCC_ExeOutput>C:\Users\Ralf-Peter Kleinert\Desktop\Compiler Ausgabe\</DCC_ExeOutput>
         <DCC_Define>Release;$(DCC_Define)</DCC_Define>
@@ -123,12 +123,12 @@
             <Form>Form1</Form>
             <FormType>dfm</FormType>
         </DCCReference>
+        <DCCReference Include="ScriptGenerator.pas"/>
+        <DCCReference Include="DockerComposeGenerator.pas"/>
         <DCCReference Include="HinweisForm.pas">
             <Form>HinweisFrm</Form>
             <FormType>dfm</FormType>
         </DCCReference>
-        <DCCReference Include="ScriptGenerator.pas"/>
-        <DCCReference Include="DockerComposeGenerator.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
