@@ -6,6 +6,7 @@ uses
   Vcl.Themes,
   Vcl.Styles,
   ScriptGenerator in 'ScriptGenerator.pas',
+  DockerComposeGenerator in 'DockerComposeGenerator.pas',
   HinweisForm in 'HinweisForm.pas' {HinweisFrm};
 
 {$R *.res}

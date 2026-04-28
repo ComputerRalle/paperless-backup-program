@@ -61313,23 +61313,23 @@ object MainformFrm: TMainformFrm
         Cursor = crHandPoint
         Caption = 'Weitere Themen rund um Computer'
       end
-      object DigitalEasyLbl: TLabel
+      object Web1Lbl: TLabel
         Left = 31
         Top = 424
-        Width = 106
+        Width = 150
         Height = 18
         Cursor = crHandPoint
-        Caption = 'digital-easy.de'
-        OnClick = DigitalEasyLblClick
+        Caption = 'ralf-peter-kleinert.de'
+        OnClick = Web1LblClick
       end
-      object ComputerRalleLbl: TLabel
+      object Web2Lbl: TLabel
         Left = 31
         Top = 454
-        Width = 125
+        Width = 190
         Height = 18
         Cursor = crHandPoint
-        Caption = 'computerralle.de'
-        OnClick = ComputerRalleLblClick
+        Caption = 'blog.ralf-peter-kleinert.de'
+        OnClick = Web2LblClick
       end
       object Label31: TLabel
         Left = 467

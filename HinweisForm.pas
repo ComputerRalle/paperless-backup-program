@@ -77,7 +77,7 @@ implementation
 {$R *.dfm}
 
 uses
-  Mainform;
+  Mainform, DockerComposeGenerator;
 
 // Close the whole program when the notice form was opened as the first form.
 procedure THinweisFrm.FormClose(Sender: TObject; var Action: TCloseAction);
@@ -402,6 +402,7 @@ var
   ComposePath, ComposeContent: string;
   CmdFile: TStringList;
   Ini: TIniFile;
+  Versions: TDockerImageVersions;
 begin
 
   // Read image versions from the INI file and apply defaults when empty.
@@ -448,95 +449,17 @@ begin
   end;
 
   ComposePath := IncludeTrailingPathDelimiter(AppDataFolder) + 'docker-compose.yml';
-
-  ComposeContent :=
-    '# Compose file for the Paperless Backup Program by ComputerRalle' + sLineBreak +
-    '# ralf-peter-kleinert.de' + sLineBreak +
-    '# The compose project name is also used as prefix for the Docker volumes' + sLineBreak +
-    'name: paperless-ngx' + sLineBreak + sLineBreak +
-    'services:' + sLineBreak +
-    '  broker:' + sLineBreak +
-    '    image: docker.io/library/redis:'+ redis_version + sLineBreak +
-    '    restart: always' + sLineBreak + sLineBreak +
-    '  db:' + sLineBreak +
-    '    image: docker.io/library/postgres:' + postgresql_version + sLineBreak +
-    '    restart: always' + sLineBreak +
-    '    volumes:' + sLineBreak +
-    '      - db_data:/var/lib/postgresql/data' + sLineBreak +
-    '    environment:' + sLineBreak +
-    '      POSTGRES_DB: paperless' + sLineBreak +
-    '      POSTGRES_USER: paperless' + sLineBreak +
-    '      POSTGRES_PASSWORD: paperless' + sLineBreak + sLineBreak +
-    '  gotenberg:' + sLineBreak +
-    '    image: gotenberg/gotenberg:' + gotenberg_version + sLineBreak +
-    '    restart: always' + sLineBreak +
-    '    environment:' + sLineBreak +
-    '      DISABLE_GOOGLE_CHROME: "1"' + sLineBreak + sLineBreak +
-    '  tika:' + sLineBreak +
-    '    image: docker.io/apache/tika:' + tika_version + sLineBreak +
-    '    restart: always' + sLineBreak + sLineBreak +
-    '# Alpine is used by the backup program for volume archives' + sLineBreak +
-    '  alpine:' + sLineBreak +
-    '    image: alpine:' + alpine_version + sLineBreak +
-    '    container_name: alpine_helper' + sLineBreak +
-    '    entrypoint: sh' + sLineBreak +
-    '    stdin_open: true' + sLineBreak +
-    '    tty: true' + sLineBreak + sLineBreak +
-    '# BusyBox is available as an additional helper environment' + sLineBreak +
-    '  busybox:'   + sLineBreak +
-    '    image: busybox:' + busybox_version + sLineBreak +
-    '    container_name: busybox_helper' + sLineBreak +
-    '    entrypoint: sh' + sLineBreak +
-    '    stdin_open: true' + sLineBreak +
-    '    tty: true' + sLineBreak + sLineBreak +
-    '  paperless:' + sLineBreak +
-    '    image: ghcr.io/paperless-ngx/paperless-ngx:' + paperless_ngx_version + sLineBreak +
-    '    depends_on:' + sLineBreak +
-    '      - db' + sLineBreak +
-    '      - broker' + sLineBreak +
-    '      - gotenberg' + sLineBreak +
-    '      - tika' + sLineBreak +
-    '    ports:' + sLineBreak +
-    '      - "8000:8000"' + sLineBreak +
-    '    restart: always' + sLineBreak +
-    '    volumes:' + sLineBreak +
-    '      - data:/usr/src/paperless/data' + sLineBreak +
-    '      - media:/usr/src/paperless/media' + sLineBreak +
-    '      - export:/usr/src/paperless/export' + sLineBreak +
-    '      - ' + PaperlessInput + ':/usr/src/paperless/consume' + sLineBreak +
-    '    env_file:' + sLineBreak +
-    '      - ./email-versand.env' + sLineBreak +
-    '    environment:' + sLineBreak +
-    '      PAPERLESS_REDIS: redis://broker:6379' + sLineBreak +
-    '      PAPERLESS_DBHOST: db' + sLineBreak +
-    '      PAPERLESS_DBNAME: paperless' + sLineBreak +
-    '      PAPERLESS_DBUSER: paperless' + sLineBreak +
-    '      PAPERLESS_DBPASS: paperless' + sLineBreak +
-    '      PAPERLESS_TIME_ZONE: Europe/Berlin' + sLineBreak +
-    '      PAPERLESS_SECRET_KEY: aksjdfhs87H/(&986jlkhgiu87659zol' + sLineBreak +
-    '      PAPERLESS_CONSUMPTION_DIR: /usr/src/paperless/consume' + sLineBreak +
-    '      PAPERLESS_MEDIA_ROOT: /usr/src/paperless/media' + sLineBreak +
-    '      PAPERLESS_EXPORT_DIR: /usr/src/paperless/export' + sLineBreak +
-    '      PAPERLESS_TIKA_ENABLED: "1"' + sLineBreak +
-    '      PAPERLESS_TIKA_GOTENBERG_ENDPOINT: http://gotenberg:3000' + sLineBreak +
-    '      PAPERLESS_TIKA_ENDPOINT: http://tika:9998' + sLineBreak +
-    '      PAPERLESS_CONSUMER_POLLING: "30"' + sLineBreak +
-    '      PAPERLESS_CONSUMER_POLLING_DELAY: "30"' + sLineBreak +
-    '      PAPERLESS_CONSUMER_POLLING_RETRY_COUNT: "3"' + sLineBreak +
-    '      PAPERLESS_CONSUMER_DELETE_DUPLICATES: "true"' + sLineBreak +
-    '      PAPERLESS_CONSUMER_RECURSIVE: "true"' + sLineBreak +
-    '      PAPERLESS_EMPTY_TRASH_DELAY: "' + IntToStr(TrashRetentionDays) + '"' + sLineBreak +
-    '      PAPERLESS_OCR_LANGUAGE: deu+eng' + sLineBreak +
-    '      # Exported documents are named by year, month, day, and title' + sLineBreak +
-    '      PAPERLESS_FILENAME_FORMAT: "{{ created_year }}-{{ created_month }}-{{ created_day }}_{{ title }}"' + sLineBreak +
-    'volumes:' + sLineBreak +
-    '  data:' + sLineBreak +
-    '  media:' + sLineBreak +
-    '  export:' + sLineBreak +
-    '  db_data:';
+  Versions.Paperless := paperless_ngx_version;
+  Versions.Postgres := postgresql_version;
+  Versions.Redis := redis_version;
+  Versions.Gotenberg := gotenberg_version;
+  Versions.Tika := tika_version;
+  Versions.Alpine := alpine_version;
+  Versions.Busybox := busybox_version;
+  ComposeContent := CreateDockerComposeContent(Versions, PaperlessInput, TrashRetentionDays);
 
   // Write docker-compose.yml.
-  TFile.WriteAllText(ComposePath, ComposeContent, TEncoding.UTF8);
+  SaveDockerComposeFile(ComposePath, ComposeContent);
 
   // Write the compose path marker file. It is migrated into the INI on startup.
   TFile.WriteAllText(IncludeTrailingPathDelimiter(AppDataFolder) + 'DockerComposePfad.txt', ComposePath);

@@ -128,8 +128,8 @@ type
     Label24: TLabel;
     BackupProgrammAnleitungLbl: TLabel;
     Label30: TLabel;
-    DigitalEasyLbl: TLabel;
-    ComputerRalleLbl: TLabel;
+    Web1Lbl: TLabel;
+    Web2Lbl: TLabel;
     Label31: TLabel;
     NewsletterLbl: TLabel;
     Label32: TLabel;
@@ -196,8 +196,8 @@ type
     procedure PaperlessPlaylistLblClick(Sender: TObject);
     procedure MyYouTubeChannelLblClick(Sender: TObject);
     procedure BackupProgramGuideLblClick(Sender: TObject);
-    procedure DigitalEasyLblClick(Sender: TObject);
-    procedure ComputerRalleLblClick(Sender: TObject);
+    procedure Web1LblClick(Sender: TObject);
+    procedure Web2LblClick(Sender: TObject);
     procedure NewsletterLblClick(Sender: TObject);
     procedure FormClose(Sender: TObject; var Action: TCloseAction);
     procedure StaticText1Click(Sender: TObject);
@@ -1066,14 +1066,14 @@ begin
       Font.Color := clYellow;
     end;
 
-    with DigitalEasyLbl do
+    with Web1Lbl do
     begin
       StyleElements := StyleElements - [seFont];
       Transparent := True;
       Font.Color := clYellow;
     end;
 
-    with ComputerRalleLbl do
+    with Web2Lbl do
     begin
       StyleElements := StyleElements - [seFont];
       Transparent := True;
@@ -2452,14 +2452,14 @@ begin
  ShellExecute(0, 'open', 'https://ralf-peter-kleinert.de/linux-os/paperless-backup-programm.html', nil, nil, SW_SHOWNORMAL);
 end;
 
-procedure TMainformFrm.DigitalEasyLblClick(Sender: TObject);
+procedure TMainformFrm.Web1LblClick(Sender: TObject);
 begin
- ShellExecute(0, 'open', 'https://digital-easy.de', nil, nil, SW_SHOWNORMAL);
+ ShellExecute(0, 'open', 'https://ralf-peter-kleinert.de', nil, nil, SW_SHOWNORMAL);
 end;
 
-procedure TMainformFrm.ComputerRalleLblClick(Sender: TObject);
+procedure TMainformFrm.Web2LblClick(Sender: TObject);
 begin
- ShellExecute(0, 'open', 'https://computerralle.de', nil, nil, SW_SHOWNORMAL);
+ ShellExecute(0, 'open', 'https://blog.ralf-peter-kleinert.de', nil, nil, SW_SHOWNORMAL);
 end;
 
 procedure TMainformFrm.NewsletterLblClick(Sender: TObject);
