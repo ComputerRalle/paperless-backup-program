@@ -5,6 +5,7 @@ uses
   MainForm in 'MainForm.pas' {Form1},
   Vcl.Themes,
   Vcl.Styles,
+  AppConfig in 'AppConfig.pas',
   ScriptGenerator in 'ScriptGenerator.pas',
   DockerComposeGenerator in 'DockerComposeGenerator.pas',
   HinweisForm in 'HinweisForm.pas' {HinweisFrm};

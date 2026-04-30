@@ -6,6 +6,12 @@ Alle wichtigen Aenderungen an diesem Projekt werden hier dokumentiert.
 
 ## Unreleased / Noch nicht veroeffentlicht
 
+- Switched the project license to GNU General Public License v3.
+- Projektlizenz auf GNU General Public License v3 umgestellt.
+- Updated copyright notices to `Copyright (C) 2026 Ralf-Peter Kleinert / ComputerRalle`.
+- Copyright-Hinweise auf `Copyright (C) 2026 Ralf-Peter Kleinert / ComputerRalle` aktualisiert.
+- Centralized application file names, URLs, INI version keys, and Docker defaults in `AppConfig.pas`.
+- Dateinamen, URLs, INI-Versionsschluessel und Docker-Standardwerte in `AppConfig.pas` zentralisiert.
 - Added `README.md` and this `CHANGELOG.md` for the repository.
 - `README.md` und diese `CHANGELOG.md` fuer das Repository ergaenzt.
 - Cleaned up the repository structure and removed generated Delphi history files from version control.
@@ -17,10 +23,8 @@ Alle wichtigen Aenderungen an diesem Projekt werden hier dokumentiert.
 
 ## 5.25.10.100 - 2025-10-29
 
-- Switched the project to the MIT License and published the source code on Codeberg.
-- Projekt auf die MIT-Lizenz umgestellt und den Quellcode auf Codeberg veroeffentlicht.
-- Added and adjusted the German license text.
-- Deutsche Lizenztexte ergaenzt und angepasst.
+- Published the source code on Codeberg and added license documentation.
+- Quellcode auf Codeberg veroeffentlicht und Lizenzdokumentation ergaenzt.
 - Updated project and update metadata to version `5.25.10.100`.
 - Projekt- und Update-Metadaten auf Version `5.25.10.100` aktualisiert.
 

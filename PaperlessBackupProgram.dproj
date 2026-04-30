@@ -66,7 +66,7 @@
         <DCC_Namespace>Winapi;System.Win;Data.Win;Datasnap.Win;Web.Win;Soap.Win;Xml.Win;Bde;$(DCC_Namespace)</DCC_Namespace>
         <BT_BuildType>Debug</BT_BuildType>
         <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
-        <VerInfo_Keys>CompanyName=;FileDescription=$(MSBuildProjectName);FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
+        <VerInfo_Keys>CompanyName=;FileDescription=$(MSBuildProjectName);FileVersion=1.0.0.0;InternalName=;LegalCopyright=Copyright (C) 2026 Ralf-Peter Kleinert / ComputerRalle;LegalTrademarks=;OriginalFilename=;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
         <VerInfo_Locale>1033</VerInfo_Locale>
         <Manifest_File>$(BDS)\bin\default_app.manifest</Manifest_File>
     </PropertyGroup>
@@ -88,7 +88,7 @@
         <AppDPIAwarenessMode>PerMonitorV2</AppDPIAwarenessMode>
         <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
         <VerInfo_Locale>1031</VerInfo_Locale>
-        <VerInfo_Keys>CompanyName=DIGITAL-easy ComputerRalle;FileDescription=$(MSBuildProjectName);FileVersion=5.26.4.100;InternalName=Paperless Backup Program;LegalCopyright=DIGITAL-easy ComputerRalle;LegalTrademarks=Paperless Backup Program;OriginalFilename=Paperless Backup Program;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=5.26.4.100;Comments=Kein Gewähr auf Funktionalität. Verwednung auf eigene Gefahr. Entwicklung unter MIT Lizenz gestellt.</VerInfo_Keys>
+        <VerInfo_Keys>CompanyName=DIGITAL-easy ComputerRalle;FileDescription=$(MSBuildProjectName);FileVersion=5.26.4.100;InternalName=Paperless Backup Program;LegalCopyright=Copyright (C) 2026 Ralf-Peter Kleinert / ComputerRalle;LegalTrademarks=Paperless Backup Program;OriginalFilename=Paperless Backup Program;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=5.26.4.100;Comments=Kein Gewähr auf Funktionalität. Verwednung auf eigene Gefahr. Entwicklung unter GNU General Public License v3 gestellt.</VerInfo_Keys>
         <Icon_MainIcon>assets\Paperless_Windows_Backup_Icon5.ico</Icon_MainIcon>
         <UWP_DelphiLogo44>assets\ralf-fuer-delphi-backup-tool-paperless.png</UWP_DelphiLogo44>
         <UWP_DelphiLogo150>assets\ralf-fuer-delphi-backup-tool-paperless.png</UWP_DelphiLogo150>
@@ -113,7 +113,7 @@
         <VerInfo_Release>10</VerInfo_Release>
         <VerInfo_Build>103</VerInfo_Build>
         <VerInfo_Locale>1031</VerInfo_Locale>
-        <VerInfo_Keys>CompanyName=Ralf-Peter Kleinert DIGITAL-easy ComputerRalle;FileDescription=$(MSBuildProjectName);FileVersion=4.25.10.103;InternalName=PaperlessBackupProgram;LegalCopyright=DIGITAL-easy ComputerRalle;LegalTrademarks=Paperless Backup Programm;OriginalFilename=Paperless Backup Program;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=4.25.10.100;Comments=</VerInfo_Keys>
+        <VerInfo_Keys>CompanyName=Ralf-Peter Kleinert DIGITAL-easy ComputerRalle;FileDescription=$(MSBuildProjectName);FileVersion=4.25.10.103;InternalName=PaperlessBackupProgram;LegalCopyright=Copyright (C) 2026 Ralf-Peter Kleinert / ComputerRalle;LegalTrademarks=Paperless Backup Programm;OriginalFilename=Paperless Backup Program;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=4.25.10.100;Comments=</VerInfo_Keys>
     </PropertyGroup>
     <ItemGroup>
         <DelphiCompile Include="$(MainSource)">
@@ -123,6 +123,7 @@
             <Form>Form1</Form>
             <FormType>dfm</FormType>
         </DCCReference>
+        <DCCReference Include="AppConfig.pas"/>
         <DCCReference Include="ScriptGenerator.pas"/>
         <DCCReference Include="DockerComposeGenerator.pas"/>
         <DCCReference Include="HinweisForm.pas">

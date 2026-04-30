@@ -9,10 +9,10 @@
 // Webseite: https://ralf-peter-kleinert.de
 // YouTube: https://www.youtube.com/@ralf-peter-kleinert
 // YouTube-Kanal: https://www.youtube.com/@ralf-peter-kleinert
-// Copyright (c) 2025 Ralf-Peter Kleinert
-// Urheberrecht (c) 2025 Ralf-Peter Kleinert
-// MIT License - see LICENSE file in the repository
-// MIT-Lizenz - siehe LICENSE-Datei im Repository
+// Copyright (C) 2026 Ralf-Peter Kleinert / ComputerRalle
+// Urheberrecht (C) 2026 Ralf-Peter Kleinert / ComputerRalle
+// GNU General Public License v3 - see LICENSE.txt in the repository
+// GNU General Public License v3 - siehe LICENSE.txt im Repository
 // --------------------------------------------------------------
 
 unit ScriptGenerator;

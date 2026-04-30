@@ -63,6 +63,8 @@ Die Anwendung speichert Laufzeiteinstellungen im Benutzerprofil:
 - `Mainform.pas` - Hauptformular und Ablaufsteuerung der Anwendung.
 - `HinweisForm.pas` - first-run notice, Docker check, and installation workflow.
 - `HinweisForm.pas` - Ersthinweis, Docker-Pruefung und Installationsablauf.
+- `AppConfig.pas` - central file names, URLs, INI keys, and Docker defaults.
+- `AppConfig.pas` - zentrale Dateinamen, URLs, INI-Schluessel und Docker-Standardwerte.
 - `ScriptGenerator.pas` - generation of backup, restore, restart, and scheduler scripts.
 - `ScriptGenerator.pas` - Erzeugung von Backup-, Restore-, Neustart- und Zeitplan-Skripten.
 - `DockerComposeGenerator.pas` - generation of the Paperless Docker Compose file.
@@ -74,7 +76,10 @@ Die Anwendung speichert Laufzeiteinstellungen im Benutzerprofil:
 
 ## License / Lizenz
 
-This project is published under the MIT License. See `LICENSE.txt`.
+Copyright (C) 2026 Ralf-Peter Kleinert / ComputerRalle
 
-Dieses Projekt steht unter der MIT-Lizenz. Siehe `LICENSE.txt`.
+This project is licensed under the GNU General Public License v3. See `LICENSE.txt`.
+For commercial use without the obligation to disclose source code, please contact me for a separate license.
 
+Dieses Projekt steht unter der GNU General Public License v3. Siehe `LICENSE.txt`.
+Fuer kommerzielle Nutzung ohne Offenlegungspflicht kontaktieren Sie mich fuer eine separate Lizenz.

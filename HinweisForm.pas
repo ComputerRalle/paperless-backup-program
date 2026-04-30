@@ -9,10 +9,10 @@
 // Webseite: https://ralf-peter-kleinert.de
 // YouTube: https://www.youtube.com/@ralf-peter-kleinert
 // YouTube-Kanal: https://www.youtube.com/@ralf-peter-kleinert
-// Copyright (c) 2025 Ralf-Peter Kleinert
-// Urheberrecht (c) 2025 Ralf-Peter Kleinert
-// MIT License - see LICENSE file in the repository
-// MIT-Lizenz - siehe LICENSE-Datei im Repository
+// Copyright (C) 2026 Ralf-Peter Kleinert / ComputerRalle
+// Urheberrecht (C) 2026 Ralf-Peter Kleinert / ComputerRalle
+// GNU General Public License v3 - see LICENSE.txt in the repository
+// GNU General Public License v3 - siehe LICENSE.txt im Repository
 // --------------------------------------------------------------
 
 unit HinweisForm;
@@ -88,7 +88,7 @@ implementation
 {$R *.dfm}
 
 uses
-  Mainform, DockerComposeGenerator;
+  Mainform, DockerComposeGenerator, AppConfig;
 
 // Close the whole program when the notice form was opened as the first form.
 // Das gesamte Programm schließen, wenn das Hinweisfenster als erstes Fenster geöffnet wurde.
@@ -121,7 +121,7 @@ begin
   StatusBar1.Height:= 25;
   StatusBar1.Font.Size:= 10;
   StatusBar1.Font.Style:= [fsBold];
-  StatusBar1.Panels.Add.Text := ' ' + ' #ComputerRalle - Paperless Backup Programm ' + MainformFrm.GetFileVersion(Application.ExeName);
+  StatusBar1.Panels.Add.Text := ' ' + AppStatusTitle + MainformFrm.GetFileVersion(Application.ExeName);
 
   // Make link labels readable in dark mode.
   // Link-Beschriftungen im dunklen Modus lesbar machen.
@@ -170,7 +170,7 @@ begin
     DockerGefundenLbl.Caption := 'Paperless Container gefunden. Installation nicht notwendig.';
     WillkommenLbl.Visible := True;
     ComputerRalleLbl.Visible := True;
-    LinkKlickLbl.Caption:= 'http://localhost:8000';
+    LinkKlickLbl.Caption:= PaperlessLocalUrl;
     IsPaperlessInstallation := True;
     Label1.Caption:= 'Paperless öffnen:';
     DockerGefundenLbl.Visible := True;
@@ -190,7 +190,7 @@ begin
     // Paperless is running, so the user can open it directly.
     // Paperless läuft, daher kann der Benutzer es direkt öffnen.
     DockerGefundenLbl.Caption := 'Paperless Container gefunden. Installation nicht notwendig.';
-    LinkKlickLbl.Caption:= 'http://localhost:8000';
+    LinkKlickLbl.Caption:= PaperlessLocalUrl;
     IsPaperlessInstallation := True;
     Label1.Caption:= 'Paperless öffnen:';
     DockerGefundenLbl.Visible := True;
@@ -214,7 +214,7 @@ begin
   if not DirectoryExists(Mainform.AppDataFolder) then ForceDirectories(AppDataFolder);
   // Store this state in the INI file.
   // Diesen Zustand in der INI-Datei speichern.
-  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + 'Einstellungen.ini');
+  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + SettingsFileName);
    try
     try
       Ini.WriteString('Einrichtung', 'Hinweis verstanden', 'Ja');
@@ -286,7 +286,7 @@ begin
       HinweisVerstandenBtn.Enabled := False;
       WillkommenLbl.Visible := False;
       LinkKlickLbl.Visible := False;
-      ShellExecute(0, 'open', 'https://www.docker.com/products/docker-desktop/', nil, nil, SW_SHOWNORMAL);
+      ShellExecute(0, 'open', DockerDesktopUrl, nil, nil, SW_SHOWNORMAL);
       Application.Terminate;
       // Keep this Exit in case code is added below later.
       // Dieses Exit beibehalten, falls später darunter Code ergänzt wird.
@@ -298,7 +298,7 @@ begin
     DockerAvailable := True;
   end;
 
-  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + 'Einstellungen.ini');
+  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + SettingsFileName);
   try
      try
       // Save the installation state before running the script.
@@ -337,7 +337,7 @@ begin
       HinweisVerstandenBtn.Enabled := False;
       WillkommenLbl.Visible := False;
       LinkKlickLbl.Visible := False;
-      ShellExecute(0, 'open', 'https://www.docker.com/products/docker-desktop/', nil, nil, SW_SHOWNORMAL);
+      ShellExecute(0, 'open', DockerDesktopUrl, nil, nil, SW_SHOWNORMAL);
       Application.Terminate;
       // Keep this Exit in case code is added below later.
       // Dieses Exit beibehalten, falls später darunter Code ergänzt wird.
@@ -427,7 +427,7 @@ end;
 // Das KeePassXC-Hilfevideo öffnen.
 procedure THinweisFrm.KeePassXCLblClick(Sender: TObject);
 begin
-  ShellExecute(0, 'open', 'https://www.youtube.com/watch?v=j4DWjU9XucI', nil, nil, SW_SHOWNORMAL);
+  ShellExecute(0, 'open', KeePassHelpVideoUrl, nil, nil, SW_SHOWNORMAL);
 end;
 
 // Open either Paperless or Docker, depending on the current form state.
@@ -437,15 +437,15 @@ begin
   // During installation the link opens Paperless; otherwise it opens Docker.
   // Während der Installation öffnet der Link Paperless, sonst öffnet er Docker.
   if ShouldOpenPaperless then
-  ShellExecute(0, 'open', 'http://localhost:8000/', nil, nil, SW_SHOWNORMAL) else
-  ShellExecute(0, 'open', 'https://www.docker.com/products/docker-desktop/', nil, nil, SW_SHOWNORMAL);
+  ShellExecute(0, 'open', PaperlessLocalUrlWithSlash, nil, nil, SW_SHOWNORMAL) else
+  ShellExecute(0, 'open', DockerDesktopUrl, nil, nil, SW_SHOWNORMAL);
 end;
 
 // Open the ComputerRalle website.
 // Die ComputerRalle-Webseite öffnen.
 procedure THinweisFrm.ComputerRalleLblClick(Sender: TObject);
 begin
-  ShellExecute(0, 'open', 'https://ralf-peter-kleinert.de', nil, nil, SW_SHOWNORMAL);
+  ShellExecute(0, 'open', ComputerRalleUrl, nil, nil, SW_SHOWNORMAL);
 end;
 
 // Create docker-compose.yml and, depending on the mode, start or restart Paperless.
@@ -460,35 +460,35 @@ begin
 
   // Read image versions from the INI file and apply defaults when empty.
   // Image-Versionen aus der INI-Datei lesen und bei leeren Werten Standardwerte verwenden.
-  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
+  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
-    MainformFrm.redis_version_edit.Text := Ini.ReadString('Versionen', 'Redis-Version', '');
+    MainformFrm.redis_version_edit.Text := Ini.ReadString(IniSectionVersions, IniKeyRedisVersion, '');
     if MainformFrm.redis_version_edit.Text = '' then
-      MainformFrm.redis_version_edit.Text := '8';
+      MainformFrm.redis_version_edit.Text := DefaultRedisVersion;
 
-    MainformFrm.paperless_version_edit.Text := Ini.ReadString('Versionen', 'Paperless-Version', '');
+    MainformFrm.paperless_version_edit.Text := Ini.ReadString(IniSectionVersions, IniKeyPaperlessVersion, '');
     if MainformFrm.paperless_version_edit.Text = '' then
-      MainformFrm.paperless_version_edit.Text := '2.20.15';
+      MainformFrm.paperless_version_edit.Text := DefaultPaperlessVersion;
 
-    MainformFrm.postgres_version_edit.Text := Ini.ReadString('Versionen', 'Postgres-Version', '');
+    MainformFrm.postgres_version_edit.Text := Ini.ReadString(IniSectionVersions, IniKeyPostgresVersion, '');
     if MainformFrm.postgres_version_edit.Text = '' then
-      MainformFrm.postgres_version_edit.Text := '17';
+      MainformFrm.postgres_version_edit.Text := DefaultPostgresVersion;
 
-    MainformFrm.gotenberg_version_edit.Text := Ini.ReadString('Versionen', 'Gotenberg-Version', '');
+    MainformFrm.gotenberg_version_edit.Text := Ini.ReadString(IniSectionVersions, IniKeyGotenbergVersion, '');
     if MainformFrm.gotenberg_version_edit.Text = '' then
-      MainformFrm.gotenberg_version_edit.Text := '8.25';
+      MainformFrm.gotenberg_version_edit.Text := DefaultGotenbergVersion;
 
-    MainformFrm.tika_version_edit.Text := Ini.ReadString('Versionen', 'Tika-Version', '');
+    MainformFrm.tika_version_edit.Text := Ini.ReadString(IniSectionVersions, IniKeyTikaVersion, '');
     if MainformFrm.tika_version_edit.Text = '' then
-      MainformFrm.tika_version_edit.Text := 'latest';
+      MainformFrm.tika_version_edit.Text := DefaultTikaVersion;
 
-    MainformFrm.alpine_version_edit.Text := Ini.ReadString('Versionen', 'Alpine-Version', '');
+    MainformFrm.alpine_version_edit.Text := Ini.ReadString(IniSectionVersions, IniKeyAlpineVersion, '');
     if MainformFrm.alpine_version_edit.Text = '' then
-      MainformFrm.alpine_version_edit.Text := '3';
+      MainformFrm.alpine_version_edit.Text := DefaultAlpineVersion;
 
-    MainformFrm.busybox_version_edit.Text := Ini.ReadString('Versionen', 'Busybox-Version', '');
+    MainformFrm.busybox_version_edit.Text := Ini.ReadString(IniSectionVersions, IniKeyBusyboxVersion, '');
     if MainformFrm.busybox_version_edit.Text = '' then
-      MainformFrm.busybox_version_edit.Text := '1';
+      MainformFrm.busybox_version_edit.Text := DefaultBusyboxVersion;
 
     redis_version := MainformFrm.redis_version_edit.Text;
     paperless_ngx_version := MainformFrm.paperless_version_edit.Text;
@@ -502,7 +502,7 @@ begin
     Ini.Free;
   end;
 
-  ComposePath := IncludeTrailingPathDelimiter(AppDataFolder) + 'docker-compose.yml';
+  ComposePath := IncludeTrailingPathDelimiter(AppDataFolder) + DockerComposeFileName;
   Versions.Paperless := paperless_ngx_version;
   Versions.Postgres := postgresql_version;
   Versions.Redis := redis_version;
@@ -518,7 +518,7 @@ begin
 
   // Write the compose path marker file. It is migrated into the INI on startup.
   // Die Markerdatei für den Compose-Pfad schreiben. Sie wird beim Start in die INI migriert.
-  TFile.WriteAllText(IncludeTrailingPathDelimiter(AppDataFolder) + 'DockerComposePfad.txt', ComposePath);
+  TFile.WriteAllText(IncludeTrailingPathDelimiter(AppDataFolder) + ComposePathFileName, ComposePath);
 
 
   // Do not start here when the main form only needs to create a new compose file.
@@ -745,7 +745,7 @@ begin
   if not DirectoryExists(FinalPath) then
     ForceDirectories(FinalPath);
 
-  IniPath := IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + 'Einstellungen.ini';
+  IniPath := IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + SettingsFileName;
   if not FileExists(IniPath) then Exit;
 
   Ini := TIniFile.Create(IniPath);
@@ -771,7 +771,7 @@ begin
 
     // Write the version file into the backup subfolder.
     // Die Versionsdatei in den Backup-Unterordner schreiben.
-    Txt.SaveToFile(IncludeTrailingPathDelimiter(FinalPath) + 'image_versionen.txt', TEncoding.UTF8);
+    Txt.SaveToFile(IncludeTrailingPathDelimiter(FinalPath) + ImageVersionsFileName, TEncoding.UTF8);
   finally
     Ini.Free;
     Txt.Free;

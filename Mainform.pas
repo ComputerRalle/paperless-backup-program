@@ -9,10 +9,10 @@
 // Webseite: https://ralf-peter-kleinert.de
 // YouTube: https://www.youtube.com/@ralf-peter-kleinert
 // YouTube-Kanal: https://www.youtube.com/@ralf-peter-kleinert
-// Copyright (c) 2025 Ralf-Peter Kleinert
-// Urheberrecht (c) 2025 Ralf-Peter Kleinert
-// MIT License - see LICENSE file in the repository
-// MIT-Lizenz - siehe LICENSE-Datei im Repository
+// Copyright (C) 2026 Ralf-Peter Kleinert / ComputerRalle
+// Urheberrecht (C) 2026 Ralf-Peter Kleinert / ComputerRalle
+// GNU General Public License v3 - see LICENSE.txt in the repository
+// GNU General Public License v3 - siehe LICENSE.txt im Repository
 // --------------------------------------------------------------
 
 unit Mainform;
@@ -23,7 +23,7 @@ uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, ShellAPI, Vcl.ComCtrls, Vcl.ExtCtrls, Vcl.Buttons,
   System.IOUtils, Vcl.Samples.Spin, System.IniFiles, DateUtils, HinweisForm, System.Generics.Collections, System.Generics.Defaults, Vcl.Menus,
-  System.Net.URLClient, System.Net.HttpClient, System.Net.HttpClientComponent, ScriptGenerator;
+  System.Net.URLClient, System.Net.HttpClient, System.Net.HttpClientComponent, ScriptGenerator, AppConfig;
 
 type
   TMainformFrm = class(TForm)
@@ -264,14 +264,14 @@ begin
 
   ProgramVersion := GetExeVersion;
 
-  if not FileExists(AppDataFolder + '\update.ini') then
+  if not FileExists(IncludeTrailingPathDelimiter(AppDataFolder) + UpdateIniFileName) then
   VersionInIni := ProgramVersion;
 
   try
     Ss := TStringStream.Create;
     try
-      NetHTTPClient1.Get('https://ralf-peter-kleinert.de/paperless-backup-programm-update/update.ini', Ss);
-      Ss.SaveToFile(AppDataFolder + '\update.ini');
+      NetHTTPClient1.Get(UpdateInfoUrl, Ss);
+      Ss.SaveToFile(IncludeTrailingPathDelimiter(AppDataFolder) + UpdateIniFileName);
     finally
       Ss.Free;
     end;
@@ -281,11 +281,11 @@ begin
     Exit;
   end;
 
-  if FileExists(AppDataFolder + '\update.ini') then
+  if FileExists(IncludeTrailingPathDelimiter(AppDataFolder) + UpdateIniFileName) then
     begin
       Sl := TStringList.Create;
       try
-        Sl.LoadFromFile(AppDataFolder + '\update.ini');
+        Sl.LoadFromFile(IncludeTrailingPathDelimiter(AppDataFolder) + UpdateIniFileName);
         VersionInIni := Trim(Sl[0]);
       finally
         Sl.Free;
@@ -316,16 +316,16 @@ var
   Ini: TIniFile;
   SettingsIniPath: string;
 begin
-  SettingsIniPath := IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + 'Einstellungen.ini';
+  SettingsIniPath := IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + SettingsFileName;
   Ini := TIniFile.Create(SettingsIniPath);
   try
-    Ini.WriteString('Versionen', 'Paperless-Version', '2.20.15');
-    Ini.WriteString('Versionen', 'Postgres-Version', '17');
-    Ini.WriteString('Versionen', 'Redis-Version', '8');
-    Ini.WriteString('Versionen', 'Gotenberg-Version', '8.25');
-    Ini.WriteString('Versionen', 'Tika-Version', 'latest');
-    Ini.WriteString('Versionen', 'Alpine-Version', '3');
-    Ini.WriteString('Versionen', 'Busybox-Version', '1');
+    Ini.WriteString(IniSectionVersions, IniKeyPaperlessVersion, DefaultPaperlessVersion);
+    Ini.WriteString(IniSectionVersions, IniKeyPostgresVersion, DefaultPostgresVersion);
+    Ini.WriteString(IniSectionVersions, IniKeyRedisVersion, DefaultRedisVersion);
+    Ini.WriteString(IniSectionVersions, IniKeyGotenbergVersion, DefaultGotenbergVersion);
+    Ini.WriteString(IniSectionVersions, IniKeyTikaVersion, DefaultTikaVersion);
+    Ini.WriteString(IniSectionVersions, IniKeyAlpineVersion, DefaultAlpineVersion);
+    Ini.WriteString(IniSectionVersions, IniKeyBusyboxVersion, DefaultBusyboxVersion);
     Ini.UpdateFile;
   finally
     Ini.Free;
@@ -343,7 +343,7 @@ end;
 // Die Unterstützungsseite im Standardbrowser öffnen.
 procedure TMainformFrm.BuyMeACoffeeBtnClick(Sender: TObject);
 begin
- ShellExecute(0, 'open', 'https://buymeacoffee.com/computerralle', nil, nil, SW_SHOWNORMAL);
+ ShellExecute(0, 'open', BuyMeACoffeeUrl, nil, nil, SW_SHOWNORMAL);
 end;
 
 // Enable or disable manual Docker image version editing.
@@ -387,7 +387,7 @@ begin
   ReadContainerNamesFromFile;
   IsPaperlessInstallation := False;
 
-  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
+  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
     Ini.WriteString('Pfade', 'DockerComposePfad', ExtractFilePath(ComposePath));
     Ini.UpdateFile; // Write immediately.
@@ -403,11 +403,11 @@ begin
 
   // Migrate the old backup target text file into the INI file.
   // Die alte Textdatei mit dem Backup-Ziel in die INI-Datei migrieren.
-  TextFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + 'BackupZiel.txt';
+  TextFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + BackupTargetFileName;
   if FileExists(TextFilePath) then
   begin
     StoredPath := TFile.ReadAllText(TextFilePath, TEncoding.UTF8).Trim;
-    Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
+    Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
     try
       Ini.WriteString('Pfade', 'BackupZiel', StoredPath);
       Ini.UpdateFile; // Write immediately.
@@ -425,7 +425,7 @@ begin
 
   // Read the last backup folder from the INI file.
   // Den letzten Backup-Ordner aus der INI-Datei lesen.
-  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
+  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
     LastBackupFolder := Ini.ReadString('Pfade', 'BackupZiel', '').Trim;
   finally
@@ -503,7 +503,7 @@ begin
     end;
   end;
 
-  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
+  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
     Ini.WriteString('Pfade', 'BackupZiel', ExtractFileDir(BackupPath));
     Ini.UpdateFile; // Write immediately.
@@ -523,7 +523,7 @@ begin
 
   // Delete the old marker file if it still exists.
   // Die alte Markerdatei löschen, falls sie noch existiert.
-  TextFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + 'DockerComposePfad.txt';
+  TextFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + ComposePathFileName;
   if FileExists(TextFilePath) then DeleteFile(TextFilePath);
 end;
 // Create paperless-backup.cmd for a manual backup.
@@ -567,7 +567,7 @@ end;
 procedure TMainformFrm.FormCreate(Sender: TObject);
 begin
 
-  AppDataFolder := IncludeTrailingPathDelimiter(GetEnvironmentVariable('USERPROFILE')) + 'Paperless Backup Programm';
+  AppDataFolder := IncludeTrailingPathDelimiter(GetEnvironmentVariable('USERPROFILE')) + AppDataFolderName;
   // Create the user data folder if it does not exist.
   // Den Benutzerdatenordner erstellen, falls er nicht existiert.
   if not DirectoryExists(AppDataFolder) then ForceDirectories(AppDataFolder);
@@ -604,7 +604,7 @@ begin
   Label28.Caption := 'Getestet mit: Paperless-ngx ' + CurrentTestedPaperlessVersion;
   Label29.Caption := 'Getestet mit: Paperless-ngx ' + CurrentTestedPaperlessVersion;
 
-  AppDataFolder := IncludeTrailingPathDelimiter(GetEnvironmentVariable('USERPROFILE')) + 'Paperless Backup Programm';
+  AppDataFolder := IncludeTrailingPathDelimiter(GetEnvironmentVariable('USERPROFILE')) + AppDataFolderName;
 
   // Create the desktop consume folder if it does not exist.
   // Den Consume-Ordner auf dem Desktop erstellen, falls er nicht existiert.
@@ -614,7 +614,7 @@ begin
 
   // Check whether the user already accepted the notice.
   // Prüfen, ob der Benutzer den Hinweis bereits akzeptiert hat.
-  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + 'Einstellungen.ini');
+  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + SettingsFileName);
   try
     Value := Ini.ReadString('Einrichtung', 'Hinweis verstanden', '');
   finally
@@ -623,14 +623,14 @@ begin
 
   if Value = 'Ja' then
   begin
-    NoticeFilePath := IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + 'HinweisVerstanden.txt';
+    NoticeFilePath := IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + NoticeAcceptedFileName;
     // Delete the old notice file after the INI value exists.
     // Die alte Hinweisdatei löschen, nachdem der INI-Wert vorhanden ist.
     if FileExists(NoticeFilePath) then DeleteFile(NoticeFilePath);
 
     // Show the notice again after 30 days.
     // Den Hinweis nach 30 Tagen erneut anzeigen.
-    if DaysBetween(Now, FileDateToDateTime(FileAge(IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + 'Einstellungen.ini'))) > 30 then
+    if DaysBetween(Now, FileDateToDateTime(FileAge(IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + SettingsFileName))) > 30 then
     begin
       HinweisFrm := THinweisFrm.Create(Self);
       try
@@ -651,7 +651,7 @@ begin
 
 
 
-  TextFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + 'DockerComposePfad.txt';
+  TextFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + ComposePathFileName;
   if FileExists(TextFilePath) then
   begin
     // Read the old path from the text file.
@@ -660,7 +660,7 @@ begin
 
     // Store it in the INI file.
     // Den Wert in der INI-Datei speichern.
-    Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
+    Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
     try
       Ini.WriteString('Pfade', 'DockerComposePfad', OldPath);
         Ini.UpdateFile; // Write immediately.
@@ -681,11 +681,11 @@ begin
 
   // Migrate the old backup target text file into the INI file.
   // Die alte Textdatei mit dem Backup-Ziel in die INI-Datei migrieren.
-  TextFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + 'BackupZiel.txt';
+  TextFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + BackupTargetFileName;
   if FileExists(TextFilePath) then
   begin
     StoredPath := TFile.ReadAllText(TextFilePath, TEncoding.UTF8).Trim;
-    Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
+    Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
     try
       Ini.WriteString('Pfade', 'BackupZiel', StoredPath);
       Ini.UpdateFile; // Write immediately.
@@ -703,7 +703,7 @@ begin
 
   // Read the last backup folder from the INI file.
   // Den letzten Backup-Ordner aus der INI-Datei lesen.
-  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
+  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
     LastBackupFolder := Ini.ReadString('Pfade', 'BackupZiel', '').Trim;
   finally
@@ -718,7 +718,7 @@ begin
   StatusBar1.Height:= 25;
   StatusBar1.Font.Size:= 10;
   StatusBar1.Font.Style:= [fsBold];
-  StatusBar1.Panels.Add.Text := ' ' + ' #ComputerRalle - Paperless Backup Programm ' + GetFileVersion(Application.ExeName);
+  StatusBar1.Panels.Add.Text := ' ' + AppStatusTitle + GetFileVersion(Application.ExeName);
   TabControl1.TabIndex := 0;
 
   if TabControl1.TabIndex = 0 then
@@ -778,9 +778,9 @@ begin
    LoadEmailSettings;
    end;
 
-  BackupTargetFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + 'BackupZiel.txt';
+  BackupTargetFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + BackupTargetFileName;
 
-  ComposePathTextFile := IncludeTrailingPathDelimiter(AppDataFolder) + 'DockerComposePfad.txt';
+  ComposePathTextFile := IncludeTrailingPathDelimiter(AppDataFolder) + ComposePathFileName;
   if FileExists(ComposePathTextFile) then
     begin
       // Read the old path from the text file.
@@ -789,7 +789,7 @@ begin
 
       // Store it in the INI file.
       // Den Wert in der INI-Datei speichern.
-      Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
+      Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
       try
         Ini.WriteString('Pfade', 'DockerComposePfad', OldPath);
         Ini.UpdateFile; // Write immediately.
@@ -807,7 +807,7 @@ begin
   // Den Standard-Compose-Pfad vorbereiten.
   NewComposePath := IncludeTrailingPathDelimiter(AppDataFolder);
 
-  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
+  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
     Value := Ini.ReadString('Einrichtung', 'Installation abgeschlossen', '');
   finally
@@ -816,10 +816,10 @@ begin
 
   // Migrate the old installation-completed text file into the INI file.
   // Die alte Textdatei für abgeschlossene Installation in die INI-Datei migrieren.
-  InstallationCompletedFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + 'InstallationAbgeschlossen.txt';
+  InstallationCompletedFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + InstallationCompletedFileName;
   if FileExists(InstallationCompletedFilePath) then
     begin
-      Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
+      Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
       try
         Ini.WriteString('Einrichtung', 'Installation abgeschlossen', 'Ja');
         Ini.UpdateFile;
@@ -834,7 +834,7 @@ begin
 
   // Read the INI value again after possible migration.
   // Den INI-Wert nach einer möglichen Migration erneut lesen.
-  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
+  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
     Value := Ini.ReadString('Einrichtung', 'Installation abgeschlossen', '');
   finally
@@ -843,7 +843,7 @@ begin
 
   if Value <> 'Ja' then
   begin
-    NewComposePath := IncludeTrailingPathDelimiter(AppDataFolder) + 'docker-compose.yml';
+    NewComposePath := IncludeTrailingPathDelimiter(AppDataFolder) + DockerComposeFileName;
 
     if not FileExists(NewComposePath) then
     begin
@@ -867,7 +867,7 @@ begin
     ComposePath := NewComposePath;
   end else
     begin
-      ComposePath := IncludeTrailingPathDelimiter(AppDataFolder) + 'docker-compose.yml';
+      ComposePath := IncludeTrailingPathDelimiter(AppDataFolder) + DockerComposeFileName;
     end;
 
   Panel6.ParentBackground := False;
@@ -902,7 +902,7 @@ begin
   // Den Backup-Pfad laden, falls er existiert.
   if FileExists(BackupTargetFilePath) then BackupPath := TFile.ReadAllText(BackupTargetFilePath).Trim;
 
-  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
+  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
     StoredPath := Ini.ReadString('Pfade', 'DockerComposePfad', '').Trim;
   finally
@@ -947,7 +947,7 @@ begin
 
    // Read trash retention from the INI file and show it in the edit field.
    // Papierkorb-Aufbewahrung aus der INI-Datei lesen und im Eingabefeld anzeigen.
-   Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
+   Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
    try
     try
       TrashRetentionDays := Ini.ReadInteger('Einstellungen', 'Papierkorb Aufbewahrungszeit in Tagen', 365);
@@ -962,37 +962,37 @@ begin
    WriteComposeContainerAndVolumeInfo(ExtractFilePath(ComposePath));
 
 
-  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
+  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   // Read image versions from the INI file and apply defaults when empty.
   // Image-Versionen aus der INI-Datei lesen und bei leeren Werten Standardwerte verwenden.
   try
-    redis_version_edit.Text := Ini.ReadString('Versionen', 'Redis-Version', '');
+    redis_version_edit.Text := Ini.ReadString(IniSectionVersions, IniKeyRedisVersion, '');
     if redis_version_edit.Text = '' then
-    redis_version_edit.Text := '7';
+    redis_version_edit.Text := DefaultRedisVersion;
 
-    paperless_version_edit.Text := Ini.ReadString('Versionen', 'Paperless-Version', '');
+    paperless_version_edit.Text := Ini.ReadString(IniSectionVersions, IniKeyPaperlessVersion, '');
     if paperless_version_edit.Text = '' then
-    paperless_version_edit.Text := '2.19.1';
+    paperless_version_edit.Text := DefaultPaperlessVersion;
 
-    postgres_version_edit.Text := Ini.ReadString('Versionen', 'Postgres-Version', '');
+    postgres_version_edit.Text := Ini.ReadString(IniSectionVersions, IniKeyPostgresVersion, '');
     if postgres_version_edit.Text = '' then
-    postgres_version_edit.Text := '17';
+    postgres_version_edit.Text := DefaultPostgresVersion;
 
-    gotenberg_version_edit.Text := Ini.ReadString('Versionen', 'Gotenberg-Version', '');
+    gotenberg_version_edit.Text := Ini.ReadString(IniSectionVersions, IniKeyGotenbergVersion, '');
     if gotenberg_version_edit.Text = '' then
-    gotenberg_version_edit.Text := '8';
+    gotenberg_version_edit.Text := DefaultGotenbergVersion;
 
-    tika_version_edit.Text := Ini.ReadString('Versionen', 'Tika-Version', '');
+    tika_version_edit.Text := Ini.ReadString(IniSectionVersions, IniKeyTikaVersion, '');
     if tika_version_edit.Text = '' then
-    tika_version_edit.Text := 'latest';
+    tika_version_edit.Text := DefaultTikaVersion;
 
-    alpine_version_edit.Text := Ini.ReadString('Versionen', 'Alpine-Version', '');
+    alpine_version_edit.Text := Ini.ReadString(IniSectionVersions, IniKeyAlpineVersion, '');
     if alpine_version_edit.Text = '' then
-    alpine_version_edit.Text := '3';
+    alpine_version_edit.Text := DefaultAlpineVersion;
 
-    busybox_version_edit.Text := Ini.ReadString('Versionen', 'Busybox-Version', '');
+    busybox_version_edit.Text := Ini.ReadString(IniSectionVersions, IniKeyBusyboxVersion, '');
     if busybox_version_edit.Text = '' then
-    busybox_version_edit.Text := '1';
+    busybox_version_edit.Text := DefaultBusyboxVersion;
 
     redis_version := redis_version_edit.Text;
     paperless_ngx_version := paperless_version_edit.Text;
@@ -1031,9 +1031,9 @@ procedure TMainformFrm.TabControl1Change(Sender: TObject);
 var
   Ini: TIniFile;
 begin
-  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
+  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
     try
-      Ini.WriteString('Pfade', 'DockerComposePfad', IncludeTrailingPathDelimiter(ExtractFilePath(ComposePath)) + 'docker-compose.yml');
+      Ini.WriteString('Pfade', 'DockerComposePfad', IncludeTrailingPathDelimiter(ExtractFilePath(ComposePath)) + DockerComposeFileName);
       Ini.UpdateFile; // Write immediately.
       // Sofort schreiben.
     finally
@@ -1199,7 +1199,7 @@ var
   Ini: TIniFile;
   MaxBackupFolders: Integer;
 begin
-  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
+  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
     // Save the retention setting.
     // Die Aufbewahrungseinstellung speichern.
@@ -1273,7 +1273,7 @@ procedure TMainformFrm.SaveScheduleSettings;
 var
   Ini: TIniFile;
 begin
-  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
+  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
     Ini.WriteBool('Zeitplan', 'Backup nach diesem Zeitplan',   AutoBackupCB.Checked);
     Ini.WriteBool('Zeitplan', 'Montag',   MondayCB.Checked);
@@ -1323,7 +1323,7 @@ begin
   AutoBackupCBClick(nil);
   // Make sure the INI value is set to False.
   // Sicherstellen, dass der INI-Wert auf False gesetzt ist.
-  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
+  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
     Ini.WriteBool('Zeitplan', 'Backup nach diesem Zeitplan', False);
   finally
@@ -1338,7 +1338,7 @@ procedure TMainformFrm.LoadScheduleSettings;
 var
   Ini: TIniFile;
 begin
-  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
+  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
     AutoBackupCB.Checked := Ini.ReadBool('Zeitplan', 'Backup nach diesem Zeitplan', False);
     MondayCB.Checked     := Ini.ReadBool('Zeitplan', 'Montag', False);
@@ -1404,7 +1404,7 @@ begin
   // Voraussetzungen prüfen.
   // Read the docker-compose path from the INI file.
   // Den docker-compose-Pfad aus der INI-Datei lesen.
-  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
+  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
     ComposePathFromIni := Ini.ReadString('Pfade', 'DockerComposePfad', '').Trim;
   finally
@@ -1443,7 +1443,7 @@ begin
   // Build the path to the planned backup CMD file.
   // Den Pfad zur geplanten Backup-CMD-Datei erstellen.
   try
-    Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
+    Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
     try
       ComposePath := Ini.ReadString('Pfade', 'DockerComposePfad', '').Trim;
     finally
@@ -1458,7 +1458,7 @@ begin
 
     // Delete the old marker file if it still exists.
     // Die alte Markerdatei löschen, falls sie noch existiert.
-    ComposePathTextFile := IncludeTrailingPathDelimiter(AppDataFolder) + 'DockerComposePfad.txt';
+    ComposePathTextFile := IncludeTrailingPathDelimiter(AppDataFolder) + ComposePathFileName;
     if FileExists(ComposePathTextFile) then DeleteFile(ComposePathTextFile);
 
     TargetCmdPath := IncludeTrailingPathDelimiter(ExtractFilePath(ComposePath)) + 'paperless-backup-geplant.cmd';
@@ -1503,7 +1503,7 @@ var
 begin
   // Path to the .env file in the app data folder.
   // Pfad zur .env-Datei im AppData-Ordner.
-  EnvFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + 'email-versand.env';
+  EnvFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + EmailEnvFileName;
 
   // Load settings only when the file exists.
   // Einstellungen nur laden, wenn die Datei existiert.
@@ -1622,7 +1622,7 @@ procedure TMainformFrm.SaveSettingsBtnClick(Sender: TObject);
 var
   Ini: TIniFile;
 begin
-  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
+  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
     // --------------------------------------------------------------
     // Section 1: Save general settings.
@@ -1650,13 +1650,13 @@ begin
     // Section 2: Save version information.
     // Abschnitt 2: Versionsinformationen speichern.
     // --------------------------------------------------------------
-    Ini.WriteString('Versionen', 'Paperless-Version', paperless_version_edit.Text);
-    Ini.WriteString('Versionen', 'Redis-Version', redis_version_edit.Text);
-    Ini.WriteString('Versionen', 'Postgres-Version', postgres_version_edit.Text);
-    Ini.WriteString('Versionen', 'Gotenberg-Version', gotenberg_version_edit.Text);
-    Ini.WriteString('Versionen', 'Tika-Version', tika_version_edit.Text);
-    Ini.WriteString('Versionen', 'Alpine-Version', alpine_version_edit.Text);
-    Ini.WriteString('Versionen', 'Busybox-Version', busybox_version_edit.Text);
+    Ini.WriteString(IniSectionVersions, IniKeyPaperlessVersion, paperless_version_edit.Text);
+    Ini.WriteString(IniSectionVersions, IniKeyRedisVersion, redis_version_edit.Text);
+    Ini.WriteString(IniSectionVersions, IniKeyPostgresVersion, postgres_version_edit.Text);
+    Ini.WriteString(IniSectionVersions, IniKeyGotenbergVersion, gotenberg_version_edit.Text);
+    Ini.WriteString(IniSectionVersions, IniKeyTikaVersion, tika_version_edit.Text);
+    Ini.WriteString(IniSectionVersions, IniKeyAlpineVersion, alpine_version_edit.Text);
+    Ini.WriteString(IniSectionVersions, IniKeyBusyboxVersion, busybox_version_edit.Text);
     Ini.UpdateFile;
 
   finally
@@ -1694,7 +1694,7 @@ var
 begin
   // Build the full path to the file.
   // Den vollständigen Pfad zur Datei erstellen.
-  EnvFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + 'email-versand.env';
+  EnvFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + EmailEnvFileName;
 
   // Make sure the app data folder exists.
   // Sicherstellen, dass der AppData-Ordner existiert.
@@ -1757,7 +1757,7 @@ var
 begin
   // Build the full path to the file.
   // Den vollständigen Pfad zur Datei erstellen.
-  EnvFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + 'email-versand.env';
+  EnvFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + EmailEnvFileName;
 
   // Make sure the app data folder exists.
   // Sicherstellen, dass der AppData-Ordner existiert.
@@ -1830,7 +1830,7 @@ var
 begin
   // Build the full path to the file.
   // Den vollständigen Pfad zur Datei erstellen.
-  EnvFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + 'email-versand.env';
+  EnvFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + EmailEnvFileName;
 
   // Make sure the app data folder exists.
   // Sicherstellen, dass der AppData-Ordner existiert.
@@ -1842,7 +1842,7 @@ begin
 
   // Create an empty .env file when it does not exist yet.
   // Eine leere .env-Datei erstellen, wenn sie noch nicht existiert.
-  if not FileExists(IncludeTrailingPathDelimiter(AppDataFolder) + 'email-versand.env') then
+  if not FileExists(IncludeTrailingPathDelimiter(AppDataFolder) + EmailEnvFileName) then
   begin
     // Build the default .env content.
     // Den Standardinhalt der .env-Datei zusammenbauen.
@@ -1902,7 +1902,7 @@ begin
                  'paperless-backup-geplant.cmd';
   // Use the saved backup folder, or fall back to Desktop\FallbackBackup.
   // Den gespeicherten Backup-Ordner verwenden oder auf Desktop\FallbackBackup zurückfallen.
-  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
+  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
     LastBackupFolder := Ini.ReadString('Pfade', 'BackupZiel', '').Trim;
   finally
@@ -2143,12 +2143,12 @@ begin
               HinweisFrm.HinweisMemo.Lines.Add('Nun können Sie Paperless starten, indem Sie Ihren Browser öffnen');
               HinweisFrm.HinweisMemo.Lines.Add('und folgende Adresse eingeben oder kopieren und einfügen, oder oben den gelben Link klicken:');
               HinweisFrm.HinweisMemo.Lines.Add(' ');
-              HinweisFrm.HinweisMemo.Lines.Add('http://localhost:8000');
+              HinweisFrm.HinweisMemo.Lines.Add(PaperlessLocalUrl);
               HinweisFrm.HinweisMemo.Lines.Add(' ');
               HinweisFrm.HinweisMemo.Lines.Add('Bitte geben Sie dem System ein wenig Zeit, bevor Sie die Seite aufrufen.');
               HinweisFrm.HinweisMemo.Lines.Add(' ');
               HinweisFrm.HinweisMemo.Lines.Add('Nach dem Öffnen von Paperless werden Sie gebeten einen Benutzernamen und ein Passwort zu vergeben. Speichern Sie diese Zugangsdaten in einem Passwortmanager wie KeePassXC!');
-              HinweisFrm.LinkKlickLbl.Caption := 'http://localhost:8080';
+              HinweisFrm.LinkKlickLbl.Caption := PaperlessFallbackLocalUrl;
               HinweisFrm.Label1.Caption := 'Paperless öffnen:';
               HinweisFrm.SieBenoetigenDockerLbl.Caption := 'Alles installiert.';
               HinweisFrm.KeePassXCLbl.Visible := True;
@@ -2384,7 +2384,7 @@ var
 begin
   // Read required paths from the INI file.
   // Benötigte Pfade aus der INI-Datei lesen.
-  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
+  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
     ComposePathFromIni := Ini.ReadString('Pfade', 'DockerComposePfad', '').Trim;
     BackupTargetFromIni := Ini.ReadString('Pfade', 'BackupZiel', '').Trim;
@@ -2429,8 +2429,8 @@ var
   ComposeYmlPath, CmdOutput, InfoPath, Line: string;
   i: Integer;
 begin
-  ComposeYmlPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'docker-compose.yml';
-  InfoPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'ContainerUndVolumesInfo.txt';
+  ComposeYmlPath := IncludeTrailingPathDelimiter(AppDataFolder) + DockerComposeFileName;
+  InfoPath := IncludeTrailingPathDelimiter(AppDataFolder) + ContainerVolumeInfoFileName;
 
   if not FileExists(ComposeYmlPath) then
   begin
@@ -2563,7 +2563,7 @@ var
   Line: string;
   InVolumeSection: Boolean;
 begin
-  FilePath := IncludeTrailingPathDelimiter(AppDataFolder) + 'ContainerUndVolumesInfo.txt';
+  FilePath := IncludeTrailingPathDelimiter(AppDataFolder) + ContainerVolumeInfoFileName;
 
   if not FileExists(FilePath) then
     Exit;
@@ -2625,41 +2625,41 @@ end;
 // --------------------------------------------------------------
 procedure TMainformFrm.ImprintLblClick(Sender: TObject);
 begin
-  ShellExecute(0, 'open', 'https://ralf-peter-kleinert.de/impressum.html', nil, nil, SW_SHOWNORMAL);
+  ShellExecute(0, 'open', ImprintUrl, nil, nil, SW_SHOWNORMAL);
 end;
 
 procedure TMainformFrm.PaperlessPlaylistLblClick(Sender: TObject);
 begin
-  ShellExecute(0, 'open', 'https://www.youtube.com/playlist?list=PL0CRlqUkwGBm4wl1wYWen3L6jHIXhq3T7', nil, nil, SW_SHOWNORMAL);
+  ShellExecute(0, 'open', PaperlessPlaylistUrl, nil, nil, SW_SHOWNORMAL);
 end;
 
 procedure TMainformFrm.MyYouTubeChannelLblClick(Sender: TObject);
 begin
- ShellExecute(0, 'open', 'https://www.youtube.com/@ralf-peter-kleinert', nil, nil, SW_SHOWNORMAL);
+ ShellExecute(0, 'open', YouTubeChannelUrl, nil, nil, SW_SHOWNORMAL);
 end;
 
 procedure TMainformFrm.BackupProgramGuideLblClick(Sender: TObject);
 begin
- ShellExecute(0, 'open', 'https://ralf-peter-kleinert.de/linux-os/paperless-backup-programm.html', nil, nil, SW_SHOWNORMAL);
+ ShellExecute(0, 'open', BackupGuideUrl, nil, nil, SW_SHOWNORMAL);
 end;
 
 procedure TMainformFrm.Web1LblClick(Sender: TObject);
 begin
- ShellExecute(0, 'open', 'https://ralf-peter-kleinert.de', nil, nil, SW_SHOWNORMAL);
+ ShellExecute(0, 'open', ComputerRalleUrl, nil, nil, SW_SHOWNORMAL);
 end;
 procedure TMainformFrm.Web2LblClick(Sender: TObject);
 begin
- ShellExecute(0, 'open', 'https://blog.ralf-peter-kleinert.de', nil, nil, SW_SHOWNORMAL);
+ ShellExecute(0, 'open', BlogUrl, nil, nil, SW_SHOWNORMAL);
 end;
 
 procedure TMainformFrm.NewsletterLblClick(Sender: TObject);
 begin
-  ShellExecute(0, 'open', 'https://dashboard.mailerlite.com/forms/1051644/128840345310988026/share', nil, nil, SW_SHOWNORMAL);
+  ShellExecute(0, 'open', NewsletterUrl, nil, nil, SW_SHOWNORMAL);
 end;
 
 procedure TMainformFrm.ProgramUpdateLblClick(Sender: TObject);
 begin
-  ShellExecute(0, 'open', 'https://downloads.ralf-peter-kleinert.de/software/paperless-backup-programm.html', nil, nil, SW_SHOWNORMAL);
+  ShellExecute(0, 'open', ProgramDownloadUrl, nil, nil, SW_SHOWNORMAL);
 end;
 
 // Return the version of the running executable as a string.
