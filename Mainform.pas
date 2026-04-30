@@ -223,8 +223,8 @@ type
 
 var
   MainformFrm: TMainformFrm;
-  // Main paths used by backup, restore, and generated CMD scripts.
-  // Hauptpfade für Backup, Wiederherstellung und generierte CMD-Skripte.
+  // Main paths used by backup, restore, and generated PowerShell scripts.
+  // Hauptpfade für Backup, Wiederherstellung und generierte PowerShell-Skripte.
   BackupPath, ComposePath, ComposeName, CmdTargetPath, LastBackupFolder: String;
   AppDataFolder, BackupTargetFilePath, DefaultFolder, PaperlessInput, NoticeFilePath : String;
   // Runtime mode flags. They decide which script is created and what happens after it finishes.
@@ -404,11 +404,13 @@ begin
   end;
 end;
 
-// Open the generated CMD script in a visible console window.
-// Das generierte CMD-Skript in einem sichtbaren Konsolenfenster öffnen.
+// Open the generated PowerShell script in a visible console window.
+// Das generierte PowerShell-Skript in einem sichtbaren Konsolenfenster öffnen.
 procedure TMainformFrm.StartCmdScript;
 begin
-  ShellExecute(0, 'open', PChar(CmdTargetPath), nil, nil, SW_SHOWNORMAL);
+  ShellExecute(0, 'open', 'powershell.exe',
+    PChar('-NoProfile -ExecutionPolicy Bypass -File "' + CmdTargetPath + '"'),
+    nil, SW_SHOWNORMAL);
 end;
 
 // Open the support page in the default browser.
@@ -598,8 +600,8 @@ begin
   TextFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + ComposePathFileName;
   if FileExists(TextFilePath) then DeleteFile(TextFilePath);
 end;
-// Create paperless-backup.cmd for a manual backup.
-// paperless-backup.cmd für ein manuelles Backup erstellen.
+// Create paperless-backup.ps1 for a manual backup.
+// paperless-backup.ps1 für ein manuelles Backup erstellen.
 // The script dumps PostgreSQL first, then archives the Docker volumes.
 // Das Skript erstellt zuerst einen PostgreSQL-Dump und archiviert danach die Docker-Volumes.
 procedure TMainformFrm.CreateBackupScript(const ComposePath: string);
@@ -613,7 +615,7 @@ begin
   end;
 
   if not DirectoryExists(BackupPath) then ForceDirectories(BackupPath);
-  CmdTargetPath := IncludeTrailingPathDelimiter(ComposePath) + 'paperless-backup.cmd';
+  CmdTargetPath := IncludeTrailingPathDelimiter(ComposePath) + 'paperless-backup.ps1';
   Volumes.Data := Volume_data;
   Volumes.DbData := Volume_db_data;
   Volumes.ExportData := Volume_export;
@@ -1374,7 +1376,7 @@ var
 begin
   // Create a script that removes the scheduled task.
   // Ein Skript erstellen, das die geplante Aufgabe entfernt.
-  CmdTargetPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'Backup-Zeitplan-Entfernen.cmd';
+  CmdTargetPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'Backup-Zeitplan-Entfernen.ps1';
   CreateDeleteBackupScheduleCmdScript(CmdTargetPath);
   ScriptSavedLbl.Caption := 'Skript gespeichert: ' + CmdTargetPath;
 
@@ -1384,9 +1386,9 @@ begin
   ShellExecuteInfo.cbSize := SizeOf(ShellExecuteInfo);
   ShellExecuteInfo.fMask := SEE_MASK_NOCLOSEPROCESS;
   ShellExecuteInfo.Wnd := 0;
-  ShellExecuteInfo.lpFile := PChar('cmd.exe');
-  ShellExecuteInfo.lpParameters := PChar('/c "' + CmdTargetPath + '"');
-  ShellExecuteInfo.nShow := SW_HIDE;
+  ShellExecuteInfo.lpFile := PChar('powershell.exe');
+  ShellExecuteInfo.lpParameters := PChar('-NoProfile -ExecutionPolicy Bypass -File "' + CmdTargetPath + '"');
+  ShellExecuteInfo.nShow := SW_SHOWNORMAL;
   ShellExecuteEx(@ShellExecuteInfo);
 
   // Reset the checkbox.
@@ -1514,8 +1516,8 @@ begin
     Exit;
   end;
   Delete(Weekdays, Length(Weekdays), 1);
-  // Build the path to the planned backup CMD file.
-  // Den Pfad zur geplanten Backup-CMD-Datei erstellen.
+  // Build the path to the planned backup PowerShell file.
+  // Den Pfad zur geplanten Backup-PowerShell-Datei erstellen.
   try
     Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
     try
@@ -1535,14 +1537,14 @@ begin
     ComposePathTextFile := IncludeTrailingPathDelimiter(AppDataFolder) + ComposePathFileName;
     if FileExists(ComposePathTextFile) then DeleteFile(ComposePathTextFile);
 
-    TargetCmdPath := IncludeTrailingPathDelimiter(ExtractFilePath(ComposePath)) + 'paperless-backup-geplant.cmd';
+    TargetCmdPath := IncludeTrailingPathDelimiter(ExtractFilePath(ComposePath)) + 'paperless-backup-geplant.ps1';
   except
     CenteredShowMessage('Fehler beim Lesen des Compose-Pfads.');
     Exit;
   end;
 
 
-  TargetCmdPath := IncludeTrailingPathDelimiter(ExtractFilePath(ComposePath)) + 'paperless-backup-geplant.cmd';
+  TargetCmdPath := IncludeTrailingPathDelimiter(ExtractFilePath(ComposePath)) + 'paperless-backup-geplant.ps1';
   if not FileExists(TargetCmdPath) then
   begin
     CenteredShowMessage('Das geplante Backup-Skript wurde nicht gefunden:' + sLineBreak + TargetCmdPath + sLineBreak + 'Bitte erzeugen Sie es zuerst.');
@@ -1550,7 +1552,7 @@ begin
   end;
   // Write the scheduler setup script.
   // Das Skript zum Einrichten der Aufgabenplanung schreiben.
-  ScriptPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'Backup-Zeitplan-Anlegen.cmd';
+  ScriptPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'Backup-Zeitplan-Anlegen.ps1';
   // The scheduled task starts this program with the /geplant parameter.
   // Die geplante Aufgabe startet dieses Programm mit dem Parameter /geplant.
   CreateBackupScheduleCmdScript(ScriptPath, ProgramPath, Weekdays, Hour, Minute);
@@ -1562,9 +1564,9 @@ begin
   ShellExecuteInfo.cbSize := SizeOf(ShellExecuteInfo);
   ShellExecuteInfo.fMask := SEE_MASK_NOCLOSEPROCESS;
   ShellExecuteInfo.Wnd := 0;
-  ShellExecuteInfo.lpFile := PChar('cmd.exe');
-  ShellExecuteInfo.lpParameters := PChar('/c "' + ScriptPath + '"');
-  ShellExecuteInfo.nShow := SW_HIDE;
+  ShellExecuteInfo.lpFile := PChar('powershell.exe');
+  ShellExecuteInfo.lpParameters := PChar('-NoProfile -ExecutionPolicy Bypass -File "' + ScriptPath + '"');
+  ShellExecuteInfo.nShow := SW_SHOWNORMAL;
   ShellExecuteEx(@ShellExecuteInfo);
 end;
 
@@ -1950,8 +1952,8 @@ begin
   end;
 end;
 
-// Create the CMD file that is called by the Windows scheduled task.
-// Die CMD-Datei erstellen, die von der Windows-Aufgabe aufgerufen wird.
+// Create the PowerShell file that is called by the Windows scheduled task.
+// Die PowerShell-Datei erstellen, die von der Windows-Aufgabe aufgerufen wird.
 procedure TMainformFrm.CreateBackupPlanScript(const ComposePath: string);
 var
   BackupFolderList: TArray<string>;
@@ -1973,10 +1975,10 @@ begin
                    ExtractFileName(ExcludeTrailingPathDelimiter(ComposePath)),
                    ' ', '-', [rfReplaceAll]);
 
-  // Build the path for the planned backup CMD file.
-  // Den Pfad zur geplanten Backup-CMD-Datei erstellen.
+  // Build the path for the planned backup PowerShell file.
+  // Den Pfad zur geplanten Backup-PowerShell-Datei erstellen.
   CmdTargetPath := IncludeTrailingPathDelimiter(ComposePath) +
-                 'paperless-backup-geplant.cmd';
+                 'paperless-backup-geplant.ps1';
   // Use the saved backup folder, or fall back to Desktop\FallbackBackup.
   // Den gespeicherten Backup-Ordner verwenden oder auf Desktop\FallbackBackup zurückfallen.
   Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
@@ -2049,7 +2051,7 @@ var
   PI: TProcessInformation;
   CmdPath: string;
 begin
-  CmdPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'GeplanterBackupTaskSkript.cmd';
+  CmdPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'GeplanterBackupTaskSkript.ps1';
   if not FileExists(CmdPath) then
   begin
     CenteredShowMessage('Das geplante Backup-Skript wurde nicht gefunden: ' + CmdPath);
@@ -2059,7 +2061,7 @@ begin
   SI.cb := SizeOf(SI);
   SI.dwFlags := STARTF_USESHOWWINDOW;
   SI.wShowWindow := SW_HIDE;
-  if CreateProcess(nil, PChar('"' + CmdPath + '"'), nil, nil, False,
+  if CreateProcess(nil, PChar('powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' + CmdPath + '"'), nil, nil, False,
      CREATE_NO_WINDOW, nil, nil, SI, PI) then
   begin
     CloseHandle(PI.hThread);
@@ -2156,8 +2158,8 @@ begin
   PaperlessUpdateBtn.Enabled := True;
 end;
 
-// Create paperless-restore.cmd for the selected backup folder.
-// paperless-restore.cmd für den ausgewählten Backup-Ordner erstellen.
+// Create paperless-restore.ps1 for the selected backup folder.
+// paperless-restore.ps1 für den ausgewählten Backup-Ordner erstellen.
 // The script restores the database dump and all Paperless Docker volumes.
 // Das Skript stellt den Datenbank-Dump und alle Paperless-Docker-Volumes wieder her.
 procedure TMainformFrm.CreateRestoreScript(const ComposePath, BackupFolder: string);
@@ -2171,7 +2173,7 @@ begin
     CenteredShowMessage('Fehler: Es wurde kein gültiger Compose-Pfad gewählt.');
     Exit;
   end;
-  CmdTargetPath := IncludeTrailingPathDelimiter(ExtractFilePath(ComposePath)) + 'paperless-restore.cmd';
+  CmdTargetPath := IncludeTrailingPathDelimiter(ExtractFilePath(ComposePath)) + 'paperless-restore.ps1';
   Volumes.Data := Volume_data;
   Volumes.DbData := Volume_db_data;
   Volumes.ExportData := Volume_export;
@@ -2181,8 +2183,8 @@ begin
   StartAndMonitorCmdScript;
 end;
 
-// Run the current CMD script, wait for it, and show success or failure.
-// Das aktuelle CMD-Skript ausführen, darauf warten und Erfolg oder Fehler anzeigen.
+// Run the current PowerShell script, wait for it, and show success or failure.
+// Das aktuelle PowerShell-Skript ausführen, darauf warten und Erfolg oder Fehler anzeigen.
 procedure TMainformFrm.StartAndMonitorCmdScript;
 var
   StartupInfo: TStartupInfo;
@@ -2197,7 +2199,7 @@ begin
   StartupInfo.dwFlags := STARTF_USESHOWWINDOW;
   StartupInfo.wShowWindow := SW_SHOWNORMAL;
 
-  Cmd := 'cmd.exe /C "' + CmdTargetPath + '"'; // Script path.
+  Cmd := 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' + CmdTargetPath + '"'; // Script path.
   // Skriptpfad.
 
   if CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NEW_CONSOLE, nil, nil, StartupInfo, ProcessInfo) then
@@ -2209,8 +2211,8 @@ begin
     begin
         if ShouldWait then
         begin
-          // Bring the CMD window to the front.
-          // Das CMD-Fenster in den Vordergrund bringen.
+          // Bring the PowerShell window to the front.
+          // Das PowerShell-Fenster in den Vordergrund bringen.
           ConsoleToFront(ProcessInfo.dwProcessId);
 
           // Wait for the process to finish.
@@ -2296,8 +2298,8 @@ begin
         CenteredShowMessage('Fehler beim Starten des Skripts.');
     end else
         begin
-          // Bring the CMD window to the front.
-          // Das CMD-Fenster in den Vordergrund bringen.
+          // Bring the PowerShell window to the front.
+          // Das PowerShell-Fenster in den Vordergrund bringen.
           ConsoleToFront(ProcessInfo.dwProcessId);
           // Wait for the process to finish.
           // Warten, bis der Prozess beendet ist.
@@ -2337,7 +2339,7 @@ begin
   StartupInfo.cb := SizeOf(TStartupInfo);
   StartupInfo.dwFlags := STARTF_USESHOWWINDOW;
   StartupInfo.wShowWindow := SW_SHOWNORMAL;
-  Cmd := 'cmd.exe /C "' + CmdTargetPath + '"'; // Script path.
+  Cmd := 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' + CmdTargetPath + '"'; // Script path.
   // Skriptpfad.
 
   if PaperlessUpdate = False then
@@ -2347,8 +2349,8 @@ begin
     if CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NEW_CONSOLE, nil, nil, StartupInfo, ProcessInfo) then
     begin
       Sleep(1000);
-      // Bring the CMD window to the front.
-      // Das CMD-Fenster in den Vordergrund bringen.
+      // Bring the PowerShell window to the front.
+      // Das PowerShell-Fenster in den Vordergrund bringen.
       ConsoleToFront(ProcessInfo.dwProcessId);
       // Wait for the process to finish.
       // Warten, bis der Prozess beendet ist.
@@ -2389,8 +2391,8 @@ begin
     if CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NEW_CONSOLE, nil, nil, StartupInfo, ProcessInfo) then
     begin
       Sleep(1000);
-      // Bring the CMD window to the front.
-      // Das CMD-Fenster in den Vordergrund bringen.
+      // Bring the PowerShell window to the front.
+      // Das PowerShell-Fenster in den Vordergrund bringen.
       ConsoleToFront(ProcessInfo.dwProcessId);
       // Wait for the process to finish.
       // Warten, bis der Prozess beendet ist.
@@ -2426,8 +2428,8 @@ begin
   end;
 end;
 
-// Create paperless-neustart.cmd to stop and start Paperless again.
-// paperless-neustart.cmd erstellen, um Paperless zu stoppen und neu zu starten.
+// Create paperless-neustart.ps1 to stop and start Paperless again.
+// paperless-neustart.ps1 erstellen, um Paperless zu stoppen und neu zu starten.
 procedure TMainformFrm.CreateRestartScript(const ComposePath: string);
 begin
   // Stop when no compose path was provided.
@@ -2438,7 +2440,7 @@ begin
     Exit;
   end;
   ComposeName := StringReplace(ExtractFileName(ExcludeTrailingPathDelimiter(ComposePath)), ' ', '-', [rfReplaceAll]);
-  CmdTargetPath := IncludeTrailingPathDelimiter(ComposePath) + 'paperless-neustart.cmd';
+  CmdTargetPath := IncludeTrailingPathDelimiter(ComposePath) + 'paperless-neustart.ps1';
   CreateRestartCmdScript(CmdTargetPath, ComposePath);
   ScriptSavedLbl.Caption := 'Backup-Skript wurde erstellt: ' + CmdTargetPath;
   StartAndMonitorRestart;
@@ -2450,8 +2452,8 @@ procedure TMainformFrm.ConsoleToFront(PID: DWORD);
 var
   hConsoleWnd: HWND;
 begin
-  // Bring the CMD window to the front.
-  // Das CMD-Fenster in den Vordergrund bringen.
+  // Bring the PowerShell window to the front.
+  // Das PowerShell-Fenster in den Vordergrund bringen.
   AttachConsole(PID);
   hConsoleWnd := GetConsoleWindow;
   if hConsoleWnd <> 0 then

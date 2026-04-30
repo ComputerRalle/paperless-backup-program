@@ -666,21 +666,27 @@ begin
   // Hier nicht starten, wenn das Hauptformular nur eine neue Compose-Datei erstellen soll.
   if (ShouldWriteNewCompose = False) and (IsUpdate = False) then
   begin
-    // Create and save the CMD script that starts docker-compose.yml.
-    // Das CMD-Skript erstellen und speichern, das docker-compose.yml startet.
-    CmdTargetPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'starte_paperless.cmd';
+    // Create and save the PowerShell script that starts docker-compose.yml.
+    // Das PowerShell-Skript erstellen und speichern, das docker-compose.yml startet.
+    CmdTargetPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'starte_paperless.ps1';
     if not FileExists(CmdTargetPath) then
     begin
       CmdFile := TStringList.Create;
       try
-        CmdFile.Add('@echo off');
-        CmdFile.Add('cd /d "' + AppDataFolder + '"');
-        CmdFile.Add('docker compose -f docker-compose.yml up -d');
-        CmdFile.Add('echo Systeme starten. Fenster wird gleich geschlossen ...');
-        CmdFile.Add('for /L %%i in (10,-1,1) do (echo %%i & timeout /t 1 >nul)');
-        CmdFile.Add('endlocal');
-        CmdFile.Add('exit');
-        CmdFile.SaveToFile(CmdTargetPath, TEncoding.ANSI);
+        CmdFile.Add('$ErrorActionPreference = ''Stop''');
+        CmdFile.Add('try {');
+        CmdFile.Add('  Set-Location -LiteralPath ''' + StringReplace(AppDataFolder, '''', '''''', [rfReplaceAll]) + '''');
+        CmdFile.Add('  docker compose -f docker-compose.yml up -d');
+        CmdFile.Add('  if ($LASTEXITCODE -ne 0) { throw "Fehler beim Starten von Docker Compose. (ExitCode $LASTEXITCODE)" }');
+        CmdFile.Add('  Write-Host "Systeme starten. Fenster wird gleich geschlossen ..."');
+        CmdFile.Add('  for ($i = 10; $i -ge 1; $i--) { Write-Host $i; Start-Sleep -Seconds 1 }');
+        CmdFile.Add('} catch {');
+        CmdFile.Add('  Write-Host $_.Exception.Message -ForegroundColor Red');
+        CmdFile.Add('  Read-Host "Fehler. Zum Schliessen ENTER druecken"');
+        CmdFile.Add('  exit 1');
+        CmdFile.Add('}');
+        CmdFile.Add('exit 0');
+        CmdFile.SaveToFile(CmdTargetPath, TEncoding.UTF8);
       finally
         CmdFile.Free;
       end;
@@ -693,34 +699,47 @@ begin
   if IsUpdate = True then
   begin
     MainformFrm.ReadContainerNamesFromFile;
-    // Create and save the CMD script for the Docker restart.
-    // Das CMD-Skript für den Docker-Neustart erstellen und speichern.
-    CmdTargetPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'update_paperless.cmd';
+    // Create and save the PowerShell script for the Docker restart.
+    // Das PowerShell-Skript für den Docker-Neustart erstellen und speichern.
+    CmdTargetPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'update_paperless.ps1';
     if not FileExists(CmdTargetPath) OR IsUpdate = True then
     begin
       CmdFile := TStringList.Create;
       try
-        CmdFile.Add('@echo off');
-        CmdFile.Add('cd /d "' + AppDataFolder + '"');
-        CmdFile.Add('docker compose -f docker-compose.yml down');
-        CmdFile.Add('echo Neustart wird kurz abgewartrt ...');
-        CmdFile.Add('for /L %%i in (5,-1,1) do (echo %%i & timeout /t 1 >nul)');
+        CmdFile.Add('$ErrorActionPreference = ''Stop''');
+        CmdFile.Add('function Invoke-Step([scriptblock]$Command, [string]$ErrorMessage) {');
+        CmdFile.Add('  & $Command');
+        CmdFile.Add('  if ($LASTEXITCODE -ne 0) { throw "$ErrorMessage (ExitCode $LASTEXITCODE)" }');
+        CmdFile.Add('}');
+        CmdFile.Add('function Wait-Countdown([int]$Seconds) {');
+        CmdFile.Add('  for ($i = $Seconds; $i -ge 1; $i--) { Write-Host $i; Start-Sleep -Seconds 1 }');
+        CmdFile.Add('}');
+        CmdFile.Add('try {');
+        CmdFile.Add('  Set-Location -LiteralPath ''' + StringReplace(AppDataFolder, '''', '''''', [rfReplaceAll]) + '''');
+        CmdFile.Add('  Invoke-Step { docker compose -f docker-compose.yml down } "Fehler beim Stoppen der Container."');
+        CmdFile.Add('  Write-Host "Neustart wird kurz abgewartet ..."');
+        CmdFile.Add('  Wait-Countdown 5');
         // Pull updated images here.
         // Hier aktualisierte Images herunterladen.
-        CmdFile.Add('docker compose -f docker-compose.yml pull && docker compose -f docker-compose.yml up -d');
-        CmdFile.Add('echo Repariere Django ContentType-Struktur...');
-        CmdFile.Add('docker exec -i paperless-ngx-paperless-1 python3 manage.py migrate contenttypes');
-        CmdFile.Add('echo Aktualisiere PostgreSQL Collation Version...');
-        CmdFile.Add(Format('docker exec -i %s psql -U paperless -d paperless -c "ALTER DATABASE paperless REFRESH COLLATION VERSION;"', [PaperlessDBName]));
-        CmdFile.Add('echo Nicht mehr verwendete Volumes werden geloescht');
-        CmdFile.Add('for /L %%i in (3,-1,1) do (echo %%i & timeout /t 1 >nul)');
-        CmdFile.Add('docker volume prune -f');
-        CmdFile.Add('for /L %%i in (3,-1,1) do (echo %%i & timeout /t 1 >nul)');
-        CmdFile.Add('echo Systeme starten. Fenster wird gleich geschlossen ...');
-        CmdFile.Add('for /L %%i in (10,-1,1) do (echo %%i & timeout /t 1 >nul)');
-        CmdFile.Add('endlocal');
-        CmdFile.Add('exit');
-        CmdFile.SaveToFile(CmdTargetPath, TEncoding.ANSI);
+        CmdFile.Add('  Invoke-Step { docker compose -f docker-compose.yml pull } "Fehler beim Herunterladen aktualisierter Images."');
+        CmdFile.Add('  Invoke-Step { docker compose -f docker-compose.yml up -d } "Fehler beim Starten der Container."');
+        CmdFile.Add('  Write-Host "Repariere Django ContentType-Struktur..."');
+        CmdFile.Add('  Invoke-Step { docker exec -i paperless-ngx-paperless-1 python3 manage.py migrate contenttypes } "Fehler bei Django ContentType-Migration."');
+        CmdFile.Add('  Write-Host "Aktualisiere PostgreSQL Collation Version..."');
+        CmdFile.Add(Format('  Invoke-Step { docker exec -i %s psql -U paperless -d paperless -c "ALTER DATABASE paperless REFRESH COLLATION VERSION;" } "Fehler beim Aktualisieren der PostgreSQL Collation Version."', [PaperlessDBName]));
+        CmdFile.Add('  Write-Host "Nicht mehr verwendete Volumes werden geloescht"');
+        CmdFile.Add('  Wait-Countdown 3');
+        CmdFile.Add('  Invoke-Step { docker volume prune -f } "Fehler beim Bereinigen nicht verwendeter Volumes."');
+        CmdFile.Add('  Wait-Countdown 3');
+        CmdFile.Add('  Write-Host "Systeme starten. Fenster wird gleich geschlossen ..."');
+        CmdFile.Add('  Wait-Countdown 10');
+        CmdFile.Add('} catch {');
+        CmdFile.Add('  Write-Host $_.Exception.Message -ForegroundColor Red');
+        CmdFile.Add('  Read-Host "Fehler. Zum Schliessen ENTER druecken"');
+        CmdFile.Add('  exit 1');
+        CmdFile.Add('}');
+        CmdFile.Add('exit 0');
+        CmdFile.SaveToFile(CmdTargetPath, TEncoding.UTF8);
       finally
         CmdFile.Free;
       end;

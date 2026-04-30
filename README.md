@@ -84,7 +84,8 @@ Die Anwendung speichert Laufzeiteinstellungen im Benutzerprofil:
 - `AppDialogs.pas` - centered application dialogs and message boxes.
 - `AppDialogs.pas` - zentrierte Anwendungsdialoge und Meldungsfenster.
 - `ScriptGenerator.pas` - generation of backup, restore, restart, and scheduler scripts.
-- `ScriptGenerator.pas` - Erzeugung von Backup-, Restore-, Neustart- und Zeitplan-Skripten.
+- `ScriptGenerator.pas` - generation of PowerShell backup, restore, restart, and scheduler scripts.
+- `ScriptGenerator.pas` - Erzeugung von PowerShell-Skripten fuer Backup, Wiederherstellung, Neustart und Zeitplan.
 - `DockerComposeGenerator.pas` - generation of the Paperless Docker Compose file.
 - `DockerComposeGenerator.pas` - Erzeugung der Paperless-Docker-Compose-Datei.
 - `assets/` - icons and images used by the application.
