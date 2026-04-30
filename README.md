@@ -64,8 +64,8 @@ Die Anwendung speichert Laufzeiteinstellungen im Benutzerprofil:
 - Bestehende Installationen ohne gespeicherten Key importieren den Key aus `docker-compose.yml`, wenn er vorhanden ist.
 - Each successful backup stores the active Paperless secret key in `paperless_secret_key.txt`.
 - Jedes erfolgreiche Backup speichert den aktiven Paperless Secret Key in `paperless_secret_key.txt`.
-- Restore imports the secret key only when the selected backup contains `paperless_secret_key.txt`.
-- Die Wiederherstellung importiert den Secret Key nur, wenn das ausgewaehlte Backup `paperless_secret_key.txt` enthaelt.
+- Restore imports the secret key from `paperless_secret_key.txt`; older backups without this file use the legacy key.
+- Die Wiederherstellung importiert den Secret Key aus `paperless_secret_key.txt`; aeltere Backups ohne diese Datei verwenden den Legacy-Key.
 - Keep this backup file private because it contains sensitive installation data.
 - Diese Backup-Datei privat halten, da sie sensible Installationsdaten enthaelt.
 - Use at your own risk.

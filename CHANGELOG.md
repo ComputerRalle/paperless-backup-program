@@ -8,8 +8,8 @@ Alle wichtigen Aenderungen an diesem Projekt werden hier dokumentiert.
 
 - Opened the restore folder picker in the last saved backup target folder.
 - Ordnerauswahl fuer die Wiederherstellung im zuletzt gespeicherten Backup-Zielordner geoeffnet.
-- Imported the Paperless secret key during restore only when `paperless_secret_key.txt` exists in the selected backup.
-- Paperless Secret Key bei der Wiederherstellung nur importiert, wenn `paperless_secret_key.txt` im ausgewaehlten Backup vorhanden ist.
+- Used the legacy Paperless secret key for restores from older backups without `paperless_secret_key.txt`.
+- Legacy-Paperless-Secret-Key fuer Wiederherstellungen aus aelteren Backups ohne `paperless_secret_key.txt` verwendet.
 - Separated new and legacy Paperless secret keys so fresh installations no longer receive the legacy key.
 - Neue und Legacy-Paperless-Secret-Keys getrennt, damit Neuinstallationen nicht mehr den Legacy-Key erhalten.
 - Renamed `HinweisForm` to `SetupForm` to better match the setup workflow.

@@ -281,26 +281,29 @@ begin
   end;
 end;
 
-// Import the Paperless secret key only when the selected backup contains it.
-// Den Paperless Secret Key nur importieren, wenn das ausgewählte Backup ihn enthält.
-function ImportPaperlessSecretKeyFromBackup(const BackupFolder: string): Boolean;
+// Apply the restore key from the backup file or use the legacy key for older backups.
+// Den Wiederherstellungs-Key aus der Backup-Datei anwenden oder bei alten Backups den Legacy-Key nutzen.
+function ApplyPaperlessSecretKeyForRestore(const BackupFolder: string): Boolean;
 var
   Ini: TIniFile;
   SecretKey, SecretKeyFilePath, SettingsIniPath: string;
 begin
-  Result := False;
+  Result := True;
   SecretKeyFilePath := IncludeTrailingPathDelimiter(BackupFolder) + PaperlessSecretKeyFileName;
   if not FileExists(SecretKeyFilePath) then
   begin
-    LogInfo('No Paperless secret key backup file found. Restore keeps current key handling.');
-    Exit;
-  end;
-
-  SecretKey := ReadPaperlessSecretKeyFromBackupFile(SecretKeyFilePath);
-  if SecretKey = '' then
+    SecretKey := LegacyPaperlessSecretKey;
+    LogWarning('No Paperless secret key backup file found. Legacy key will be used for restore.');
+  end
+  else
   begin
-    LogWarning('Paperless secret key backup file exists but contains no readable key.');
-    Exit;
+    SecretKey := ReadPaperlessSecretKeyFromBackupFile(SecretKeyFilePath);
+    if SecretKey = '' then
+    begin
+      Result := False;
+      LogWarning('Paperless secret key backup file exists but contains no readable key.');
+      Exit;
+    end;
   end;
 
   SettingsIniPath := IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName;
@@ -321,8 +324,7 @@ begin
     Ini.Free;
   end;
 
-  Result := True;
-  LogInfo('Paperless secret key imported from selected backup.');
+  LogInfo('Paperless secret key prepared for restore.');
 end;
 
 // Load update.ini from the web server and show whether a program update is available.
@@ -2127,7 +2129,7 @@ begin
     if FolderDialog.Execute then
     begin
       BackupFolder := FolderDialog.FileName;
-      if ImportPaperlessSecretKeyFromBackup(BackupFolder) then
+      if ApplyPaperlessSecretKeyForRestore(BackupFolder) then
       begin
         ShouldWriteNewCompose := True;
         try
