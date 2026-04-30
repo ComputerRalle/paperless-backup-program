@@ -8,6 +8,8 @@ Alle wichtigen Aenderungen an diesem Projekt werden hier dokumentiert.
 
 - Switched generated backup, restore, restart, update, and scheduler scripts from CMD to PowerShell.
 - Generierte Backup-, Wiederherstellungs-, Neustart-, Update- und Zeitplan-Skripte von CMD auf PowerShell umgestellt.
+- Kept the Django ContentType migration non-fatal in generated PowerShell scripts to match the former CMD restore behavior.
+- Django-ContentType-Migration in generierten PowerShell-Skripten nicht abbrechend behandelt, passend zum bisherigen CMD-Wiederherstellungsverhalten.
 - Centered application messages, folder picker dialogs, and setup windows over the main form.
 - Anwendungsmitteilungen, Ordnerauswahldialoge und Einrichtungsfenster ueber dem Hauptformular zentriert.
 - Reapplied settings automatically after restore so the database collation maintenance runs.

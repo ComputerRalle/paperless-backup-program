@@ -109,6 +109,16 @@ begin
   Lines.Add('');
 end;
 
+procedure AddBestEffortContentTypeMigration(const Lines: TStringList);
+begin
+  Lines.Add('  Write-Host "Repariere Django ContentType-Struktur..."');
+  Lines.Add('  docker exec -i paperless-ngx-paperless-1 python3 manage.py migrate contenttypes');
+  Lines.Add('  if ($LASTEXITCODE -ne 0) {');
+  Lines.Add('    Write-Host "Hinweis: ContentType-Migration konnte jetzt nicht abgeschlossen werden. Das Skript laeuft weiter." -ForegroundColor Yellow');
+  Lines.Add('    $global:LASTEXITCODE = 0');
+  Lines.Add('  }');
+end;
+
 procedure CreateManualBackupCmdScript(
   const TargetPath, ComposePath, BackupPath, AppDataFolder, DatabaseContainerName: string;
   const Volumes: TDockerVolumeNames);
@@ -174,7 +184,7 @@ begin
     Lines.Add('  $BackupDir = Join-Path $BackupBase (Get-Date -Format "yyyy-MM-dd_HH-mm-ss")');
     Lines.Add('  Set-Location -LiteralPath $ComposeDir');
     Lines.Add('  if (-not (Test-Path -LiteralPath $BackupDir)) { New-Item -ItemType Directory -Path $BackupDir | Out-Null }');
-    Lines.Add('  Invoke-DockerStep { docker exec -i paperless-ngx-paperless-1 python3 manage.py migrate contenttypes } "Fehler bei Django ContentType-Migration."');
+    AddBestEffortContentTypeMigration(Lines);
     Lines.Add('  $DumpFile = Join-Path $BackupDir ($DatabaseContainer + "_backup.sql")');
     Lines.Add('  docker exec $DatabaseContainer pg_dump -U paperless paperless | Out-File -FilePath $DumpFile -Encoding utf8');
     Lines.Add('  if ($LASTEXITCODE -ne 0) { throw "Fehler beim PostgreSQL-Dump. Abbruch. (ExitCode $LASTEXITCODE)" }');
@@ -216,7 +226,7 @@ begin
     Lines.Add('  Invoke-DockerStep { docker compose up -d } "Fehler beim Starten der Container."');
     Lines.Add('  Write-Host "Wiederherstellen der PostgreSQL-Datenbank. Bitte haben Sie Geduld..."');
     Lines.Add('  Start-Sleep -Seconds 3');
-    Lines.Add('  Invoke-DockerStep { docker exec -i paperless-ngx-paperless-1 python3 manage.py migrate contenttypes } "Fehler bei Django ContentType-Migration."');
+    AddBestEffortContentTypeMigration(Lines);
     Lines.Add('  Start-Sleep -Seconds 3');
     Lines.Add('  Write-Host "Wiederherstellen der PostgreSQL-Datenbank (Datenbank wird gestartet) ..."');
     Lines.Add('  Wait-Countdown 15');
@@ -264,7 +274,7 @@ begin
     Lines.Add('  Invoke-DockerStep { docker volume prune -f } "Fehler beim Bereinigen nicht verwendeter Volumes."');
     Lines.Add('  Wait-Countdown 3');
     Lines.Add('  Start-Sleep -Seconds 3');
-    Lines.Add('  Invoke-DockerStep { docker exec -i paperless-ngx-paperless-1 python3 manage.py migrate contenttypes } "Fehler bei Django ContentType-Migration."');
+    AddBestEffortContentTypeMigration(Lines);
     Lines.Add('  Start-Sleep -Seconds 3');
     AddPsFooter(Lines);
     SavePsScript(Lines, TargetPath);
