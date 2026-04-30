@@ -10,6 +10,16 @@ Alle wichtigen Aenderungen an diesem Projekt werden hier dokumentiert.
 - Generierte Backup-, Wiederherstellungs-, Neustart-, Update- und Zeitplan-Skripte von CMD auf PowerShell umgestellt.
 - Switched generated PowerShell scripts from the isolated Django ContentType migration to the full Django database migration.
 - Generierte PowerShell-Skripte von der einzelnen Django-ContentType-Migration auf die vollstaendige Django-Datenbankmigration umgestellt.
+- Added an in-application status label and progress bar while visible PowerShell scripts are running.
+- Statuslabel und Fortschrittsanzeige in der Anwendung ergaenzt, waehrend sichtbare PowerShell-Skripte laufen.
+- Hid the old backup and restore readiness labels while scripts are running.
+- Alte Backup- und Wiederherstellungs-Hinweise waehrend laufender Skripte ausgeblendet.
+- Mirrored visible PowerShell output into the main form status label while scripts are running.
+- Sichtbare PowerShell-Ausgabe waehrend laufender Skripte in das Statuslabel des Hauptformulars gespiegelt.
+- Replaced generic PowerShell startup text with operation-specific status messages and shortened long label text.
+- Allgemeine PowerShell-Startmeldung durch vorgangsspezifische Statusmeldungen ersetzt und lange Labeltexte gekuerzt.
+- Removed the old backup and restore readiness texts from the main form.
+- Alte Backup- und Wiederherstellungs-Bereitschaftstexte aus dem Hauptformular entfernt.
 - Centered application messages, folder picker dialogs, and setup windows over the main form.
 - Anwendungsmitteilungen, Ordnerauswahldialoge und Einrichtungsfenster ueber dem Hauptformular zentriert.
 - Reapplied settings automatically after restore so the database collation maintenance runs.

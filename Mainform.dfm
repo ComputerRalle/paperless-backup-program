@@ -18,7 +18,7 @@ object MainformFrm: TMainformFrm
   Font.Height = -15
   Font.Name = 'Verdana'
   Font.Style = []
-  Position = poScreenCenter
+  Position = poDesktopCenter
   OnClose = FormClose
   OnCreate = FormCreate
   OnShow = FormShow
@@ -150,33 +150,12 @@ object MainformFrm: TMainformFrm
             'ogramm neu gestartet werden'
           Visible = False
         end
-        object CanStartBackupSTxt: TStaticText
-          Left = 31
-          Top = 15
-          Width = 271
-          Height = 22
-          Caption = 'Sie k'#246'nnen das Backup nun starten.'
+        object ProgressBar1: TProgressBar
+          Left = 30
+          Top = 79
+          Width = 794
+          Height = 17
           TabOrder = 0
-          Visible = False
-        end
-        object RestoreCanStartSTxt: TStaticText
-          Left = 498
-          Top = 15
-          Width = 337
-          Height = 22
-          Caption = 'Sie k'#246'nnen die Wiedeherstellung nun starten.'
-          TabOrder = 1
-          Visible = False
-        end
-        object StaticText5: TStaticText
-          Left = 498
-          Top = 37
-          Width = 459
-          Height = 45
-          AutoSize = False
-          Caption = 'Sie werden nach Klick gebeten, den '#13#10'Backupordner zu w'#228'hlen.'
-          TabOrder = 2
-          Visible = False
         end
       end
       object Panel4: TPanel
@@ -60412,6 +60391,7 @@ object MainformFrm: TMainformFrm
       BevelOuter = bvNone
       ParentBackground = False
       TabOrder = 1
+      ExplicitLeft = 5000
       ExplicitWidth = 836
       ExplicitHeight = 559
       object Panel9: TPanel
@@ -60682,6 +60662,7 @@ object MainformFrm: TMainformFrm
       BevelOuter = bvNone
       ParentBackground = False
       TabOrder = 2
+      ExplicitLeft = 5000
       ExplicitWidth = 836
       ExplicitHeight = 559
       object Panel6: TPanel
@@ -60815,6 +60796,7 @@ object MainformFrm: TMainformFrm
       ParentBackground = False
       ParentColor = True
       TabOrder = 3
+      ExplicitLeft = 5000
       ExplicitWidth = 836
       ExplicitHeight = 559
       object EMailHostLbl: TLabel
@@ -61006,6 +60988,7 @@ object MainformFrm: TMainformFrm
       ParentBackground = False
       ParentColor = True
       TabOrder = 4
+      ExplicitLeft = 5000
       ExplicitWidth = 836
       ExplicitHeight = 559
       object Label26: TLabel
@@ -61262,6 +61245,7 @@ object MainformFrm: TMainformFrm
       ParentBackground = False
       ParentColor = True
       TabOrder = 5
+      ExplicitLeft = 5000
       ExplicitWidth = 836
       ExplicitHeight = 559
       object Label21: TLabel
