@@ -1,11 +1,18 @@
 ﻿// --------------------------------------------------------------
 // Original author: Ralf-Peter Kleinert - 2025
+// Ursprünglicher Autor: Ralf-Peter Kleinert - 2025
 // Alias: #ComputerRalle / DIGITAL-easy
+// Künstlername: #ComputerRalle / DIGITAL-easy
 // Project: Paperless Backup Program / Paperless Backup Programm
+// Projekt: Paperless Backup Program / Paperless Backup Programm
 // Website: https://ralf-peter-kleinert.de
+// Webseite: https://ralf-peter-kleinert.de
 // YouTube: https://www.youtube.com/@ralf-peter-kleinert
+// YouTube-Kanal: https://www.youtube.com/@ralf-peter-kleinert
 // Copyright (c) 2025 Ralf-Peter Kleinert
+// Urheberrecht (c) 2025 Ralf-Peter Kleinert
 // MIT License - see LICENSE file in the repository
+// MIT-Lizenz - siehe LICENSE-Datei im Repository
 // --------------------------------------------------------------
 
 unit Mainform;
@@ -217,13 +224,16 @@ type
 var
   MainformFrm: TMainformFrm;
   // Main paths used by backup, restore, and generated CMD scripts.
+  // Hauptpfade für Backup, Wiederherstellung und generierte CMD-Skripte.
   BackupPath, ComposePath, ComposeName, CmdTargetPath, LastBackupFolder: String;
   AppDataFolder, BackupTargetFilePath, DefaultFolder, PaperlessInput, NoticeFilePath : String;
   // Runtime mode flags. They decide which script is created and what happens after it finishes.
+  // Laufzeitmodus-Flags. Sie entscheiden, welches Skript erstellt wird und was nach dessen Ende passiert.
   IsBackup: Boolean;
   IsPaperlessInstallation, ShouldOpenPaperless: Boolean;
   InternalName, FileVersion: string;
   // Docker container and volume names detected from the current compose project.
+  // Docker-Container- und Volume-Namen, die aus dem aktuellen Compose-Projekt erkannt wurden.
   PaperlessDBName, PaperlessCTName, PaperlessBrokerName, PaperlessTikaName, PaperlessGotenbergName: String;
   Volume_data, Volume_db_data, Volume_export, Volume_media: String;
   NewComposePath: String;
@@ -242,6 +252,7 @@ implementation
 {$R *.dfm}
 
 // Load update.ini from the web server and show whether a program update is available.
+// update.ini vom Webserver laden und anzeigen, ob ein Programmupdate verfügbar ist.
 procedure TMainformFrm.LoadUpdateIniFile();
 var
   Ss: TStringStream;
@@ -266,6 +277,7 @@ begin
     end;
   except
     VersionInIni := ProgramVersion; // No update check result when the server is unavailable.
+    // Kein Ergebnis der Update-Prüfung, wenn der Server nicht erreichbar ist.
     Exit;
   end;
 
@@ -298,6 +310,7 @@ begin
 end;
 
 // Store the default versions of all Docker components in the settings INI file.
+// Die Standardversionen aller Docker-Komponenten in der Einstellungs-INI speichern.
 procedure TMainformFrm.WriteStandardVersionAfterInstallation();
 var
   Ini: TIniFile;
@@ -320,18 +333,21 @@ begin
 end;
 
 // Open the generated CMD script in a visible console window.
+// Das generierte CMD-Skript in einem sichtbaren Konsolenfenster öffnen.
 procedure TMainformFrm.StartCmdScript;
 begin
   ShellExecute(0, 'open', PChar(CmdTargetPath), nil, nil, SW_SHOWNORMAL);
 end;
 
 // Open the support page in the default browser.
+// Die Unterstützungsseite im Standardbrowser öffnen.
 procedure TMainformFrm.BuyMeACoffeeBtnClick(Sender: TObject);
 begin
  ShellExecute(0, 'open', 'https://buymeacoffee.com/computerralle', nil, nil, SW_SHOWNORMAL);
 end;
 
 // Enable or disable manual Docker image version editing.
+// Manuelle Bearbeitung der Docker-Image-Versionen aktivieren oder deaktivieren.
 procedure TMainformFrm.CheckBox1Click(Sender: TObject);
 begin
   if CheckBox1.State = cbUnchecked then
@@ -356,6 +372,7 @@ begin
 end;
 
 // Choose the backup target folder, save it, and create the backup scripts.
+// Den Backup-Zielordner auswählen, speichern und die Backup-Skripte erstellen.
 procedure TMainformFrm.StartPaperlessBackupBtnClick(Sender: TObject);
 var
   FolderDialog: TFileOpenDialog;
@@ -374,6 +391,7 @@ begin
   try
     Ini.WriteString('Pfade', 'DockerComposePfad', ExtractFilePath(ComposePath));
     Ini.UpdateFile; // Write immediately.
+    // Sofort schreiben.
   finally
     Ini.Free;
   end;
@@ -384,6 +402,7 @@ begin
   if not DirectoryExists(DefaultFolder) then ForceDirectories(DefaultFolder);
 
   // Migrate the old backup target text file into the INI file.
+  // Die alte Textdatei mit dem Backup-Ziel in die INI-Datei migrieren.
   TextFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + 'BackupZiel.txt';
   if FileExists(TextFilePath) then
   begin
@@ -392,16 +411,20 @@ begin
     try
       Ini.WriteString('Pfade', 'BackupZiel', StoredPath);
       Ini.UpdateFile; // Write immediately.
+      // Sofort schreiben.
       // Read the value back from the INI file.
+      // Den Wert wieder aus der INI-Datei lesen.
       StoredPath := Ini.ReadString('Pfade', 'BackupZiel', '').Trim;
     finally
       Ini.Free;
     end;
     // Delete the old text file after a successful migration.
+    // Die alte Textdatei nach erfolgreicher Migration löschen.
     if StoredPath <> '' then DeleteFile(TextFilePath);
   end;
 
   // Read the last backup folder from the INI file.
+  // Den letzten Backup-Ordner aus der INI-Datei lesen.
   Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
   try
     LastBackupFolder := Ini.ReadString('Pfade', 'BackupZiel', '').Trim;
@@ -484,6 +507,7 @@ begin
   try
     Ini.WriteString('Pfade', 'BackupZiel', ExtractFileDir(BackupPath));
     Ini.UpdateFile; // Write immediately.
+    // Sofort schreiben.
   finally
     Ini.Free;
   end;
@@ -498,11 +522,14 @@ begin
   RestoreCanStartSTxt.Visible := False;
 
   // Delete the old marker file if it still exists.
+  // Die alte Markerdatei löschen, falls sie noch existiert.
   TextFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + 'DockerComposePfad.txt';
   if FileExists(TextFilePath) then DeleteFile(TextFilePath);
 end;
 // Create paperless-backup.cmd for a manual backup.
+// paperless-backup.cmd für ein manuelles Backup erstellen.
 // The script dumps PostgreSQL first, then archives the Docker volumes.
+// Das Skript erstellt zuerst einen PostgreSQL-Dump und archiviert danach die Docker-Volumes.
 procedure TMainformFrm.CreateBackupScript(const ComposePath: string);
 var
   Volumes: TDockerVolumeNames;
@@ -525,22 +552,28 @@ begin
 end;
 
 // Close the application from the main form.
+// Die Anwendung vom Hauptformular aus schließen.
 procedure TMainformFrm.FormClose(Sender: TObject; var Action: TCloseAction);
 begin
   Action := caNone;         // Stop default close handling.
+  // Die Standard-Schließbehandlung stoppen.
   PostQuitMessage(0);       // End the message loop.
+  // Die Nachrichtenschleife beenden.
   Application.Terminate;
 end;
 
 // Prepare global paths and default runtime state.
+// Globale Pfade und Standard-Laufzeitzustand vorbereiten.
 procedure TMainformFrm.FormCreate(Sender: TObject);
 begin
 
   AppDataFolder := IncludeTrailingPathDelimiter(GetEnvironmentVariable('USERPROFILE')) + 'Paperless Backup Programm';
   // Create the user data folder if it does not exist.
+  // Den Benutzerdatenordner erstellen, falls er nicht existiert.
   if not DirectoryExists(AppDataFolder) then ForceDirectories(AppDataFolder);
 
   // Initialize runtime state.
+  // Den Laufzeitzustand initialisieren.
   IsAutostart := False;
   ShouldWriteNewCompose := False;
   IsBackup := False;
@@ -552,6 +585,7 @@ begin
 end;
 
 // Load saved settings, migrate old text files, and prepare the visible form state.
+// Gespeicherte Einstellungen laden, alte Textdateien migrieren und den sichtbaren Formularzustand vorbereiten.
 procedure TMainformFrm.FormShow(Sender: TObject);
 var
   StartParameter: string;
@@ -573,11 +607,13 @@ begin
   AppDataFolder := IncludeTrailingPathDelimiter(GetEnvironmentVariable('USERPROFILE')) + 'Paperless Backup Programm';
 
   // Create the desktop consume folder if it does not exist.
+  // Den Consume-Ordner auf dem Desktop erstellen, falls er nicht existiert.
   PaperlessInput := IncludeTrailingPathDelimiter(GetEnvironmentVariable('USERPROFILE')) + 'Desktop\Paperless-Input';
   if not DirectoryExists(PaperlessInput) then ForceDirectories(PaperlessInput);
   SaveEmptyEnvFile();
 
   // Check whether the user already accepted the notice.
+  // Prüfen, ob der Benutzer den Hinweis bereits akzeptiert hat.
   Ini := TIniFile.Create(IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + 'Einstellungen.ini');
   try
     Value := Ini.ReadString('Einrichtung', 'Hinweis verstanden', '');
@@ -589,9 +625,11 @@ begin
   begin
     NoticeFilePath := IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + 'HinweisVerstanden.txt';
     // Delete the old notice file after the INI value exists.
+    // Die alte Hinweisdatei löschen, nachdem der INI-Wert vorhanden ist.
     if FileExists(NoticeFilePath) then DeleteFile(NoticeFilePath);
 
     // Show the notice again after 30 days.
+    // Den Hinweis nach 30 Tagen erneut anzeigen.
     if DaysBetween(Now, FileDateToDateTime(FileAge(IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + 'Einstellungen.ini'))) > 30 then
     begin
       HinweisFrm := THinweisFrm.Create(Self);
@@ -617,18 +655,22 @@ begin
   if FileExists(TextFilePath) then
   begin
     // Read the old path from the text file.
+    // Den alten Pfad aus der Textdatei lesen.
     OldPath := TFile.ReadAllText(TextFilePath, TEncoding.UTF8).Trim;
 
     // Store it in the INI file.
+    // Den Wert in der INI-Datei speichern.
     Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
     try
       Ini.WriteString('Pfade', 'DockerComposePfad', OldPath);
         Ini.UpdateFile; // Write immediately.
+        // Sofort schreiben.
     finally
       Ini.Free;
     end;
 
   // Delete the migrated text file.
+  // Die migrierte Textdatei löschen.
   DeleteFile(TextFilePath);
   end;
 
@@ -638,6 +680,7 @@ begin
   if not DirectoryExists(DefaultFolder) then ForceDirectories(DefaultFolder);
 
   // Migrate the old backup target text file into the INI file.
+  // Die alte Textdatei mit dem Backup-Ziel in die INI-Datei migrieren.
   TextFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + 'BackupZiel.txt';
   if FileExists(TextFilePath) then
   begin
@@ -646,16 +689,20 @@ begin
     try
       Ini.WriteString('Pfade', 'BackupZiel', StoredPath);
       Ini.UpdateFile; // Write immediately.
+      // Sofort schreiben.
       // Read the value back from the INI file.
+      // Den Wert wieder aus der INI-Datei lesen.
       StoredPath := Ini.ReadString('Pfade', 'BackupZiel', '').Trim;
     finally
       Ini.Free;
     end;
     // Delete the old text file after a successful migration.
+    // Die alte Textdatei nach erfolgreicher Migration löschen.
     if StoredPath <> '' then DeleteFile(TextFilePath);
   end;
 
   // Read the last backup folder from the INI file.
+  // Den letzten Backup-Ordner aus der INI-Datei lesen.
   Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
   try
     LastBackupFolder := Ini.ReadString('Pfade', 'BackupZiel', '').Trim;
@@ -737,22 +784,27 @@ begin
   if FileExists(ComposePathTextFile) then
     begin
       // Read the old path from the text file.
+      // Den alten Pfad aus der Textdatei lesen.
       OldPath := TFile.ReadAllText(ComposePathTextFile, TEncoding.UTF8);
 
       // Store it in the INI file.
+      // Den Wert in der INI-Datei speichern.
       Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
       try
         Ini.WriteString('Pfade', 'DockerComposePfad', OldPath);
         Ini.UpdateFile; // Write immediately.
+        // Sofort schreiben.
       finally
         Ini.Free;
       end;
 
       // Delete the migrated text file.
+      // Die migrierte Textdatei löschen.
       DeleteFile(ComposePathTextFile);
   end;
 
   // Prepare the default compose path.
+  // Den Standard-Compose-Pfad vorbereiten.
   NewComposePath := IncludeTrailingPathDelimiter(AppDataFolder);
 
   Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
@@ -763,6 +815,7 @@ begin
   end;
 
   // Migrate the old installation-completed text file into the INI file.
+  // Die alte Textdatei für abgeschlossene Installation in die INI-Datei migrieren.
   InstallationCompletedFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + 'InstallationAbgeschlossen.txt';
   if FileExists(InstallationCompletedFilePath) then
     begin
@@ -775,10 +828,12 @@ begin
       end;
 
       // Delete the migrated text file.
+      // Die migrierte Textdatei löschen.
       DeleteFile(InstallationCompletedFilePath);
     end;
 
   // Read the INI value again after possible migration.
+  // Den INI-Wert nach einer möglichen Migration erneut lesen.
   Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
   try
     Value := Ini.ReadString('Einrichtung', 'Installation abgeschlossen', '');
@@ -844,6 +899,7 @@ begin
   StaticText3.Caption := '';
 
   // Load the backup path if it exists.
+  // Den Backup-Pfad laden, falls er existiert.
   if FileExists(BackupTargetFilePath) then BackupPath := TFile.ReadAllText(BackupTargetFilePath).Trim;
 
   Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
@@ -854,6 +910,7 @@ begin
   end;
 
   // Load the last valid compose path and backup target from the INI file.
+  // Den letzten gültigen Compose-Pfad und das Backup-Ziel aus der INI-Datei laden.
   if StoredPath <> '' then
   begin
     ComposePath := StoredPath;
@@ -889,6 +946,7 @@ begin
     end;
 
    // Read trash retention from the INI file and show it in the edit field.
+   // Papierkorb-Aufbewahrung aus der INI-Datei lesen und im Eingabefeld anzeigen.
    Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
    try
     try
@@ -906,6 +964,7 @@ begin
 
   Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
   // Read image versions from the INI file and apply defaults when empty.
+  // Image-Versionen aus der INI-Datei lesen und bei leeren Werten Standardwerte verwenden.
   try
     redis_version_edit.Text := Ini.ReadString('Versionen', 'Redis-Version', '');
     if redis_version_edit.Text = '' then
@@ -951,19 +1010,23 @@ begin
 end;
 
 // Start a backup when the program was launched by the Windows task scheduler.
+// Ein Backup starten, wenn das Programm von der Windows-Aufgabenplanung gestartet wurde.
 procedure TMainformFrm.RunAutostartBackup();
 begin
   // Kept as a small wrapper for scheduled starts.
+  // Als kleiner Wrapper für geplante Starts beibehalten.
   StartPaperlessBackupBtn.Click;
 end;
 
 // Recreate and run the manual backup script for the current compose path.
+// Das manuelle Backup-Skript für den aktuellen Compose-Pfad neu erstellen und ausführen.
 procedure TMainformFrm.StartPaperlessBackupScriptBtnClick(Sender: TObject);
 begin
   CreateBackupScript(ExtractFilePath(ComposePath));
 end;
 
 // Switch between the main panels and refresh panel-specific settings.
+// Zwischen den Hauptbereichen wechseln und bereichsspezifische Einstellungen aktualisieren.
 procedure TMainformFrm.TabControl1Change(Sender: TObject);
 var
   Ini: TIniFile;
@@ -972,6 +1035,7 @@ begin
     try
       Ini.WriteString('Pfade', 'DockerComposePfad', IncludeTrailingPathDelimiter(ExtractFilePath(ComposePath)) + 'docker-compose.yml');
       Ini.UpdateFile; // Write immediately.
+      // Sofort schreiben.
     finally
       Ini.Free;
     end;
@@ -1093,8 +1157,10 @@ end;
 
 // --------------------------------------------------------------
 // Schedule
+// Zeitplan
 // --------------------------------------------------------------
 // Validate the trash-retention input while the user types.
+// Die Eingabe zur Papierkorb-Aufbewahrung während der Eingabe prüfen.
 procedure TMainformFrm.TrashRetentionEditChange(Sender: TObject);
 var
   i: Integer;
@@ -1105,6 +1171,7 @@ begin
   istGanzzahl := True;
 
   // Allow only whole numbers.
+  // Nur ganze Zahlen erlauben.
   for i := 1 to Length(s) do
     if not CharInSet(s[i], ['0'..'9']) then
     begin
@@ -1126,6 +1193,7 @@ end;
 
 
 // Save how many scheduled backup folders should be kept.
+// Speichern, wie viele geplante Backup-Ordner behalten werden sollen.
 procedure TMainformFrm.SaveRetentionBtnClick(Sender: TObject);
 var
   Ini: TIniFile;
@@ -1134,10 +1202,13 @@ begin
   Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
   try
     // Save the retention setting.
+    // Die Aufbewahrungseinstellung speichern.
     Ini.WriteInteger('Zeitplan', 'BackupsBehalten', KeepBackupsSpE.Value);
     // Write immediately.
+    // Sofort schreiben.
     Ini.UpdateFile;
     // Read the value back safely.
+    // Den Wert sicher zurücklesen.
     try
       MaxBackupFolders := Ini.ReadInteger('Zeitplan', 'BackupsBehalten', 0);
     except
@@ -1147,15 +1218,18 @@ begin
     Ini.Free;
   end;
   // Show the label only when all backups are kept.
+  // Die Beschriftung nur anzeigen, wenn alle Backups behalten werden.
   if KeepBackupsSpE.Value = 0 then
   AllBackupsAreRetainedLbl.Visible := True else
   AllBackupsAreRetainedLbl.Visible := False;
 end;
 
 // Enable or disable all controls that belong to automatic backups.
+// Alle Steuerelemente für automatische Backups aktivieren oder deaktivieren.
 procedure TMainformFrm.AutoBackupCBClick(Sender: TObject);
 begin
   // Enable or disable schedule controls.
+  // Zeitplan-Steuerelemente aktivieren oder deaktivieren.
   if AutoBackupCB.Checked = True then
    begin
      WeekDaysPan.Enabled := True;
@@ -1194,6 +1268,7 @@ begin
 end;
 
 // Save the selected weekdays and time for the Windows scheduled task.
+// Ausgewählte Wochentage und Uhrzeit für die Windows-Aufgabe speichern.
 procedure TMainformFrm.SaveScheduleSettings;
 var
   Ini: TIniFile;
@@ -1216,6 +1291,7 @@ begin
 end;
 
 // Remove the Windows scheduled task for automatic backups.
+// Die Windows-Aufgabe für automatische Backups entfernen.
 procedure TMainformFrm.DeleteBackupPlanBtnClick(Sender: TObject);
 var
   ShellExecuteInfo: TShellExecuteInfo;
@@ -1223,11 +1299,13 @@ var
   Ini: TIniFile;
 begin
   // Create a script that removes the scheduled task.
+  // Ein Skript erstellen, das die geplante Aufgabe entfernt.
   CmdTargetPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'Backup-Zeitplan-Entfernen.cmd';
   CreateDeleteBackupScheduleCmdScript(CmdTargetPath);
   ScriptSavedLbl.Caption := 'Skript gespeichert: ' + CmdTargetPath;
 
   // Run the script silently in the background.
+  // Das Skript still im Hintergrund ausführen.
   FillChar(ShellExecuteInfo, SizeOf(ShellExecuteInfo), 0);
   ShellExecuteInfo.cbSize := SizeOf(ShellExecuteInfo);
   ShellExecuteInfo.fMask := SEE_MASK_NOCLOSEPROCESS;
@@ -1238,10 +1316,13 @@ begin
   ShellExecuteEx(@ShellExecuteInfo);
 
   // Reset the checkbox.
+  // Die Checkbox zurücksetzen.
   AutoBackupCB.Checked := False;
   // Disable related controls and save the setting.
+  // Zugehörige Steuerelemente deaktivieren und die Einstellung speichern.
   AutoBackupCBClick(nil);
   // Make sure the INI value is set to False.
+  // Sicherstellen, dass der INI-Wert auf False gesetzt ist.
   Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
   try
     Ini.WriteBool('Zeitplan', 'Backup nach diesem Zeitplan', False);
@@ -1252,6 +1333,7 @@ begin
 end;
 
 // Load saved schedule settings into the form controls.
+// Gespeicherte Zeitplaneinstellungen in die Formularsteuerelemente laden.
 procedure TMainformFrm.LoadScheduleSettings;
 var
   Ini: TIniFile;
@@ -1290,6 +1372,7 @@ begin
   end;
 
   // Update the UI after loading settings.
+  // Die Oberfläche nach dem Laden der Einstellungen aktualisieren.
   AutoBackupCBClick(nil);
 
   Label12.Visible := True;
@@ -1301,6 +1384,7 @@ begin
 end;
 
 // Create or update the Windows scheduled task for automatic backups.
+// Die Windows-Aufgabe für automatische Backups erstellen oder aktualisieren.
 procedure TMainformFrm.CreateBackupPlanBtnClick(Sender: TObject);
 var
   Weekdays: string;
@@ -1313,10 +1397,13 @@ var
   ComposePathTextFile: string;
 begin
   // Get the executable path.
+  // Den Pfad zur ausführbaren Datei ermitteln.
   ProgramPath := ParamStr(0);
   SaveScheduleSettings;
   // Check prerequisites.
+  // Voraussetzungen prüfen.
   // Read the docker-compose path from the INI file.
+  // Den docker-compose-Pfad aus der INI-Datei lesen.
   Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
   try
     ComposePathFromIni := Ini.ReadString('Pfade', 'DockerComposePfad', '').Trim;
@@ -1324,6 +1411,7 @@ begin
     Ini.Free;
   end;
   // Stop when the compose path is missing.
+  // Abbrechen, wenn der Compose-Pfad fehlt.
   if (ComposePathFromIni = '') or
      not FileExists(ComposePathFromIni) then
   begin
@@ -1334,9 +1422,11 @@ begin
   end;
 
   // Build the scheduled start time.
+  // Die geplante Startzeit zusammensetzen.
   Hour := Format('%.2d', [HourSpE.Value]);
   Minute := Format('%.2d', [MinuteSpE.Value]);
   // Build the weekday list for schtasks.
+  // Die Wochentagsliste für schtasks zusammensetzen.
   if MondayCB.Checked then Weekdays := Weekdays + 'MON,';
   if TuesdayCB.Checked then Weekdays := Weekdays + 'TUE,';
   if WednesdayCB.Checked then Weekdays := Weekdays + 'WED,';
@@ -1351,6 +1441,7 @@ begin
   end;
   Delete(Weekdays, Length(Weekdays), 1);
   // Build the path to the planned backup CMD file.
+  // Den Pfad zur geplanten Backup-CMD-Datei erstellen.
   try
     Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
     try
@@ -1366,6 +1457,7 @@ begin
     end;
 
     // Delete the old marker file if it still exists.
+    // Die alte Markerdatei löschen, falls sie noch existiert.
     ComposePathTextFile := IncludeTrailingPathDelimiter(AppDataFolder) + 'DockerComposePfad.txt';
     if FileExists(ComposePathTextFile) then DeleteFile(ComposePathTextFile);
 
@@ -1383,12 +1475,15 @@ begin
     Exit;
   end;
   // Write the scheduler setup script.
+  // Das Skript zum Einrichten der Aufgabenplanung schreiben.
   ScriptPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'Backup-Zeitplan-Anlegen.cmd';
   // The scheduled task starts this program with the /geplant parameter.
+  // Die geplante Aufgabe startet dieses Programm mit dem Parameter /geplant.
   CreateBackupScheduleCmdScript(ScriptPath, ProgramPath, Weekdays, Hour, Minute);
 
   ShowMessage('Die geplante Backup-Aufgabe wurde als Aufgabe eingetragen und als Skript gespeichert:' + sLineBreak + ScriptPath);
   // Run the script silently in the background.
+  // Das Skript still im Hintergrund ausführen.
   FillChar(ShellExecuteInfo, SizeOf(ShellExecuteInfo), 0);
   ShellExecuteInfo.cbSize := SizeOf(ShellExecuteInfo);
   ShellExecuteInfo.fMask := SEE_MASK_NOCLOSEPROCESS;
@@ -1400,24 +1495,30 @@ begin
 end;
 
 // Load saved Paperless email settings from email-versand.env.
+// Gespeicherte Paperless-E-Mail-Einstellungen aus email-versand.env laden.
 procedure TMainformFrm.LoadEmailSettings;
 var
   EnvFilePath: string;
   EnvList: TStringList;
 begin
   // Path to the .env file in the app data folder.
+  // Pfad zur .env-Datei im AppData-Ordner.
   EnvFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + 'email-versand.env';
 
   // Load settings only when the file exists.
+  // Einstellungen nur laden, wenn die Datei existiert.
   if FileExists(EnvFilePath) then
   begin
     // Use a string list to read the .env file.
+    // Eine Stringliste zum Lesen der .env-Datei verwenden.
     EnvList := TStringList.Create;
     try
       // Read the .env file.
+      // Die .env-Datei lesen.
       EnvList.LoadFromFile(EnvFilePath);
 
       // Check whether setup is still pending.
+      // Prüfen, ob die Einrichtung noch aussteht.
       if EnvList.Values['Eingerichtet'] = 'Nein' then
       begin
         RequireCompletedSettings;
@@ -1425,6 +1526,7 @@ begin
       else
       begin
         // Copy saved values into the edit fields.
+        // Gespeicherte Werte in die Eingabefelder übernehmen.
         SMTPServerEdit.Text := EnvList.Values['PAPERLESS_EMAIL_HOST'];
         SMTPPortEdit.Text := EnvList.Values['PAPERLESS_EMAIL_PORT'];
         UserNameEdit.Text := EnvList.Values['PAPERLESS_EMAIL_HOST_USER'];
@@ -1432,21 +1534,26 @@ begin
         EMailSentFromEdit.Text := EnvList.Values['PAPERLESS_EMAIL_FROM'];
 
         // Restore the SSL/TLS selection.
+        // Die SSL/TLS-Auswahl wiederherstellen.
         if EnvList.Values['PAPERLESS_EMAIL_USE_SSL'] = 'true' then
         begin
           SSLoTLSRg.ItemIndex := 0;  // SSL
+          // SSL
         end
         else if EnvList.Values['PAPERLESS_EMAIL_USE_TLS'] = 'true' then
         begin
           SSLoTLSRg.ItemIndex := 1;  // TLS
+          // TLS
         end
         else
         begin
           // No SSL/TLS option is selected.
+          // Keine SSL/TLS-Option ist ausgewählt.
           SSLoTLSRg.ItemIndex := -1;
         end;
 
         // Empty values also mean no selection.
+        // Leere Werte bedeuten ebenfalls keine Auswahl.
         if (EnvList.Values['PAPERLESS_EMAIL_USE_SSL'] = '') and (EnvList.Values['PAPERLESS_EMAIL_USE_TLS'] = '') then
         begin
           SSLoTLSRg.ItemIndex := -1;
@@ -1465,6 +1572,7 @@ begin
 end;
 
 // Prepare the compose file before email settings can be completed.
+// Die Compose-Datei vorbereiten, bevor E-Mail-Einstellungen abgeschlossen werden können.
 procedure TMainformFrm.RequireCompletedSettings;
 var
   Response: Integer;
@@ -1472,6 +1580,7 @@ begin
   IsUpdate:= True;
 
   // Ask before changing the compose file and restarting Paperless.
+  // Vor dem Ändern der Compose-Datei und dem Neustart von Paperless nachfragen.
   Response := MessageDlg('E-Mail-Einstellungen stehen aus. Dazu muss Paperless gestoppt werden.' + sLineBreak +
                         'Es werden einige Einstellungen angepasst, eine neue docker-compose-Datei'  + sLineBreak +
                         'erzeugt und Paperless dann neu gestartet.' + sLineBreak + sLineBreak +
@@ -1480,25 +1589,34 @@ begin
                         'Möchten Sie fortfahren?', mtConfirmation, [mbOk, mbCancel], 0);
 
   // Continue when the user confirms.
+  // Fortfahren, wenn der Benutzer bestätigt.
   if Response = mrOk then
   begin
     // Write a new docker-compose.yml file.
+    // Eine neue docker-compose.yml-Datei schreiben.
      HinweisFrm.CreateDockerComposeFile;
   end
   else
   begin
     // Stop when the user cancels.
+    // Abbrechen, wenn der Benutzer abbricht.
     ShowMessage('Der Vorgang wurde abgebrochen.');
   end;
 end;
 
 // --------------------------------------------------------------
 // This procedure saves the current settings and version information
+// Diese Prozedur speichert die aktuellen Einstellungen und Versionsinformationen
 // into the settings INI file. The routine is divided into two main sections:
+// in die Einstellungs-INI-Datei. Die Routine ist in zwei Hauptbereiche aufgeteilt:
 // 1. General settings (e.g., trash retention time)
+// 1. Allgemeine Einstellungen (z. B. Papierkorb-Aufbewahrungszeit)
 // 2. Versions of Docker components (Paperless, Redis, PostgreSQL, etc.)
+// 2. Versionen der Docker-Komponenten (Paperless, Redis, PostgreSQL usw.)
 // After saving, the user is asked whether to restart Paperless
+// Nach dem Speichern wird der Benutzer gefragt, ob Paperless neu gestartet werden soll
 // to apply the new configuration.
+// um die neue Konfiguration zu übernehmen.
 // --------------------------------------------------------------
 procedure TMainformFrm.SaveSettingsBtnClick(Sender: TObject);
 var
@@ -1508,23 +1626,29 @@ begin
   try
     // --------------------------------------------------------------
     // Section 1: Save general settings.
+    // Abschnitt 1: Allgemeine Einstellungen speichern.
     // --------------------------------------------------------------
     Ini.WriteInteger('Einstellungen', 'Papierkorb Aufbewahrungszeit in Tagen',
       StrToIntDef(PapierkorbAufbewahrungEdit.Text, 0));
     Ini.UpdateFile; // Write immediately.
+    // Sofort schreiben.
 
     SettingsSavedLbl.Visible := True; // Show confirmation.
+    // Bestätigung anzeigen.
 
     // Read the saved value back safely.
+    // Den gespeicherten Wert sicher zurücklesen.
     try
       TrashRetentionDays :=
         Ini.ReadInteger('Einstellungen', 'Papierkorb Aufbewahrungszeit in Tagen', 0);
     except
       TrashRetentionDays := 365; // Default fallback.
+      // Standard-Rückfallwert.
     end;
 
     // --------------------------------------------------------------
     // Section 2: Save version information.
+    // Abschnitt 2: Versionsinformationen speichern.
     // --------------------------------------------------------------
     Ini.WriteString('Versionen', 'Paperless-Version', paperless_version_edit.Text);
     Ini.WriteString('Versionen', 'Redis-Version', redis_version_edit.Text);
@@ -1541,6 +1665,7 @@ begin
 
   // --------------------------------------------------------------
   // Section 3: Ask whether Paperless should be restarted.
+  // Abschnitt 3: Fragen, ob Paperless neu gestartet werden soll.
   // --------------------------------------------------------------
   if MessageDlg(
     'Paperless muss neu gestartet werden, um die Einstellungen zu übernehmen. ' +
@@ -1561,15 +1686,18 @@ end;
 
 
 // Save the current email fields without triggering a Paperless restart.
+// Die aktuellen E-Mail-Felder speichern, ohne einen Paperless-Neustart auszulösen.
 procedure TMainformFrm.SaveBlankEmailSettings();
 var
   EnvList: TStringList;
   EnvFilePath: string;
 begin
   // Build the full path to the file.
+  // Den vollständigen Pfad zur Datei erstellen.
   EnvFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + 'email-versand.env';
 
   // Make sure the app data folder exists.
+  // Sicherstellen, dass der AppData-Ordner existiert.
   if not DirectoryExists(AppDataFolder) then
   begin
     ShowMessage('Der angegebene AppData-Ordner existiert nicht.');
@@ -1577,9 +1705,11 @@ begin
   end;
 
   // Build the .env file content.
+  // Den Inhalt der .env-Datei zusammenbauen.
   EnvList := TStringList.Create;
   try
     // Add mail settings to email-versand.env.
+    // E-Mail-Einstellungen zu email-versand.env hinzufügen.
     EnvList.Add('PAPERLESS_EMAIL_HOST=' + SMTPServerEdit.Text);
     if SMTPPortEdit.Text = '' then
     EnvList.Add('PAPERLESS_EMAIL_PORT=25') else
@@ -1589,6 +1719,7 @@ begin
     EnvList.Add('PAPERLESS_EMAIL_FROM=' + EMailSentFromEdit.Text);
 
     // Save the SSL/TLS selection.
+    // Die SSL/TLS-Auswahl speichern.
     if SSLoTLSRg.ItemIndex = 0 then
     begin
       EnvList.Add('PAPERLESS_EMAIL_USE_TLS=false');
@@ -1606,25 +1737,30 @@ begin
     end;
 
     // Save the file.
+    // Die Datei speichern.
     EnvList.SaveToFile(EnvFilePath, TEncoding.ANSI);
   except
     on E: Exception do
       ShowMessage('Fehler beim Speichern der Datei: ' + E.Message);
   end;
   // Clean up.
+  // Aufräumen.
   EnvList.Free;
 end;
 
 // Save email settings and restart Paperless so the new values are used.
+// E-Mail-Einstellungen speichern und Paperless neu starten, damit die neuen Werte verwendet werden.
 procedure TMainformFrm.SaveEmailSettingsBtnClick(Sender: TObject);
 var
   EnvList: TStringList;
   EnvFilePath: string;
 begin
   // Build the full path to the file.
+  // Den vollständigen Pfad zur Datei erstellen.
   EnvFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + 'email-versand.env';
 
   // Make sure the app data folder exists.
+  // Sicherstellen, dass der AppData-Ordner existiert.
   if not DirectoryExists(AppDataFolder) then
   begin
     ShowMessage('Der angegebene AppData-Ordner existiert nicht.');
@@ -1632,9 +1768,11 @@ begin
   end;
 
   // Build the .env file content.
+  // Den Inhalt der .env-Datei zusammenbauen.
   EnvList := TStringList.Create;
   try
     // Add mail settings to email-versand.env.
+    // E-Mail-Einstellungen zu email-versand.env hinzufügen.
     EnvList.Add('PAPERLESS_EMAIL_HOST=' + SMTPServerEdit.Text);
     EnvList.Add('PAPERLESS_EMAIL_PORT=' + SMTPPortEdit.Text);
     EnvList.Add('PAPERLESS_EMAIL_HOST_USER=' + UserNameEdit.Text);
@@ -1642,6 +1780,7 @@ begin
     EnvList.Add('PAPERLESS_EMAIL_FROM=' + EMailSentFromEdit.Text);
 
     // Save the SSL/TLS selection.
+    // Die SSL/TLS-Auswahl speichern.
     if SSLoTLSRg.ItemIndex = 0 then
     begin
       EnvList.Add('PAPERLESS_EMAIL_USE_TLS=false');
@@ -1659,9 +1798,11 @@ begin
     end;
 
     // Save the file.
+    // Die Datei speichern.
     EnvList.SaveToFile(EnvFilePath, TEncoding.ANSI);
 
     // Show confirmation when no restart is pending.
+    // Bestätigung anzeigen, wenn kein Neustart aussteht.
     if IsUpdate = False then
   except
     on E: Exception do
@@ -1669,9 +1810,11 @@ begin
   end;
 
   // Clean up.
+  // Aufräumen.
   EnvList.Free;
 
     // Restart after changing email settings.
+    // Nach Änderung der E-Mail-Einstellungen neu starten.
      Application.MessageBox('Paperless muss neu gestartet werden, um die Einstellungen zu übernehmen.', 'Information',
      MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
     SaveEmailSettingsBtn.Enabled:=False;
@@ -1679,15 +1822,18 @@ begin
 end;
 
 // Create the default email-versand.env file when it is missing.
+// Die Standarddatei email-versand.env erstellen, wenn sie fehlt.
 procedure TMainformFrm.SaveEmptyEnvFile();
 var
   EnvList: TStringList;
   EnvFilePath: string;
 begin
   // Build the full path to the file.
+  // Den vollständigen Pfad zur Datei erstellen.
   EnvFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + 'email-versand.env';
 
   // Make sure the app data folder exists.
+  // Sicherstellen, dass der AppData-Ordner existiert.
   if not DirectoryExists(AppDataFolder) then
   begin
     ShowMessage('Der angegebene AppData-Ordner existiert nicht.');
@@ -1695,12 +1841,15 @@ begin
   end;
 
   // Create an empty .env file when it does not exist yet.
+  // Eine leere .env-Datei erstellen, wenn sie noch nicht existiert.
   if not FileExists(IncludeTrailingPathDelimiter(AppDataFolder) + 'email-versand.env') then
   begin
     // Build the default .env content.
+    // Den Standardinhalt der .env-Datei zusammenbauen.
     EnvList := TStringList.Create;
     try
       // Add default email settings.
+      // Standard-E-Mail-Einstellungen hinzufügen.
       EnvList.Add('Eingerichtet=Nein');
        EnvList.Add('PAPERLESS_EMAIL_HOST=');
       EnvList.Add('PAPERLESS_EMAIL_PORT=');
@@ -1710,18 +1859,22 @@ begin
       EnvList.Add('PAPERLESS_EMAIL_USE_TLS=');
       EnvList.Add('PAPERLESS_EMAIL_USE_SSL=');
       // Save the file.
+      // Die Datei speichern.
       EnvList.SaveToFile(EnvFilePath);
       // Show save errors.
+      // Speicherfehler anzeigen.
       except
         on E: Exception do
           ShowMessage('Fehler beim Speichern der Datei: ' + E.Message);
     end;
     // Clean up.
+    // Aufräumen.
     EnvList.Free;
   end;
 end;
 
 // Create the CMD file that is called by the Windows scheduled task.
+// Die CMD-Datei erstellen, die von der Windows-Aufgabe aufgerufen wird.
 procedure TMainformFrm.CreateBackupPlanScript(const ComposePath: string);
 var
   BackupFolderList: TArray<string>;
@@ -1730,6 +1883,7 @@ var
   Volumes: TDockerVolumeNames;
 begin
   // Stop when no compose path was provided.
+  // Abbrechen, wenn kein Compose-Pfad übergeben wurde.
   if ComposePath.Trim = '' then
   begin
     ShowMessage('Fehler: Es wurde kein gültiger Compose-Pfad gewählt.');
@@ -1737,14 +1891,17 @@ begin
   end;
 
   // Prepare a compose name without spaces.
+  // Einen Compose-Namen ohne Leerzeichen vorbereiten.
   ComposeName := StringReplace(
                    ExtractFileName(ExcludeTrailingPathDelimiter(ComposePath)),
                    ' ', '-', [rfReplaceAll]);
 
   // Build the path for the planned backup CMD file.
+  // Den Pfad zur geplanten Backup-CMD-Datei erstellen.
   CmdTargetPath := IncludeTrailingPathDelimiter(ComposePath) +
                  'paperless-backup-geplant.cmd';
   // Use the saved backup folder, or fall back to Desktop\FallbackBackup.
+  // Den gespeicherten Backup-Ordner verwenden oder auf Desktop\FallbackBackup zurückfallen.
   Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
   try
     LastBackupFolder := Ini.ReadString('Pfade', 'BackupZiel', '').Trim;
@@ -1762,6 +1919,7 @@ begin
   CreatePlannedBackupCmdScript(CmdTargetPath, ComposePath, BackupPath, AppDataFolder, PaperlessDBName, Volumes);
   ScriptSavedLbl.Caption := 'Plan gespeichert: ' + CmdTargetPath;
   // Delete old backup folders when a retention limit is set.
+  // Alte Backup-Ordner löschen, wenn eine Aufbewahrungsgrenze gesetzt ist.
   MaxBackupFolders := KeepBackupsSpE.Value;
   if (MaxBackupFolders > 0) and DirectoryExists(BackupPath) then
   begin
@@ -1793,18 +1951,21 @@ begin
         DL := FolderNameToDateTime(L);
         DR := FolderNameToDateTime(R);
         Result := CompareDateTime(DL, DR); // Ascending: oldest first.
+        // Aufsteigend: älteste zuerst.
       end));
     if Length(BackupFolderList) > MaxBackupFolders then
     begin
       for var i := 0 to Length(BackupFolderList) - MaxBackupFolders - 1 do
       begin
         TDirectory.Delete(BackupFolderList[i], True); // Delete oldest folders.
+        // Die ältesten Ordner löschen.
       end;
     end;
   end;
 end;
 
 // Run the planned backup script without showing a console window.
+// Das geplante Backup-Skript ohne sichtbares Konsolenfenster ausführen.
 procedure TMainformFrm.StartBackupPlanScriptSilent;
 var
   SI: TStartupInfo;
@@ -1832,6 +1993,7 @@ begin
 end;
 
 // Reserved click handler for the static text control.
+// Reservierter Klick-Handler für das StaticText-Steuerelement.
 procedure TMainformFrm.StaticText1Click(Sender: TObject);
 begin
 
@@ -1839,8 +2001,10 @@ end;
 
 // --------------------------------------------------------------
 // Restore
+// Wiederherstellung
 // --------------------------------------------------------------
 // Let the user select a backup folder and create the restore script.
+// Den Benutzer einen Backup-Ordner auswählen lassen und das Wiederherstellungsskript erstellen.
 procedure TMainformFrm.RestorePaperlessBackupBtnClick(Sender: TObject);
 var
   BackupFolder: string;
@@ -1876,6 +2040,7 @@ begin
     FolderDialog.Free;
   end;
   // Update the form state.
+  // Den Formularzustand aktualisieren.
   StartPaperlessBackupBtn.Enabled := True;
   RestorePaperlessBackupBtn.Enabled := True;
   CanStartBackupSTxt.Visible := False;
@@ -1884,6 +2049,7 @@ begin
 end;
 
 // Enable the email save button after the user confirms that the update step is done.
+// Den E-Mail-Speichern-Button aktivieren, nachdem der Benutzer den abgeschlossenen Update-Schritt bestätigt hat.
 procedure TMainformFrm.UpdateDoneCbClick(Sender: TObject);
 begin
   if HabeUpdaetGemachtCb.State = cbUnchecked then
@@ -1892,12 +2058,15 @@ begin
 end;
 
 // Create paperless-restore.cmd for the selected backup folder.
+// paperless-restore.cmd für den ausgewählten Backup-Ordner erstellen.
 // The script restores the database dump and all Paperless Docker volumes.
+// Das Skript stellt den Datenbank-Dump und alle Paperless-Docker-Volumes wieder her.
 procedure TMainformFrm.CreateRestoreScript(const ComposePath, BackupFolder: string);
 var
   Volumes: TDockerVolumeNames;
 begin
   // Stop when no compose path was provided.
+  // Abbrechen, wenn kein Compose-Pfad übergeben wurde.
   if ComposePath.Trim = '' then
   begin
     ShowMessage('Fehler: Es wurde kein gültiger Compose-Pfad gewählt.');
@@ -1914,6 +2083,7 @@ begin
 end;
 
 // Run the current CMD script, wait for it, and show success or failure.
+// Das aktuelle CMD-Skript ausführen, darauf warten und Erfolg oder Fehler anzeigen.
 procedure TMainformFrm.StartAndMonitorCmdScript;
 var
   StartupInfo: TStartupInfo;
@@ -1929,6 +2099,7 @@ begin
   StartupInfo.wShowWindow := SW_SHOWNORMAL;
 
   Cmd := 'cmd.exe /C "' + CmdTargetPath + '"'; // Script path.
+  // Skriptpfad.
 
   if CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NEW_CONSOLE, nil, nil, StartupInfo, ProcessInfo) then
   begin
@@ -1940,12 +2111,15 @@ begin
         if ShouldWait then
         begin
           // Bring the CMD window to the front.
+          // Das CMD-Fenster in den Vordergrund bringen.
           ConsoleToFront(ProcessInfo.dwProcessId);
 
           // Wait for the process to finish.
+          // Warten, bis der Prozess beendet ist.
           WaitForSingleObject(ProcessInfo.hProcess, INFINITE);
 
           // Check the exit code.
+          // Den Exit-Code prüfen.
           GetExitCodeProcess(ProcessInfo.hProcess, ExitCode);
           CloseHandle(ProcessInfo.hProcess);
           CloseHandle(ProcessInfo.hThread);
@@ -2023,10 +2197,13 @@ begin
     end else
         begin
           // Bring the CMD window to the front.
+          // Das CMD-Fenster in den Vordergrund bringen.
           ConsoleToFront(ProcessInfo.dwProcessId);
           // Wait for the process to finish.
+          // Warten, bis der Prozess beendet ist.
           WaitForSingleObject(ProcessInfo.hProcess, INFINITE);
           // Check the exit code.
+          // Den Exit-Code prüfen.
           GetExitCodeProcess(ProcessInfo.hProcess, ExitCode);
           CloseHandle(ProcessInfo.hProcess);
           CloseHandle(ProcessInfo.hThread);
@@ -2048,6 +2225,7 @@ begin
 end;
 
 // Run the restart or update script and show the final result to the user.
+// Das Neustart- oder Update-Skript ausführen und dem Benutzer das Ergebnis anzeigen.
 procedure TMainformFrm.StartAndMonitorRestart;
 var
   StartupInfo: TStartupInfo;
@@ -2060,23 +2238,29 @@ begin
   StartupInfo.dwFlags := STARTF_USESHOWWINDOW;
   StartupInfo.wShowWindow := SW_SHOWNORMAL;
   Cmd := 'cmd.exe /C "' + CmdTargetPath + '"'; // Script path.
+  // Skriptpfad.
 
   if PaperlessUpdate = False then
   begin
     // Start the process.
+    // Den Prozess starten.
     if CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NEW_CONSOLE, nil, nil, StartupInfo, ProcessInfo) then
     begin
       Sleep(1000);
       // Bring the CMD window to the front.
+      // Das CMD-Fenster in den Vordergrund bringen.
       ConsoleToFront(ProcessInfo.dwProcessId);
       // Wait for the process to finish.
+      // Warten, bis der Prozess beendet ist.
       WaitForSingleObject(ProcessInfo.hProcess, INFINITE);
       // Check the exit code.
+      // Den Exit-Code prüfen.
       GetExitCodeProcess(ProcessInfo.hProcess, ExitCode);
       CloseHandle(ProcessInfo.hProcess);
       CloseHandle(ProcessInfo.hThread);
 
       // Exit code 0 means success.
+      // Exit-Code 0 bedeutet Erfolg.
       if ExitCode = 0 then
       begin
         Application.MessageBox('Neustart abgeschlossen. Sie können das Programm jetzt schließen.' + #13#10 +
@@ -2086,6 +2270,7 @@ begin
       else
       begin
         // Show a failure message when the process returns an error.
+        // Eine Fehlermeldung anzeigen, wenn der Prozess einen Fehler zurückgibt.
         ShowMessage('Der Vorgang ist fehlgeschlagen. Fehlercode: ' + IntToStr(ExitCode));
       end;
     end
@@ -2094,24 +2279,30 @@ begin
       ShowMessage('Fehler beim Starten des Prozesses.');
     end;
     ActiveControl := nil; // Remove focus from the current control.
+    // Den Fokus vom aktuellen Steuerelement entfernen.
   end;
 
   if PaperlessUpdate = true then
   begin
     // Start the process.
+    // Den Prozess starten.
     if CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NEW_CONSOLE, nil, nil, StartupInfo, ProcessInfo) then
     begin
       Sleep(1000);
       // Bring the CMD window to the front.
+      // Das CMD-Fenster in den Vordergrund bringen.
       ConsoleToFront(ProcessInfo.dwProcessId);
       // Wait for the process to finish.
+      // Warten, bis der Prozess beendet ist.
       WaitForSingleObject(ProcessInfo.hProcess, INFINITE);
       // Check the exit code.
+      // Den Exit-Code prüfen.
       GetExitCodeProcess(ProcessInfo.hProcess, ExitCode);
       CloseHandle(ProcessInfo.hProcess);
       CloseHandle(ProcessInfo.hThread);
 
       // Exit code 0 means success.
+      // Exit-Code 0 bedeutet Erfolg.
       if ExitCode = 0 then
       begin
         Application.MessageBox('Neustart und Updatesuche abgeschlossen. Sie können das Programm jetzt schließen.' + #13#10 +
@@ -2122,6 +2313,7 @@ begin
       else
       begin
         // Show a failure message when the process returns an error.
+        // Eine Fehlermeldung anzeigen, wenn der Prozess einen Fehler zurückgibt.
         ShowMessage('Der Vorgang ist fehlgeschlagen. Fehlercode: ' + IntToStr(ExitCode));
       end;
     end
@@ -2130,13 +2322,16 @@ begin
       ShowMessage('Fehler beim Starten des Prozesses.');
     end;
     ActiveControl := nil; // Remove focus from the current control.
+    // Den Fokus vom aktuellen Steuerelement entfernen.
   end;
 end;
 
 // Create paperless-neustart.cmd to stop and start Paperless again.
+// paperless-neustart.cmd erstellen, um Paperless zu stoppen und neu zu starten.
 procedure TMainformFrm.CreateRestartScript(const ComposePath: string);
 begin
   // Stop when no compose path was provided.
+  // Abbrechen, wenn kein Compose-Pfad übergeben wurde.
   if ComposePath.Trim = '' then
   begin
     ShowMessage('Fehler: Es wurde kein gültiger Compose-Pfad gewählt.');
@@ -2150,11 +2345,13 @@ begin
 end;
 
 // Bring the console window of a started process to the front.
+// Das Konsolenfenster eines gestarteten Prozesses in den Vordergrund bringen.
 procedure TMainformFrm.ConsoleToFront(PID: DWORD);
 var
   hConsoleWnd: HWND;
 begin
   // Bring the CMD window to the front.
+  // Das CMD-Fenster in den Vordergrund bringen.
   AttachConsole(PID);
   hConsoleWnd := GetConsoleWindow;
   if hConsoleWnd <> 0 then
@@ -2166,6 +2363,7 @@ begin
 end;
 
 // Show the settings page where image versions and update settings are edited.
+// Die Einstellungsseite anzeigen, auf der Image-Versionen und Update-Einstellungen bearbeitet werden.
 procedure TMainformFrm.PaperlessUpdateBtnClick(Sender: TObject);
 begin
   TabControl1.TabIndex := 4;
@@ -2178,12 +2376,14 @@ begin
   SettingsSavedLbl.Visible:=False;
 end;
 // Enable scheduling only after compose file and backup target are known.
+// Zeitplanung erst aktivieren, wenn Compose-Datei und Backup-Ziel bekannt sind.
 procedure TMainformFrm.CheckScheduleAllowed;
 var
   Ini: TIniFile;
   ComposePathFromIni, BackupTargetFromIni: string;
 begin
   // Read required paths from the INI file.
+  // Benötigte Pfade aus der INI-Datei lesen.
   Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + 'Einstellungen.ini');
   try
     ComposePathFromIni := Ini.ReadString('Pfade', 'DockerComposePfad', '').Trim;
@@ -2193,9 +2393,11 @@ begin
   end;
 
   // Scheduling is allowed only when compose file and backup target exist.
+  // Zeitplanung ist nur erlaubt, wenn Compose-Datei und Backup-Ziel existieren.
   if FileExists(ComposePathFromIni) and DirectoryExists(BackupTargetFromIni) then
   begin
     // Enable scheduling controls.
+    // Zeitplan-Steuerelemente aktivieren.
     BackupPlanPan.Enabled := True;
     RetentionPan.Enabled := True;
     CreateBackupPlanBtn.Enabled := True;
@@ -2207,6 +2409,7 @@ begin
   else
   begin
     // Disable scheduling controls.
+    // Zeitplan-Steuerelemente deaktivieren.
     BackupPlanPan.Enabled := False;
     RetentionPan.Enabled := False;
     CreateBackupPlanBtn.Enabled := False;
@@ -2219,6 +2422,7 @@ end;
 
 
 // Detect container and volume names and write them to a small helper text file.
+// Container- und Volume-Namen erkennen und in eine kleine Hilfsdatei schreiben.
 procedure TMainformFrm.WriteComposeContainerAndVolumeInfo(const ComposePath: string);
 var
   SL, ContainerLines, VolumeLines: TStringList;
@@ -2268,6 +2472,7 @@ begin
 end;
 
 // Run a shell command hidden and return its text output.
+// Einen Shell-Befehl versteckt ausführen und seine Textausgabe zurückgeben.
 function TMainformFrm.ExecuteShellCommand(const Command, Params: string): string;
 var
   SA: TSecurityAttributes;
@@ -2318,6 +2523,7 @@ begin
 end;
 
 // Read the file version from a Windows executable or DLL.
+// Die Dateiversion aus einer Windows-EXE oder DLL lesen.
 function TMainformFrm.GetFileVersion(const FilePath: string): string;
 var
   InfoSize, Handle: DWORD;
@@ -2348,6 +2554,7 @@ begin
 end;
 
 // Read container and volume names from ContainerUndVolumesInfo.txt.
+// Container- und Volume-Namen aus ContainerUndVolumesInfo.txt lesen.
 procedure TMainformFrm.ReadContainerNamesFromFile;
 var
   FilePath: string;
@@ -2414,6 +2621,7 @@ end;
 
 // --------------------------------------------------------------
 // Help links
+// Hilfelinks
 // --------------------------------------------------------------
 procedure TMainformFrm.ImprintLblClick(Sender: TObject);
 begin
@@ -2455,6 +2663,7 @@ begin
 end;
 
 // Return the version of the running executable as a string.
+// Die Version der laufenden EXE als Zeichenkette zurückgeben.
 function TMainformFrm.GetExeVersion: string;
 var
   Size, Handle: DWORD;
@@ -2481,6 +2690,7 @@ begin
 end;
 
 // Convert dotted version (x.x.x.x) into a fixed-width sortable string.
+// Eine gepunktete Version (x.x.x.x) in eine sortierbare Zeichenkette fester Breite umwandeln.
 function TMainformFrm.VersionToInt(const V: string): string;
 var
   P: TArray<string>;

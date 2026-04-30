@@ -1,11 +1,18 @@
 // --------------------------------------------------------------
 // Original author: Ralf-Peter Kleinert - 2025
+// Ursprünglicher Autor: Ralf-Peter Kleinert - 2025
 // Alias: #ComputerRalle / DIGITAL-easy
+// Künstlername: #ComputerRalle / DIGITAL-easy
 // Project: Paperless Backup Program / Paperless Backup Programm
+// Projekt: Paperless Backup Program / Paperless Backup Programm
 // Website: https://ralf-peter-kleinert.de
+// Webseite: https://ralf-peter-kleinert.de
 // YouTube: https://www.youtube.com/@ralf-peter-kleinert
+// YouTube-Kanal: https://www.youtube.com/@ralf-peter-kleinert
 // Copyright (c) 2025 Ralf-Peter Kleinert
+// Urheberrecht (c) 2025 Ralf-Peter Kleinert
 // MIT License - see LICENSE file in the repository
+// MIT-Lizenz - siehe LICENSE-Datei im Repository
 // --------------------------------------------------------------
 
 unit ScriptGenerator;
@@ -14,6 +21,7 @@ interface
 
 type
   // Docker volume names used by the backup and restore scripts.
+  // Docker-Volume-Namen, die von den Backup- und Wiederherstellungsskripten verwendet werden.
   TDockerVolumeNames = record
     Data: string;
     DbData: string;
