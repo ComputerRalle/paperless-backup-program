@@ -6,6 +6,8 @@ Alle wichtigen Aenderungen an diesem Projekt werden hier dokumentiert.
 
 ## Unreleased / Noch nicht veroeffentlicht
 
+- Reapplied settings automatically after restore so the database collation maintenance runs.
+- Einstellungen nach der Wiederherstellung automatisch neu angewendet, damit die Datenbank-Collation-Wartung laeuft.
 - Opened the restore folder picker in the last saved backup target folder.
 - Ordnerauswahl fuer die Wiederherstellung im zuletzt gespeicherten Backup-Zielordner geoeffnet.
 - Used the legacy Paperless secret key for restores from older backups without `paperless_secret_key.txt`.

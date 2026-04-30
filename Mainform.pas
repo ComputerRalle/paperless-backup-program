@@ -248,9 +248,7 @@ var
 
 
 implementation
-
 {$R *.dfm}
-
 // Read PAPERLESS_SECRET_KEY from a backup metadata file.
 // PAPERLESS_SECRET_KEY aus einer Backup-Metadatendatei lesen.
 function ReadPaperlessSecretKeyFromBackupFile(const SecretKeyFilePath: string): string;
@@ -261,7 +259,6 @@ var
 begin
   Result := '';
   if not FileExists(SecretKeyFilePath) then Exit;
-
   Lines := TStringList.Create;
   try
     Lines.LoadFromFile(SecretKeyFilePath, TEncoding.UTF8);
@@ -280,7 +277,6 @@ begin
     Lines.Free;
   end;
 end;
-
 // Apply the restore key from the backup file or use the legacy key for older backups.
 // Den Wiederherstellungs-Key aus der Backup-Datei anwenden oder bei alten Backups den Legacy-Key nutzen.
 function ApplyPaperlessSecretKeyForRestore(const BackupFolder: string): Boolean;
@@ -305,7 +301,6 @@ begin
       Exit;
     end;
   end;
-
   SettingsIniPath := IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName;
   Ini := TIniFile.Create(SettingsIniPath);
   try
@@ -323,10 +318,8 @@ begin
   finally
     Ini.Free;
   end;
-
   LogInfo('Paperless secret key prepared for restore.');
 end;
-
 // Load update.ini from the web server and show whether a program update is available.
 // update.ini vom Webserver laden und anzeigen, ob ein Programmupdate verfügbar ist.
 procedure TMainformFrm.LoadUpdateIniFile();
@@ -337,10 +330,8 @@ var
   VersionInIni: String;
   test1, test2 : String;
 begin
-
   ProgramVersion := GetExeVersion;
   LogInfo('Checking program update. Current version: ' + ProgramVersion);
-
   if not FileExists(IncludeTrailingPathDelimiter(AppDataFolder) + UpdateIniFileName) then
   VersionInIni := ProgramVersion;
 
@@ -655,7 +646,6 @@ begin
   if not DirectoryExists(AppDataFolder) then ForceDirectories(AppDataFolder);
   InitLogger(AppDataFolder);
   LogInfo('Application started.');
-
   // Initialize runtime state.
   // Den Laufzeitzustand initialisieren.
   IsAutostart := False;
@@ -1751,10 +1741,13 @@ begin
   // Section 3: Ask whether Paperless should be restarted.
   // Abschnitt 3: Fragen, ob Paperless neu gestartet werden soll.
   // --------------------------------------------------------------
-  if MessageDlg(
-    'Paperless muss neu gestartet werden, um die Einstellungen zu übernehmen. ' +
-    'Möchten Sie Paperless neu starten?',
-    mtConfirmation, [mbYes, mbNo], 0) = mrYes then
+  // Run automatically when called after a restore; ask only for direct button clicks.
+  // Nach einer Wiederherstellung automatisch ausführen; nur bei direktem Button-Klick nachfragen.
+  if (Sender = nil) or
+     (MessageDlg(
+       'Paperless muss neu gestartet werden, um die Einstellungen zu übernehmen. ' +
+       'Möchten Sie Paperless neu starten?',
+       mtConfirmation, [mbYes, mbNo], 0) = mrYes) then
   begin
     IsUpdate := True;
     Application.MessageBox(
@@ -2108,7 +2101,6 @@ begin
     ShowMessage('Bitte zuerst den Paperless-Ordner auswählen.');
     Exit;
   end;
-
   // Start the restore folder picker in the last known backup target folder.
   // Die Ordnerauswahl für die Wiederherstellung im zuletzt bekannten Backup-Zielordner starten.
   RestoreDefaultFolder := GetEnvironmentVariable('USERPROFILE');
@@ -2120,7 +2112,6 @@ begin
   finally
     Ini.Free;
   end;
-
   FolderDialog := TFileOpenDialog.Create(nil);
   try
     FolderDialog.Options := [fdoPickFolders];
@@ -2289,9 +2280,10 @@ begin
                   'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
                 end else
                 begin
-                  Application.MessageBox('Wiederherstellung abgeschlossen. Sie können das Programm jetzt schließen.' + #13#10 +
-                  'Bitte geben Sie Paperless Zeit zum starten.',
+                  Application.MessageBox('Wiederherstellung abgeschlossen.' + #13#10 +
+                  'Die Einstellungen werden jetzt neu angewendet, damit die Datenbank-Collation geprüft wird.',
                   'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
+                  SaveSettingsBtnClick(nil);
                 end;
               end;
             end;

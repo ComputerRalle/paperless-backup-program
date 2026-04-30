@@ -1,4 +1,4 @@
-﻿// --------------------------------------------------------------
+// --------------------------------------------------------------
 // Original author: Ralf-Peter Kleinert - 2025
 // Ursprünglicher Autor: Ralf-Peter Kleinert - 2025
 // Alias: #ComputerRalle / DIGITAL-easy
@@ -89,6 +89,7 @@ implementation
 
 uses
   Mainform, DockerComposeGenerator, AppConfig, AppLogger;
+
 // Generate a per-installation Paperless secret key.
 // Einen Paperless Secret Key pro Installation erzeugen.
 function GeneratePaperlessSecretKey: string;
@@ -104,6 +105,7 @@ begin
   end;
   Result := Copy(Result, 1, 64);
 end;
+
 // Read an existing Paperless secret key from docker-compose.yml.
 // Einen vorhandenen Paperless Secret Key aus docker-compose.yml lesen.
 function ReadPaperlessSecretKeyFromCompose(const ComposePath: string): string;
@@ -116,6 +118,7 @@ var
 begin
   Result := '';
   if not FileExists(ComposePath) then Exit;
+
   Lines := TStringList.Create;
   try
     Lines.LoadFromFile(ComposePath, TEncoding.UTF8);
@@ -134,6 +137,7 @@ begin
     Lines.Free;
   end;
 end;
+
 // Reuse the saved key, import an existing compose key, migrate a legacy key, or create a new key.
 // Gespeicherten Key verwenden, vorhandenen Compose-Key importieren, Legacy-Key migrieren oder neuen Key erzeugen.
 function GetOrCreatePaperlessSecretKey(const Ini: TIniFile; const ComposePath: string): string;
@@ -142,11 +146,13 @@ var
 begin
   StoredKey := Ini.ReadString(IniSectionSecurity, IniKeyPaperlessSecretKey, '').Trim;
   LegacyStoredKey := Ini.ReadString(IniSectionSecurity, IniKeyLegacyPaperlessSecretKey, '').Trim;
+
   if (StoredKey <> '') and (StoredKey <> LegacyPaperlessSecretKey) then
   begin
     Result := StoredKey;
     Exit;
   end;
+
   ComposeKey := ReadPaperlessSecretKeyFromCompose(ComposePath);
   if ComposeKey <> '' then
   begin
@@ -165,12 +171,14 @@ begin
     Ini.UpdateFile;
     Exit;
   end;
+
   if LegacyStoredKey <> '' then
   begin
     Result := LegacyStoredKey;
     LogWarning('Legacy Paperless secret key reused from Einstellungen.ini.');
     Exit;
   end;
+
   if StoredKey = LegacyPaperlessSecretKey then
   begin
     Result := StoredKey;
@@ -180,11 +188,13 @@ begin
     LogWarning('Legacy Paperless secret key migrated to separate INI key.');
     Exit;
   end;
+
   Result := GeneratePaperlessSecretKey;
   Ini.WriteString(IniSectionSecurity, IniKeyPaperlessSecretKey, Result);
   Ini.UpdateFile;
   LogInfo('New Paperless secret key generated and saved.');
 end;
+
 // Write the active Paperless secret key into the backup folder.
 // Den aktiven Paperless Secret Key in den Backup-Ordner schreiben.
 procedure WritePaperlessSecretKeyBackup(const TargetPath: string; const Ini: TIniFile);
@@ -193,17 +203,22 @@ var
   Txt: TStringList;
 begin
   SecretKey := Ini.ReadString(IniSectionSecurity, IniKeyPaperlessSecretKey, '').Trim;
+
   if SecretKey = LegacyPaperlessSecretKey then
     SecretKey := '';
+
   if SecretKey = '' then
   begin
     ComposePath := IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + DockerComposeFileName;
     SecretKey := ReadPaperlessSecretKeyFromCompose(ComposePath);
   end;
+
   if SecretKey = '' then
     SecretKey := Ini.ReadString(IniSectionSecurity, IniKeyLegacyPaperlessSecretKey, '').Trim;
+
   if SecretKey = '' then
     SecretKey := Ini.ReadString(IniSectionSecurity, IniKeyPaperlessSecretKey, '').Trim;
+
   Txt := TStringList.Create;
   try
     Txt.Add('PAPERLESS_SECRET_KEY=' + SecretKey);
@@ -213,6 +228,7 @@ begin
     Txt.Free;
   end;
 end;
+
 // Close the whole program when the notice form was opened as the first form.
 // Das gesamte Programm schließen, wenn das Hinweisfenster als erstes Fenster geöffnet wurde.
 procedure TSetupFrm.FormClose(Sender: TObject; var Action: TCloseAction);
@@ -582,6 +598,7 @@ var
   Versions: TDockerImageVersions;
 begin
   ComposePath := IncludeTrailingPathDelimiter(AppDataFolder) + DockerComposeFileName;
+
   // Read image versions from the INI file and apply defaults when empty.
   // Image-Versionen aus der INI-Datei lesen und bei leeren Werten Standardwerte verwenden.
   Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
@@ -622,9 +639,11 @@ begin
     alpine_version := MainformFrm.alpine_version_edit.Text;
     busybox_version := MainformFrm.busybox_version_edit.Text;
     PaperlessSecretKey := GetOrCreatePaperlessSecretKey(Ini, ComposePath);
+
   finally
     Ini.Free;
   end;
+
   Versions.Paperless := paperless_ngx_version;
   Versions.Postgres := postgresql_version;
   Versions.Redis := redis_version;
@@ -894,6 +913,7 @@ begin
     // Write the version file into the backup subfolder.
     // Die Versionsdatei in den Backup-Unterordner schreiben.
     Txt.SaveToFile(IncludeTrailingPathDelimiter(FinalPath) + ImageVersionsFileName, TEncoding.UTF8);
+
     WritePaperlessSecretKeyBackup(FinalPath, Ini);
   finally
     Ini.Free;
