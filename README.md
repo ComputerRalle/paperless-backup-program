@@ -81,6 +81,8 @@ Die Anwendung speichert Laufzeiteinstellungen im Benutzerprofil:
 - `AppConfig.pas` - zentrale Dateinamen, URLs, INI-Schluessel und Docker-Standardwerte.
 - `AppLogger.pas` - application logging for basic diagnostics.
 - `AppLogger.pas` - Anwendungslogging fuer einfache Diagnose.
+- `AppDialogs.pas` - centered application dialogs and message boxes.
+- `AppDialogs.pas` - zentrierte Anwendungsdialoge und Meldungsfenster.
 - `ScriptGenerator.pas` - generation of backup, restore, restart, and scheduler scripts.
 - `ScriptGenerator.pas` - Erzeugung von Backup-, Restore-, Neustart- und Zeitplan-Skripten.
 - `DockerComposeGenerator.pas` - generation of the Paperless Docker Compose file.

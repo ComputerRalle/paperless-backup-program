@@ -125,6 +125,7 @@
         </DCCReference>
         <DCCReference Include="AppConfig.pas"/>
         <DCCReference Include="AppLogger.pas"/>
+        <DCCReference Include="AppDialogs.pas"/>
         <DCCReference Include="ScriptGenerator.pas"/>
         <DCCReference Include="DockerComposeGenerator.pas"/>
         <DCCReference Include="SetupForm.pas">

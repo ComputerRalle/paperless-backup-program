@@ -23,7 +23,7 @@ uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, ShellAPI, Vcl.ComCtrls, Vcl.ExtCtrls, Vcl.Buttons,
   System.IOUtils, Vcl.Samples.Spin, System.IniFiles, DateUtils, SetupForm, System.Generics.Collections, System.Generics.Defaults, Vcl.Menus,
-  System.Net.URLClient, System.Net.HttpClient, System.Net.HttpClientComponent, ScriptGenerator, AppConfig, AppLogger;
+  System.Net.URLClient, System.Net.HttpClient, System.Net.HttpClientComponent, ScriptGenerator, AppConfig, AppLogger, AppDialogs;
 
 type
   TMainformFrm = class(TForm)
@@ -509,7 +509,7 @@ begin
   if LastBackupFolder <> '' then
   begin
     if IsAutostart or
-       (MessageDlg('Es wurde folgender voreingestellter Pfad gefunden:' + sLineBreak + LastBackupFolder + sLineBreak + sLineBreak +
+       (CenteredMessageDlg('Es wurde folgender voreingestellter Pfad gefunden:' + sLineBreak + LastBackupFolder + sLineBreak + sLineBreak +
                    'Soll das Backup hier gespeichert werden?', mtConfirmation, [mbYes, mbNo], 0) = mrYes) then
     begin
       BackupPath := IncludeTrailingPathDelimiter(LastBackupFolder) + FormatDateTime('yyyy-mm-dd_hh-mm-ss', Now);
@@ -521,7 +521,7 @@ begin
         FolderDialog.Options := [fdoPickFolders];
         FolderDialog.Title := 'Wählen Sie einen Backup-Ziel-Ordner aus.';
         FolderDialog.DefaultFolder := DefaultFolder;
-        if FolderDialog.Execute then
+        if FolderDialog.Execute(Handle) then
         begin
           BackupPath := IncludeTrailingPathDelimiter(FolderDialog.FileName) + FormatDateTime('yyyy-mm-dd_hh-mm-ss', Now);
 
@@ -538,7 +538,7 @@ begin
         end
         else
         begin
-          ShowMessage('Es wurde kein Ordner gewählt. Backupvorgang abgebrochen.');
+          CenteredShowMessage('Es wurde kein Ordner gewählt. Backupvorgang abgebrochen.');
           Exit;
         end;
       finally
@@ -553,7 +553,7 @@ begin
       FolderDialog.Options := [fdoPickFolders];
       FolderDialog.Title := 'Wählen Sie einen Backup-Ziel-Ordner aus.';
       FolderDialog.DefaultFolder := DefaultFolder;
-      if FolderDialog.Execute then
+      if FolderDialog.Execute(Handle) then
       begin
         BackupPath := IncludeTrailingPathDelimiter(FolderDialog.FileName) + FormatDateTime('yyyy-mm-dd_hh-mm-ss', Now);
         if not SameText(FolderDialog.FileName, DefaultFolder) then
@@ -568,7 +568,7 @@ begin
       else
       begin
         BackupPath := IncludeTrailingPathDelimiter(DefaultFolder) + FormatDateTime('yyyy-mm-dd_hh-mm-ss', Now);
-        ShowMessage('Es wurde kein Ordner gewählt. Der Standardordner wird verwendet: ' + sLineBreak + BackupPath);
+        CenteredShowMessage('Es wurde kein Ordner gewählt. Der Standardordner wird verwendet: ' + sLineBreak + BackupPath);
       end;
     finally
       FolderDialog.Free;
@@ -608,7 +608,7 @@ var
 begin
   if ComposePath.Trim = '' then
   begin
-    ShowMessage('Fehler: Es wurde kein gültiger Compose-Pfad gewählt.');
+    CenteredShowMessage('Fehler: Es wurde kein gültiger Compose-Pfad gewählt.');
     Exit;
   end;
 
@@ -921,7 +921,7 @@ begin
 
     if not FileExists(NewComposePath) then
     begin
-      Application.MessageBox(
+      CenteredMessageBox(
         'Bitte beachten: Es wird nun eine neue, für das Programm optimierte docker-compose.yml angelegt.' + #13#10 +
         'Ein manuelles Wählen der Datei wird dadurch unnötig und vereinfacht die Nutzung des Programmes.' + #13#10 + #13#10 +
         'Im nächsten Schritt fragt die Software, ob Paperless installiert werden soll.' + #13#10 + #13#10 +
@@ -1403,7 +1403,7 @@ begin
   finally
     Ini.Free;
   end;
-  ShowMessage('Der geplante Backup-Zeitplan wurde entfernt.');
+  CenteredShowMessage('Der geplante Backup-Zeitplan wurde entfernt.');
 end;
 
 // Load saved schedule settings into the form controls.
@@ -1489,7 +1489,7 @@ begin
   if (ComposePathFromIni = '') or
      not FileExists(ComposePathFromIni) then
   begin
-    ShowMessage('Fehlender Docker-Compose-Pfad.' + sLineBreak +
+    CenteredShowMessage('Fehlender Docker-Compose-Pfad.' + sLineBreak +
                 'Bitte führen Sie zuerst ein reguläres Backup durch,' + sLineBreak +
                 'damit der Speicherort festgelegt werden kann.');
     Exit;
@@ -1510,7 +1510,7 @@ begin
   if SundayCB.Checked then Weekdays := Weekdays + 'SUN,';
   if Weekdays = '' then
   begin
-    ShowMessage('Bitte wählen Sie mindestens einen Wochentag aus.');
+    CenteredShowMessage('Bitte wählen Sie mindestens einen Wochentag aus.');
     Exit;
   end;
   Delete(Weekdays, Length(Weekdays), 1);
@@ -1526,7 +1526,7 @@ begin
 
     if ComposePath = '' then
     begin
-      ShowMessage('Fehler: Kein Docker-Compose-Pfad in der INI gespeichert.');
+      CenteredShowMessage('Fehler: Kein Docker-Compose-Pfad in der INI gespeichert.');
       Exit;
     end;
 
@@ -1537,7 +1537,7 @@ begin
 
     TargetCmdPath := IncludeTrailingPathDelimiter(ExtractFilePath(ComposePath)) + 'paperless-backup-geplant.cmd';
   except
-    ShowMessage('Fehler beim Lesen des Compose-Pfads.');
+    CenteredShowMessage('Fehler beim Lesen des Compose-Pfads.');
     Exit;
   end;
 
@@ -1545,7 +1545,7 @@ begin
   TargetCmdPath := IncludeTrailingPathDelimiter(ExtractFilePath(ComposePath)) + 'paperless-backup-geplant.cmd';
   if not FileExists(TargetCmdPath) then
   begin
-    ShowMessage('Das geplante Backup-Skript wurde nicht gefunden:' + sLineBreak + TargetCmdPath + sLineBreak + 'Bitte erzeugen Sie es zuerst.');
+    CenteredShowMessage('Das geplante Backup-Skript wurde nicht gefunden:' + sLineBreak + TargetCmdPath + sLineBreak + 'Bitte erzeugen Sie es zuerst.');
     Exit;
   end;
   // Write the scheduler setup script.
@@ -1555,7 +1555,7 @@ begin
   // Die geplante Aufgabe startet dieses Programm mit dem Parameter /geplant.
   CreateBackupScheduleCmdScript(ScriptPath, ProgramPath, Weekdays, Hour, Minute);
 
-  ShowMessage('Die geplante Backup-Aufgabe wurde als Aufgabe eingetragen und als Skript gespeichert:' + sLineBreak + ScriptPath);
+  CenteredShowMessage('Die geplante Backup-Aufgabe wurde als Aufgabe eingetragen und als Skript gespeichert:' + sLineBreak + ScriptPath);
   // Run the script silently in the background.
   // Das Skript still im Hintergrund ausführen.
   FillChar(ShellExecuteInfo, SizeOf(ShellExecuteInfo), 0);
@@ -1636,12 +1636,12 @@ begin
 
     except
       on E: Exception do
-        ShowMessage('Fehler beim Laden der Konfiguration: ' + E.Message);
+        CenteredShowMessage('Fehler beim Laden der Konfiguration: ' + E.Message);
     end;
   end
   else
   begin
-    ShowMessage('Die Datei "email-versand.env" existiert nicht.');
+    CenteredShowMessage('Die Datei "email-versand.env" existiert nicht.');
   end;
 end;
 
@@ -1655,7 +1655,7 @@ begin
 
   // Ask before changing the compose file and restarting Paperless.
   // Vor dem Ändern der Compose-Datei und dem Neustart von Paperless nachfragen.
-  Response := MessageDlg('E-Mail-Einstellungen stehen aus. Dazu muss Paperless gestoppt werden.' + sLineBreak +
+  Response := CenteredMessageDlg('E-Mail-Einstellungen stehen aus. Dazu muss Paperless gestoppt werden.' + sLineBreak +
                         'Es werden einige Einstellungen angepasst, eine neue docker-compose-Datei'  + sLineBreak +
                         'erzeugt und Paperless dann neu gestartet.' + sLineBreak + sLineBreak +
                         'Wenn dieser Vorgang abgeschlossen ist, können Sie ihre Mail-Server-Daten ins Formular eintragen.'  + sLineBreak +
@@ -1674,7 +1674,7 @@ begin
   begin
     // Stop when the user cancels.
     // Abbrechen, wenn der Benutzer abbricht.
-    ShowMessage('Der Vorgang wurde abgebrochen.');
+    CenteredShowMessage('Der Vorgang wurde abgebrochen.');
   end;
 end;
 
@@ -1744,13 +1744,13 @@ begin
   // Run automatically when called after a restore; ask only for direct button clicks.
   // Nach einer Wiederherstellung automatisch ausführen; nur bei direktem Button-Klick nachfragen.
   if (Sender = nil) or
-     (MessageDlg(
+     (CenteredMessageDlg(
        'Paperless muss neu gestartet werden, um die Einstellungen zu übernehmen. ' +
        'Möchten Sie Paperless neu starten?',
        mtConfirmation, [mbYes, mbNo], 0) = mrYes) then
   begin
     IsUpdate := True;
-    Application.MessageBox(
+    CenteredMessageBox(
       'Paperless wird heruntergefahren und es wird nach Updates gesucht. ' + #13#10 +
       'Sollten Updates vorliegen, werden diese installiert.' + #13#10 +
       'Geben Sie Paperless nach dem Neustart Zeit.',
@@ -1777,7 +1777,7 @@ begin
   // Sicherstellen, dass der AppData-Ordner existiert.
   if not DirectoryExists(AppDataFolder) then
   begin
-    ShowMessage('Der angegebene AppData-Ordner existiert nicht.');
+    CenteredShowMessage('Der angegebene AppData-Ordner existiert nicht.');
     Exit;
   end;
 
@@ -1818,7 +1818,7 @@ begin
     EnvList.SaveToFile(EnvFilePath, TEncoding.ANSI);
   except
     on E: Exception do
-      ShowMessage('Fehler beim Speichern der Datei: ' + E.Message);
+      CenteredShowMessage('Fehler beim Speichern der Datei: ' + E.Message);
   end;
   // Clean up.
   // Aufräumen.
@@ -1840,7 +1840,7 @@ begin
   // Sicherstellen, dass der AppData-Ordner existiert.
   if not DirectoryExists(AppDataFolder) then
   begin
-    ShowMessage('Der angegebene AppData-Ordner existiert nicht.');
+    CenteredShowMessage('Der angegebene AppData-Ordner existiert nicht.');
     Exit;
   end;
 
@@ -1883,7 +1883,7 @@ begin
     if IsUpdate = False then
   except
     on E: Exception do
-      ShowMessage('Fehler beim Speichern der Datei: ' + E.Message);
+      CenteredShowMessage('Fehler beim Speichern der Datei: ' + E.Message);
   end;
 
   // Clean up.
@@ -1892,7 +1892,7 @@ begin
 
     // Restart after changing email settings.
     // Nach Änderung der E-Mail-Einstellungen neu starten.
-     Application.MessageBox('Paperless muss neu gestartet werden, um die Einstellungen zu übernehmen.', 'Information',
+     CenteredMessageBox('Paperless muss neu gestartet werden, um die Einstellungen zu übernehmen.', 'Information',
      MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
     SaveEmailSettingsBtn.Enabled:=False;
     CreateRestartScript(ExtractFilePath(ComposePath));
@@ -1913,7 +1913,7 @@ begin
   // Sicherstellen, dass der AppData-Ordner existiert.
   if not DirectoryExists(AppDataFolder) then
   begin
-    ShowMessage('Der angegebene AppData-Ordner existiert nicht.');
+    CenteredShowMessage('Der angegebene AppData-Ordner existiert nicht.');
     Exit;
   end;
 
@@ -1942,7 +1942,7 @@ begin
       // Speicherfehler anzeigen.
       except
         on E: Exception do
-          ShowMessage('Fehler beim Speichern der Datei: ' + E.Message);
+          CenteredShowMessage('Fehler beim Speichern der Datei: ' + E.Message);
     end;
     // Clean up.
     // Aufräumen.
@@ -1963,7 +1963,7 @@ begin
   // Abbrechen, wenn kein Compose-Pfad übergeben wurde.
   if ComposePath.Trim = '' then
   begin
-    ShowMessage('Fehler: Es wurde kein gültiger Compose-Pfad gewählt.');
+    CenteredShowMessage('Fehler: Es wurde kein gültiger Compose-Pfad gewählt.');
     Exit;
   end;
 
@@ -2052,7 +2052,7 @@ begin
   CmdPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'GeplanterBackupTaskSkript.cmd';
   if not FileExists(CmdPath) then
   begin
-    ShowMessage('Das geplante Backup-Skript wurde nicht gefunden: ' + CmdPath);
+    CenteredShowMessage('Das geplante Backup-Skript wurde nicht gefunden: ' + CmdPath);
     Exit;
   end;
   ZeroMemory(@SI, SizeOf(SI));
@@ -2066,7 +2066,7 @@ begin
     CloseHandle(PI.hProcess);
   end
   else
-    ShowMessage('Geplantes Backup-Skript konnte nicht gestartet werden.');
+    CenteredShowMessage('Geplantes Backup-Skript konnte nicht gestartet werden.');
 end;
 
 // Reserved click handler for the static text control.
@@ -2098,7 +2098,7 @@ begin
   IsPaperlessInstallation := False;
   if ComposePath = '' then
   begin
-    ShowMessage('Bitte zuerst den Paperless-Ordner auswählen.');
+    CenteredShowMessage('Bitte zuerst den Paperless-Ordner auswählen.');
     Exit;
   end;
   // Start the restore folder picker in the last known backup target folder.
@@ -2117,7 +2117,7 @@ begin
     FolderDialog.Options := [fdoPickFolders];
     FolderDialog.Title := 'Bitte den Ordner mit Ihrem Paperless-Backup auswählen.';
     FolderDialog.DefaultFolder := RestoreDefaultFolder;
-    if FolderDialog.Execute then
+    if FolderDialog.Execute(Handle) then
     begin
       BackupFolder := FolderDialog.FileName;
       if ApplyPaperlessSecretKeyForRestore(BackupFolder) then
@@ -2133,7 +2133,7 @@ begin
     end
     else
     begin
-      ShowMessage('Wiederherstellung abgebrochen – kein Backup-Ordner gewählt.');
+      CenteredShowMessage('Wiederherstellung abgebrochen – kein Backup-Ordner gewählt.');
     end;
   finally
     FolderDialog.Free;
@@ -2168,7 +2168,7 @@ begin
   // Abbrechen, wenn kein Compose-Pfad übergeben wurde.
   if ComposePath.Trim = '' then
   begin
-    ShowMessage('Fehler: Es wurde kein gültiger Compose-Pfad gewählt.');
+    CenteredShowMessage('Fehler: Es wurde kein gültiger Compose-Pfad gewählt.');
     Exit;
   end;
   CmdTargetPath := IncludeTrailingPathDelimiter(ExtractFilePath(ComposePath)) + 'paperless-restore.cmd';
@@ -2228,7 +2228,7 @@ begin
             if IsPaperlessInstallation = True then
             begin
               WriteStandardVersionAfterInstallation;
-              Application.MessageBox('Paperless wurde erfolgreich installiert und gestartet.' + #13#10 +
+              CenteredMessageBox('Paperless wurde erfolgreich installiert und gestartet.' + #13#10 +
                 'Sie können Paperless nun im Browser öffnen (http://localhost:8000). Geben Sie Paperless ein wenig Zeit zum starten.',
                 'Installation abgeschlossen', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
 
@@ -2261,7 +2261,7 @@ begin
             begin
               if not IsAutostart then
               begin
-                Application.MessageBox('Backup abgeschlossen. Sie können das Programm jetzt schließen.' + #13#10 +
+                CenteredMessageBox('Backup abgeschlossen. Sie können das Programm jetzt schließen.' + #13#10 +
                 'Bitte geben Sie Paperless Zeit zum starten.',
                 'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
               end;
@@ -2275,12 +2275,12 @@ begin
               begin
                 if IsUpdate = True then
                 begin
-                  Application.MessageBox('Update abgeschlossen. Sie können das Programm jetzt schließen.' + #13#10 +
+                  CenteredMessageBox('Update abgeschlossen. Sie können das Programm jetzt schließen.' + #13#10 +
                   'Bitte geben Sie Paperless Zeit zum starten.',
                   'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
                 end else
                 begin
-                  Application.MessageBox('Wiederherstellung abgeschlossen.' + #13#10 +
+                  CenteredMessageBox('Wiederherstellung abgeschlossen.' + #13#10 +
                   'Die Einstellungen werden jetzt neu angewendet, damit die Datenbank-Collation geprüft wird.',
                   'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
                   SaveSettingsBtnClick(nil);
@@ -2290,10 +2290,10 @@ begin
           end
           else
           begin
-            ShowMessage('Vorgang fehlgeschlagen. Fehlercode: ' + IntToStr(ExitCode));
+            CenteredShowMessage('Vorgang fehlgeschlagen. Fehlercode: ' + IntToStr(ExitCode));
           end;
         end else
-        ShowMessage('Fehler beim Starten des Skripts.');
+        CenteredShowMessage('Fehler beim Starten des Skripts.');
     end else
         begin
           // Bring the CMD window to the front.
@@ -2310,7 +2310,7 @@ begin
           if ExitCode = 0 then
           begin
             SaveBlankEmailSettings();
-            Application.MessageBox('Paperless wurde erfolgreich aktualisiert' + #13#10 +
+            CenteredMessageBox('Paperless wurde erfolgreich aktualisiert' + #13#10 +
             'Sie können Paperless nun im Browser öffnen (http://localhost:8000). Geben Sie Paperless ein wenig Zeit zum starten.',
             'Installation abgeschlossen', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
             IsUpdate := False;
@@ -2363,7 +2363,7 @@ begin
       // Exit-Code 0 bedeutet Erfolg.
       if ExitCode = 0 then
       begin
-        Application.MessageBox('Neustart abgeschlossen. Sie können das Programm jetzt schließen.' + #13#10 +
+        CenteredMessageBox('Neustart abgeschlossen. Sie können das Programm jetzt schließen.' + #13#10 +
           'Bitte geben Sie den Paperless Komponenten Zeit zum starten.',
           'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
       end
@@ -2371,12 +2371,12 @@ begin
       begin
         // Show a failure message when the process returns an error.
         // Eine Fehlermeldung anzeigen, wenn der Prozess einen Fehler zurückgibt.
-        ShowMessage('Der Vorgang ist fehlgeschlagen. Fehlercode: ' + IntToStr(ExitCode));
+        CenteredShowMessage('Der Vorgang ist fehlgeschlagen. Fehlercode: ' + IntToStr(ExitCode));
       end;
     end
     else
     begin
-      ShowMessage('Fehler beim Starten des Prozesses.');
+      CenteredShowMessage('Fehler beim Starten des Prozesses.');
     end;
     ActiveControl := nil; // Remove focus from the current control.
     // Den Fokus vom aktuellen Steuerelement entfernen.
@@ -2405,7 +2405,7 @@ begin
       // Exit-Code 0 bedeutet Erfolg.
       if ExitCode = 0 then
       begin
-        Application.MessageBox('Neustart und Updatesuche abgeschlossen. Sie können das Programm jetzt schließen.' + #13#10 +
+        CenteredMessageBox('Neustart und Updatesuche abgeschlossen. Sie können das Programm jetzt schließen.' + #13#10 +
           'Bitte geben Sie den Paperless Komponenten Zeit zum starten.' + #13#10 +
           'Lagen Updates vor, wurden diese installiert.',
           'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
@@ -2414,12 +2414,12 @@ begin
       begin
         // Show a failure message when the process returns an error.
         // Eine Fehlermeldung anzeigen, wenn der Prozess einen Fehler zurückgibt.
-        ShowMessage('Der Vorgang ist fehlgeschlagen. Fehlercode: ' + IntToStr(ExitCode));
+        CenteredShowMessage('Der Vorgang ist fehlgeschlagen. Fehlercode: ' + IntToStr(ExitCode));
       end;
     end
     else
     begin
-      ShowMessage('Fehler beim Starten des Prozesses.');
+      CenteredShowMessage('Fehler beim Starten des Prozesses.');
     end;
     ActiveControl := nil; // Remove focus from the current control.
     // Den Fokus vom aktuellen Steuerelement entfernen.
@@ -2434,7 +2434,7 @@ begin
   // Abbrechen, wenn kein Compose-Pfad übergeben wurde.
   if ComposePath.Trim = '' then
   begin
-    ShowMessage('Fehler: Es wurde kein gültiger Compose-Pfad gewählt.');
+    CenteredShowMessage('Fehler: Es wurde kein gültiger Compose-Pfad gewählt.');
     Exit;
   end;
   ComposeName := StringReplace(ExtractFileName(ExcludeTrailingPathDelimiter(ComposePath)), ' ', '-', [rfReplaceAll]);
@@ -2534,7 +2534,7 @@ begin
 
   if not FileExists(ComposeYmlPath) then
   begin
-    ShowMessage('Fehler: docker-compose.yml wurde im gewählten Ordner nicht gefunden.');
+    CenteredShowMessage('Fehler: docker-compose.yml wurde im gewählten Ordner nicht gefunden.');
     Exit;
   end;
 

@@ -7,6 +7,7 @@ uses
   Vcl.Styles,
   AppConfig in 'AppConfig.pas',
   AppLogger in 'AppLogger.pas',
+  AppDialogs in 'AppDialogs.pas',
   ScriptGenerator in 'ScriptGenerator.pas',
   DockerComposeGenerator in 'DockerComposeGenerator.pas',
   SetupForm in 'SetupForm.pas' {SetupFrm};

@@ -6,6 +6,8 @@ Alle wichtigen Aenderungen an diesem Projekt werden hier dokumentiert.
 
 ## Unreleased / Noch nicht veroeffentlicht
 
+- Centered application messages, folder picker dialogs, and setup windows over the main form.
+- Anwendungsmitteilungen, Ordnerauswahldialoge und Einrichtungsfenster ueber dem Hauptformular zentriert.
 - Reapplied settings automatically after restore so the database collation maintenance runs.
 - Einstellungen nach der Wiederherstellung automatisch neu angewendet, damit die Datenbank-Collation-Wartung laeuft.
 - Opened the restore folder picker in the last saved backup target folder.

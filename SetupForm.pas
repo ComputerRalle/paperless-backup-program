@@ -88,7 +88,7 @@ implementation
 {$R *.dfm}
 
 uses
-  Mainform, DockerComposeGenerator, AppConfig, AppLogger;
+  Mainform, DockerComposeGenerator, AppConfig, AppLogger, AppDialogs;
 
 // Generate a per-installation Paperless secret key.
 // Einen Paperless Secret Key pro Installation erzeugen.
@@ -358,7 +358,7 @@ begin
     try
       Ini.WriteString('Einrichtung', 'Hinweis verstanden', 'Ja');
     except
-      ShowMessage('Einstellungen.ini kann nicht geschrieben werden. Rechte?');
+      CenteredShowMessage('Einstellungen.ini kann nicht geschrieben werden. Rechte?');
     end;
    finally
     Ini.Free;
@@ -379,7 +379,7 @@ begin
   // Schritt 1: Prüfen, ob Docker im System-PATH verfügbar ist.
   if not IsDockerInPath then
   begin
-    MessageBox(0,
+    CenteredMessageBox(
     'Docker wurde nicht gefunden.' + #13#10 +
     'Bitte installieren Sie Docker Desktop ganz normal,' + #13#10 +
     'ohne „Als Administrator ausführen“ zu verwenden.' + #13#10 +
@@ -399,7 +399,7 @@ begin
   end;
   // Step 2: Ask for confirmation before installation.
   // Schritt 2: Vor der Installation nach Bestätigung fragen.
-  if MessageDlg('Möchten Sie Paperless jetzt installieren?', mtConfirmation, [mbYes, mbNo], 0) = mrNo then
+  if CenteredMessageDlg('Möchten Sie Paperless jetzt installieren?', mtConfirmation, [mbYes, mbNo], 0) = mrNo then
     Exit;
 
   IsPaperlessInstallation := True;
@@ -414,7 +414,7 @@ begin
   // Schritt 3: Prüfen, ob Docker funktioniert.
   if not Self.RunCommand('docker', 'info', ExitCode) or (ExitCode <> 0) then
   begin
-    MessageBox(0,
+    CenteredMessageBox(
       'Docker Desktop scheint nicht installiert oder gestartet zu sein, der Befehl "docker" funktioniert nicht korrekt.' + #13#10 + #13#10 +
       'Stellen Sie sicher, dass Docker installiert und gestartet ist.' + #13#10 +
       'Installieren und starten sie Docker Desktop. Sie werden zusätzlich zur Downloadseite von Docker Desktop geleitet.',
@@ -444,7 +444,7 @@ begin
       // Den Installationsstatus speichern, bevor das Skript ausgeführt wird.
       Ini.WriteString('Einrichtung', 'Installation abgeschlossen', 'Ja');
      except
-       ShowMessage('Einstellungen.ini kann nicht geschrieben werden. Rechte?');
+       CenteredShowMessage('Einstellungen.ini kann nicht geschrieben werden. Rechte?');
      end;
   finally
      Ini.Free;
@@ -464,7 +464,7 @@ begin
   // Prüfen, ob Docker funktioniert.
   if not Self.RunCommand('docker', 'info', ExitCode) or (ExitCode <> 0) then
   begin
-    MessageBox(0,
+    CenteredMessageBox(
       'Docker Desktop scheint nicht installiert oder gestartet zu sein, der Befehl "docker" funktioniert nicht korrekt.' + #13#10 + #13#10 +
       'Stellen Sie sicher, dass Docker installiert und gestartet ist.' + #13#10 +
       'Installieren und starten sie Docker Desktop. Sie werden zusätzlich zur Downloadseite von Docker Desktop geleitet.',
@@ -738,7 +738,7 @@ var
 begin
   if not RunCommand('docker', 'compose -f "' + ComposePath + '" up -d', ExitCode) or (ExitCode <> 0) then
   begin
-    MessageBox(0,
+    CenteredMessageBox(
       'Fehler beim Start von Docker Compose.' + #13#10 +
       'Bitte prüfen Sie, ob Docker korrekt installiert und gestartet ist.',
       'Fehler',
@@ -746,7 +746,7 @@ begin
   end
   else
   begin
-    MessageBox(0,
+    CenteredMessageBox(
       'Paperless wurde gestartet.',
       'Erfolg',
       MB_OK or MB_ICONINFORMATION or MB_TOPMOST);

@@ -14,7 +14,7 @@ object SetupFrm: TSetupFrm
   Font.Height = -15
   Font.Name = 'Verdana'
   Font.Style = []
-  Position = poDesktopCenter
+  Position = poMainFormCenter
   OnClose = FormClose
   OnCreate = FormCreate
   OnShow = FormShow
