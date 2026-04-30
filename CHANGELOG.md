@@ -22,6 +22,8 @@ Alle wichtigen Aenderungen an diesem Projekt werden hier dokumentiert.
 - Alte Backup- und Wiederherstellungs-Bereitschaftstexte aus dem Hauptformular entfernt.
 - Set operation-specific final status texts and moved the status label and progress bar upward.
 - Vorgangsspezifische Abschlussmeldungen gesetzt und Statuslabel sowie Fortschrittsanzeige nach oben verschoben.
+- Ran monitored PowerShell scripts without showing a console window.
+- Ueberwachte PowerShell-Skripte ohne sichtbares Konsolenfenster ausgefuehrt.
 - Centered application messages, folder picker dialogs, and setup windows over the main form.
 - Anwendungsmitteilungen, Ordnerauswahldialoge und Einrichtungsfenster ueber dem Hauptformular zentriert.
 - Reapplied settings automatically after restore so the database collation maintenance runs.

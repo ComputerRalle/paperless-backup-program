@@ -2330,8 +2330,7 @@ begin
   FillChar(StartupInfo, SizeOf(TStartupInfo), 0);
   StartupInfo.cb := SizeOf(TStartupInfo);
   StartupInfo.dwFlags := STARTF_USESHOWWINDOW;
-  StartupInfo.wShowWindow := SW_SHOWNORMAL;
-
+  StartupInfo.wShowWindow := SW_HIDE;
   OutputLogPath := PrepareScriptOutputLog;
   Cmd := BuildPowerShellCommand(CmdTargetPath, OutputLogPath); // Script path.
   // Skriptpfad.
@@ -2344,7 +2343,7 @@ begin
   else
     RunningStatus := 'Wiederherstellung wird gestartet...';
   PrepareScriptProgress(RunningStatus);
-  if CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NEW_CONSOLE, nil, nil, StartupInfo, ProcessInfo) then
+  if CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NO_WINDOW, nil, nil, StartupInfo, ProcessInfo) then
   begin
     ShouldWait := True;
     UpdateScriptProgress(RunningStatus);
@@ -2353,10 +2352,6 @@ begin
     begin
         if ShouldWait then
         begin
-          // Bring the PowerShell window to the front.
-          // Das PowerShell-Fenster in den Vordergrund bringen.
-          ConsoleToFront(ProcessInfo.dwProcessId);
-
           // Wait for the process to finish.
           // Warten, bis der Prozess beendet ist.
           WaitForScriptWithProgress(ProcessInfo.hProcess, RunningStatus, OutputLogPath);
@@ -2452,9 +2447,6 @@ begin
         end;
     end else
         begin
-          // Bring the PowerShell window to the front.
-          // Das PowerShell-Fenster in den Vordergrund bringen.
-          ConsoleToFront(ProcessInfo.dwProcessId);
           // Wait for the process to finish.
           // Warten, bis der Prozess beendet ist.
           WaitForScriptWithProgress(ProcessInfo.hProcess, RunningStatus, OutputLogPath);
@@ -2505,7 +2497,7 @@ begin
   FillChar(StartupInfo, SizeOf(TStartupInfo), 0);
   StartupInfo.cb := SizeOf(TStartupInfo);
   StartupInfo.dwFlags := STARTF_USESHOWWINDOW;
-  StartupInfo.wShowWindow := SW_SHOWNORMAL;
+  StartupInfo.wShowWindow := SW_HIDE;
   OutputLogPath := PrepareScriptOutputLog;
   Cmd := BuildPowerShellCommand(CmdTargetPath, OutputLogPath); // Script path.
   // Skriptpfad.
@@ -2518,13 +2510,10 @@ begin
   begin
     // Start the process.
     // Den Prozess starten.
-    if CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NEW_CONSOLE, nil, nil, StartupInfo, ProcessInfo) then
+    if CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NO_WINDOW, nil, nil, StartupInfo, ProcessInfo) then
     begin
       UpdateScriptProgress(RunningStatus);
       Sleep(1000);
-      // Bring the PowerShell window to the front.
-      // Das PowerShell-Fenster in den Vordergrund bringen.
-      ConsoleToFront(ProcessInfo.dwProcessId);
       // Wait for the process to finish.
       // Warten, bis der Prozess beendet ist.
       WaitForScriptWithProgress(ProcessInfo.hProcess, RunningStatus, OutputLogPath);
@@ -2564,13 +2553,10 @@ begin
   begin
     // Start the process.
     // Den Prozess starten.
-    if CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NEW_CONSOLE, nil, nil, StartupInfo, ProcessInfo) then
+    if CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NO_WINDOW, nil, nil, StartupInfo, ProcessInfo) then
     begin
       UpdateScriptProgress(RunningStatus);
       Sleep(1000);
-      // Bring the PowerShell window to the front.
-      // Das PowerShell-Fenster in den Vordergrund bringen.
-      ConsoleToFront(ProcessInfo.dwProcessId);
       // Wait for the process to finish.
       // Warten, bis der Prozess beendet ist.
       WaitForScriptWithProgress(ProcessInfo.hProcess, RunningStatus, OutputLogPath);
