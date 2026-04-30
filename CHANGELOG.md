@@ -6,6 +6,8 @@ Alle wichtigen Aenderungen an diesem Projekt werden hier dokumentiert.
 
 ## Unreleased / Noch nicht veroeffentlicht
 
+- Opened the restore folder picker in the last saved backup target folder.
+- Ordnerauswahl fuer die Wiederherstellung im zuletzt gespeicherten Backup-Zielordner geoeffnet.
 - Imported the Paperless secret key during restore only when `paperless_secret_key.txt` exists in the selected backup.
 - Paperless Secret Key bei der Wiederherstellung nur importiert, wenn `paperless_secret_key.txt` im ausgewaehlten Backup vorhanden ist.
 - Separated new and legacy Paperless secret keys so fresh installations no longer receive the legacy key.

@@ -2091,6 +2091,8 @@ procedure TMainformFrm.RestorePaperlessBackupBtnClick(Sender: TObject);
 var
   BackupFolder: string;
   FolderDialog: TFileOpenDialog;
+  Ini: TIniFile;
+  RestoreDefaultFolder: string;
 begin
   WriteComposeContainerAndVolumeInfo(ExtractFilePath(ComposePath));
   StartPaperlessBackupBtn.Enabled := False;
@@ -2104,11 +2106,24 @@ begin
     ShowMessage('Bitte zuerst den Paperless-Ordner auswählen.');
     Exit;
   end;
+
+  // Start the restore folder picker in the last known backup target folder.
+  // Die Ordnerauswahl für die Wiederherstellung im zuletzt bekannten Backup-Zielordner starten.
+  RestoreDefaultFolder := GetEnvironmentVariable('USERPROFILE');
+  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
+  try
+    LastBackupFolder := Ini.ReadString('Pfade', 'BackupZiel', '').Trim;
+    if (LastBackupFolder <> '') and DirectoryExists(LastBackupFolder) then
+      RestoreDefaultFolder := LastBackupFolder;
+  finally
+    Ini.Free;
+  end;
+
   FolderDialog := TFileOpenDialog.Create(nil);
   try
     FolderDialog.Options := [fdoPickFolders];
     FolderDialog.Title := 'Bitte den Ordner mit Ihrem Paperless-Backup auswählen.';
-    FolderDialog.DefaultFolder := GetEnvironmentVariable('USERPROFILE');
+    FolderDialog.DefaultFolder := RestoreDefaultFolder;
     if FolderDialog.Execute then
     begin
       BackupFolder := FolderDialog.FileName;
