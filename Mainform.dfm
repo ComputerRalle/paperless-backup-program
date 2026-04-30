@@ -6,8 +6,8 @@ object MainformFrm: TMainformFrm
   VertScrollBar.Smooth = True
   VertScrollBar.Tracking = True
   Caption = '  #ComputerRalle Paperless Backup Programm'
-  ClientHeight = 612
-  ClientWidth = 848
+  ClientHeight = 611
+  ClientWidth = 844
   Color = clBtnFace
   Constraints.MaxHeight = 650
   Constraints.MaxWidth = 860
@@ -25,19 +25,17 @@ object MainformFrm: TMainformFrm
   TextHeight = 18
   object StatusBar1: TStatusBar
     Left = 0
-    Top = 593
-    Width = 848
+    Top = 592
+    Width = 844
     Height = 19
     Panels = <>
     SizeGrip = False
-    ExplicitTop = 592
-    ExplicitWidth = 844
   end
   object TabControl1: TTabControl
     Left = 0
     Top = 0
-    Width = 848
-    Height = 593
+    Width = 844
+    Height = 592
     Align = alClient
     TabOrder = 1
     Tabs.Strings = (
@@ -49,19 +47,15 @@ object MainformFrm: TMainformFrm
       'Hilfe')
     TabIndex = 0
     OnChange = TabControl1Change
-    ExplicitWidth = 844
-    ExplicitHeight = 592
     object BackupRestorePan: TPanel
       Left = 4
       Top = 29
-      Width = 840
-      Height = 560
+      Width = 836
+      Height = 559
       Align = alClient
       BevelOuter = bvNone
       ParentBackground = False
       TabOrder = 0
-      ExplicitWidth = 836
-      ExplicitHeight = 559
       object ProgramUpdateLbl: TLabel
         Left = 294
         Top = 502
@@ -142,7 +136,7 @@ object MainformFrm: TMainformFrm
         TabOrder = 1
         object BackupWiederherProgNeuStartLbl: TLabel
           Left = 31
-          Top = 48
+          Top = 38
           Width = 738
           Height = 18
           Caption = 
@@ -152,7 +146,7 @@ object MainformFrm: TMainformFrm
         end
         object ProgressBar1: TProgressBar
           Left = 30
-          Top = 79
+          Top = 69
           Width = 794
           Height = 17
           TabOrder = 0
@@ -60385,15 +60379,13 @@ object MainformFrm: TMainformFrm
     object BackupPlanPan: TPanel
       Left = 4
       Top = 29
-      Width = 840
-      Height = 560
+      Width = 836
+      Height = 559
       Align = alClient
       BevelOuter = bvNone
       ParentBackground = False
       TabOrder = 1
       ExplicitLeft = 5000
-      ExplicitWidth = 836
-      ExplicitHeight = 559
       object Panel9: TPanel
         Left = 2
         Top = 57
@@ -60656,15 +60648,13 @@ object MainformFrm: TMainformFrm
     object RetentionPan: TPanel
       Left = 4
       Top = 29
-      Width = 840
-      Height = 560
+      Width = 836
+      Height = 559
       Align = alClient
       BevelOuter = bvNone
       ParentBackground = False
       TabOrder = 2
       ExplicitLeft = 5000
-      ExplicitWidth = 836
-      ExplicitHeight = 559
       object Panel6: TPanel
         Left = 0
         Top = 0
@@ -60789,16 +60779,14 @@ object MainformFrm: TMainformFrm
     object EMailSettingsPan: TPanel
       Left = 4
       Top = 29
-      Width = 840
-      Height = 560
+      Width = 836
+      Height = 559
       Align = alClient
       BevelOuter = bvNone
       ParentBackground = False
       ParentColor = True
       TabOrder = 3
       ExplicitLeft = 5000
-      ExplicitWidth = 836
-      ExplicitHeight = 559
       object EMailHostLbl: TLabel
         Left = 31
         Top = 180
@@ -60981,16 +60969,14 @@ object MainformFrm: TMainformFrm
     object SettingsPan: TPanel
       Left = 4
       Top = 29
-      Width = 840
-      Height = 560
+      Width = 836
+      Height = 559
       Align = alClient
       BevelOuter = bvNone
       ParentBackground = False
       ParentColor = True
       TabOrder = 4
       ExplicitLeft = 5000
-      ExplicitWidth = 836
-      ExplicitHeight = 559
       object Label26: TLabel
         Left = 31
         Top = 75
@@ -61073,14 +61059,13 @@ object MainformFrm: TMainformFrm
       object Panel15: TPanel
         Left = 0
         Top = 0
-        Width = 840
+        Width = 836
         Height = 56
         Align = alTop
         BevelOuter = bvNone
         Color = 3767324
         ParentBackground = False
         TabOrder = 0
-        ExplicitWidth = 836
         object Label27: TLabel
           Left = 20
           Top = 19
@@ -61238,16 +61223,14 @@ object MainformFrm: TMainformFrm
     object HelpPan: TPanel
       Left = 4
       Top = 29
-      Width = 840
-      Height = 560
+      Width = 836
+      Height = 559
       Align = alClient
       BevelOuter = bvNone
       ParentBackground = False
       ParentColor = True
       TabOrder = 5
       ExplicitLeft = 5000
-      ExplicitWidth = 836
-      ExplicitHeight = 559
       object Label21: TLabel
         Left = 31
         Top = 75

@@ -20,6 +20,8 @@ Alle wichtigen Aenderungen an diesem Projekt werden hier dokumentiert.
 - Allgemeine PowerShell-Startmeldung durch vorgangsspezifische Statusmeldungen ersetzt und lange Labeltexte gekuerzt.
 - Removed the old backup and restore readiness texts from the main form.
 - Alte Backup- und Wiederherstellungs-Bereitschaftstexte aus dem Hauptformular entfernt.
+- Set operation-specific final status texts and moved the status label and progress bar upward.
+- Vorgangsspezifische Abschlussmeldungen gesetzt und Statuslabel sowie Fortschrittsanzeige nach oben verschoben.
 - Centered application messages, folder picker dialogs, and setup windows over the main form.
 - Anwendungsmitteilungen, Ordnerauswahldialoge und Einrichtungsfenster ueber dem Hauptformular zentriert.
 - Reapplied settings automatically after restore so the database collation maintenance runs.

@@ -419,14 +419,12 @@ begin
     PChar('-NoProfile -ExecutionPolicy Bypass -File "' + CmdTargetPath + '"'),
     nil, SW_SHOWNORMAL);
 end;
-
 // Quote a value for use inside a PowerShell command string.
 // Einen Wert fuer die Verwendung in einer PowerShell-Befehlszeile quoten.
 function TMainformFrm.PowerShellQuote(const Value: string): string;
 begin
   Result := '''' + StringReplace(Value, '''', '''''', [rfReplaceAll]) + '''';
 end;
-
 // Prepare the temporary file that mirrors the visible PowerShell output.
 // Die temporaere Datei vorbereiten, die die sichtbare PowerShell-Ausgabe spiegelt.
 function TMainformFrm.PrepareScriptOutputLog: string;
@@ -439,7 +437,6 @@ begin
       LogError('Could not prepare PowerShell status log: ' + E.Message);
   end;
 end;
-
 // Build a visible PowerShell command that also writes its output to a log file.
 // Eine sichtbare PowerShell-Befehlszeile bauen, die ihre Ausgabe zusaetzlich in eine Logdatei schreibt.
 function TMainformFrm.BuildPowerShellCommand(const ScriptPath, OutputLogPath: string): string;
@@ -451,7 +448,6 @@ begin
     PowerShellQuote(OutputLogPath) +
     ' -Value ([string]$_) -Encoding Unicode }; exit $LASTEXITCODE"';
 end;
-
 // Read the last non-empty line from the mirrored PowerShell output.
 // Die letzte nicht leere Zeile aus der gespiegelten PowerShell-Ausgabe lesen.
 function TMainformFrm.ReadLastScriptOutputLine(const OutputLogPath, FallbackText: string): string;
@@ -463,32 +459,31 @@ begin
   Result := FallbackText;
   if OutputLogPath.Trim = '' then Exit;
   if not FileExists(OutputLogPath) then Exit;
-
   Lines := TStringList.Create;
   try
-    Stream := TFileStream.Create(OutputLogPath, fmOpenRead or fmShareDenyNone);
     try
-      Lines.LoadFromStream(Stream, TEncoding.Unicode);
-    finally
-      Stream.Free;
-    end;
-
-    for I := Lines.Count - 1 downto 0 do
-    begin
-      if Lines[I].Trim <> '' then
-        Exit(Lines[I].Trim);
-    end;
-  except
-    on E: Exception do
-    begin
-      // The status file can be touched by PowerShell at the same moment. Keep the last known status.
-      // Die Statusdatei kann im gleichen Moment von PowerShell geschrieben werden. Den letzten bekannten Status behalten.
+      Stream := TFileStream.Create(OutputLogPath, fmOpenRead or fmShareDenyNone);
+      try
+        Lines.LoadFromStream(Stream, TEncoding.Unicode);
+      finally
+        Stream.Free;
+      end;
+      for I := Lines.Count - 1 downto 0 do
+      begin
+        if Lines[I].Trim <> '' then
+          Exit(Lines[I].Trim);
+      end;
+    except
+      on E: Exception do
+      begin
+        // The status file can be touched by PowerShell at the same moment. Keep the last known status.
+        // Die Statusdatei kann im gleichen Moment von PowerShell geschrieben werden. Den letzten bekannten Status behalten.
+      end;
     end;
   finally
     Lines.Free;
   end;
 end;
-
 // Shorten long script status texts for the label.
 // Lange Skriptstatus-Texte fuer das Label kuerzen.
 function TMainformFrm.ShortenScriptStatusText(const StatusText: string): string;
@@ -499,7 +494,6 @@ begin
   if Length(Result) > MaxStatusTextLength then
     Result := Copy(Result, 1, MaxStatusTextLength - 3).TrimRight + '...';
 end;
-
 // Prepare the in-application script status display.
 // Die Statusanzeige fuer laufende Skripte in der Anwendung vorbereiten.
 procedure TMainformFrm.PrepareScriptProgress(const StatusText: string);
@@ -514,7 +508,6 @@ begin
   ProgressBar1.Visible := True;
   Application.ProcessMessages;
 end;
-
 // Update the status label and move the progress bar while a script is running.
 // Das Statuslabel aktualisieren und die Fortschrittsanzeige waehrend eines Skripts bewegen.
 procedure TMainformFrm.UpdateScriptProgress(const StatusText: string);
@@ -527,7 +520,6 @@ begin
     ProgressBar1.Position := ProgressBar1.Position + 2;
   Application.ProcessMessages;
 end;
-
 // Finish the in-application script status display.
 // Die Statusanzeige fuer laufende Skripte abschliessen.
 procedure TMainformFrm.FinishScriptProgress(const StatusText: string; const Success: Boolean);
@@ -542,7 +534,6 @@ begin
     ProgressBar1.Position := ProgressBar1.Min;
   Application.ProcessMessages;
 end;
-
 // Wait for a visible PowerShell process while keeping the form status alive.
 // Auf einen sichtbaren PowerShell-Prozess warten und die Formularanzeige aktuell halten.
 procedure TMainformFrm.WaitForScriptWithProgress(const ProcessHandle: THandle; const StatusText, OutputLogPath: string);
@@ -564,7 +555,6 @@ begin
       UpdateScriptProgress(CurrentStatusText);
   end;
 end;
-
 // Open the support page in the default browser.
 // Die Unterstützungsseite im Standardbrowser öffnen.
 procedure TMainformFrm.BuyMeACoffeeBtnClick(Sender: TObject);
@@ -740,10 +730,8 @@ begin
 
   CreateBackupScript(ExtractFilePath(ComposePath));
   CreateBackupPlanScript(ExtractFilePath(ComposePath));
-
   StartPaperlessBackupBtn.Enabled := True;
   RestorePaperlessBackupBtn.Enabled := True;
-
   // Delete the old marker file if it still exists.
   // Die alte Markerdatei löschen, falls sie noch existiert.
   TextFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + ComposePathFileName;
@@ -2334,6 +2322,7 @@ var
   Cmd: string;
   RunningStatus: string;
   OutputLogPath: string;
+  SuccessStatus: string;
   ExitCode: DWORD;
   ShouldWait: Boolean;
 begin
@@ -2355,13 +2344,11 @@ begin
   else
     RunningStatus := 'Wiederherstellung wird gestartet...';
   PrepareScriptProgress(RunningStatus);
-
   if CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NEW_CONSOLE, nil, nil, StartupInfo, ProcessInfo) then
   begin
     ShouldWait := True;
     UpdateScriptProgress(RunningStatus);
     Sleep(1500);
-
     if IsUpdate = False then
     begin
         if ShouldWait then
@@ -2373,7 +2360,6 @@ begin
           // Wait for the process to finish.
           // Warten, bis der Prozess beendet ist.
           WaitForScriptWithProgress(ProcessInfo.hProcess, RunningStatus, OutputLogPath);
-
           // Check the exit code.
           // Den Exit-Code prüfen.
           GetExitCodeProcess(ProcessInfo.hProcess, ExitCode);
@@ -2382,7 +2368,15 @@ begin
           Sleep(1000);
           if ExitCode = 0 then
           begin
-            FinishScriptProgress('Vorgang abgeschlossen.', True);
+            if IsPaperlessInstallation = True then
+              SuccessStatus := 'Paperless-Installation abgeschlossen.'
+            else if IsBackup = True then
+              SuccessStatus := 'Backupvorgang abgeschlossen.'
+            else if IsUpdate = True then
+              SuccessStatus := 'Update abgeschlossen.'
+            else
+              SuccessStatus := 'Wiederherstellung abgeschlossen.';
+            FinishScriptProgress(SuccessStatus, True);
             if IsPaperlessInstallation = True then
             begin
               WriteStandardVersionAfterInstallation;
@@ -2471,7 +2465,7 @@ begin
           CloseHandle(ProcessInfo.hThread);
           if ExitCode = 0 then
           begin
-            FinishScriptProgress('Paperless-Update abgeschlossen.', True);
+            FinishScriptProgress('Update abgeschlossen.', True);
             SaveBlankEmailSettings();
             CenteredMessageBox('Paperless wurde erfolgreich aktualisiert' + #13#10 +
             'Sie können Paperless nun im Browser öffnen (http://localhost:8000). Geben Sie Paperless ein wenig Zeit zum starten.',
@@ -2520,7 +2514,6 @@ begin
   else
     RunningStatus := 'Neustart wird gestartet...';
   PrepareScriptProgress(RunningStatus);
-
   if PaperlessUpdate = False then
   begin
     // Start the process.
@@ -2591,7 +2584,7 @@ begin
       // Exit-Code 0 bedeutet Erfolg.
       if ExitCode = 0 then
       begin
-        FinishScriptProgress('Neustart und Updatesuche abgeschlossen.', True);
+        FinishScriptProgress('Update abgeschlossen.', True);
         CenteredMessageBox('Neustart und Updatesuche abgeschlossen. Sie können das Programm jetzt schließen.' + #13#10 +
           'Bitte geben Sie den Paperless Komponenten Zeit zum starten.' + #13#10 +
           'Lagen Updates vor, wurden diese installiert.',
