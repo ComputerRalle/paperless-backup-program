@@ -124,6 +124,7 @@
             <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="AppConfig.pas"/>
+        <DCCReference Include="AppLogger.pas"/>
         <DCCReference Include="ScriptGenerator.pas"/>
         <DCCReference Include="DockerComposeGenerator.pas"/>
         <DCCReference Include="HinweisForm.pas">

@@ -35,6 +35,7 @@ type
 function CreateDockerComposeContent(
   const Versions: TDockerImageVersions;
   const PaperlessInput: string;
+  const PaperlessSecretKey: string;
   TrashRetentionDays: Integer): string;
 
 procedure SaveDockerComposeFile(const TargetPath, Content: string);
@@ -47,6 +48,7 @@ uses
 function CreateDockerComposeContent(
   const Versions: TDockerImageVersions;
   const PaperlessInput: string;
+  const PaperlessSecretKey: string;
   TrashRetentionDays: Integer): string;
 begin
   Result :=
@@ -113,7 +115,7 @@ begin
     '      PAPERLESS_DBUSER: paperless' + sLineBreak +
     '      PAPERLESS_DBPASS: paperless' + sLineBreak +
     '      PAPERLESS_TIME_ZONE: Europe/Berlin' + sLineBreak +
-    '      PAPERLESS_SECRET_KEY: aksjdfhs87H/(&986jlkhgiu87659zol' + sLineBreak +
+    '      PAPERLESS_SECRET_KEY: "' + PaperlessSecretKey + '"' + sLineBreak +
     '      PAPERLESS_CONSUMPTION_DIR: /usr/src/paperless/consume' + sLineBreak +
     '      PAPERLESS_MEDIA_ROOT: /usr/src/paperless/media' + sLineBreak +
     '      PAPERLESS_EXPORT_DIR: /usr/src/paperless/export' + sLineBreak +

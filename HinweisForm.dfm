@@ -2,8 +2,8 @@ object HinweisFrm: THinweisFrm
   Left = 0
   Top = 0
   Caption = 'Willkommen im Paperless Backup Programm'
-  ClientHeight = 612
-  ClientWidth = 848
+  ClientHeight = 611
+  ClientWidth = 844
   Color = clBtnFace
   Constraints.MaxHeight = 650
   Constraints.MaxWidth = 860
@@ -146,14 +146,13 @@ object HinweisFrm: THinweisFrm
   object Panel14: TPanel
     Left = 0
     Top = 0
-    Width = 848
+    Width = 844
     Height = 56
     Align = alTop
     BevelOuter = bvNone
     Color = 3767324
     ParentBackground = False
     TabOrder = 2
-    ExplicitWidth = 844
     object Label8: TLabel
       Left = 20
       Top = 19
@@ -187,13 +186,11 @@ object HinweisFrm: THinweisFrm
   end
   object StatusBar1: TStatusBar
     Left = 0
-    Top = 593
-    Width = 848
+    Top = 592
+    Width = 844
     Height = 19
     Panels = <>
     SizeGrip = False
-    ExplicitTop = 592
-    ExplicitWidth = 844
   end
   object PaperlessInstallierenBtn: TButton
     Left = 31

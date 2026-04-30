@@ -6,6 +6,7 @@ uses
   Vcl.Themes,
   Vcl.Styles,
   AppConfig in 'AppConfig.pas',
+  AppLogger in 'AppLogger.pas',
   ScriptGenerator in 'ScriptGenerator.pas',
   DockerComposeGenerator in 'DockerComposeGenerator.pas',
   HinweisForm in 'HinweisForm.pas' {HinweisFrm};

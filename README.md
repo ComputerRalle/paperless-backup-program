@@ -54,6 +54,16 @@ Die Anwendung speichert Laufzeiteinstellungen im Benutzerprofil:
 - Mindestens eine externe Backup-Kopie aufbewahren.
 - Restore should be tested before updating Paperless-ngx or Docker images.
 - Die Wiederherstellung sollte vor Updates von Paperless-ngx oder Docker-Images getestet werden.
+- The Paperless secret key is generated once and stored in `Einstellungen.ini`.
+- Der Paperless Secret Key wird einmal erzeugt und in `Einstellungen.ini` gespeichert.
+- Keep this settings file when reusing an existing Paperless installation.
+- Diese Einstellungsdatei behalten, wenn eine bestehende Paperless-Installation weiterverwendet wird.
+- Existing installations without a saved key keep using the legacy key from earlier program versions.
+- Bestehende Installationen ohne gespeicherten Key verwenden weiter den Legacy-Key aus frueheren Programmversionen.
+- Each successful backup stores the active Paperless secret key in `paperless_secret_key.txt`.
+- Jedes erfolgreiche Backup speichert den aktiven Paperless Secret Key in `paperless_secret_key.txt`.
+- Keep this backup file private because it contains sensitive installation data.
+- Diese Backup-Datei privat halten, da sie sensible Installationsdaten enthaelt.
 - Use at your own risk.
 - Verwendung auf eigene Gefahr.
 
@@ -65,6 +75,8 @@ Die Anwendung speichert Laufzeiteinstellungen im Benutzerprofil:
 - `HinweisForm.pas` - Ersthinweis, Docker-Pruefung und Installationsablauf.
 - `AppConfig.pas` - central file names, URLs, INI keys, and Docker defaults.
 - `AppConfig.pas` - zentrale Dateinamen, URLs, INI-Schluessel und Docker-Standardwerte.
+- `AppLogger.pas` - application logging for basic diagnostics.
+- `AppLogger.pas` - Anwendungslogging fuer einfache Diagnose.
 - `ScriptGenerator.pas` - generation of backup, restore, restart, and scheduler scripts.
 - `ScriptGenerator.pas` - Erzeugung von Backup-, Restore-, Neustart- und Zeitplan-Skripten.
 - `DockerComposeGenerator.pas` - generation of the Paperless Docker Compose file.

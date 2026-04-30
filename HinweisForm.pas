@@ -88,7 +88,114 @@ implementation
 {$R *.dfm}
 
 uses
-  Mainform, DockerComposeGenerator, AppConfig;
+  Mainform, DockerComposeGenerator, AppConfig, AppLogger;
+
+// Generate a per-installation Paperless secret key.
+// Einen Paperless Secret Key pro Installation erzeugen.
+function GeneratePaperlessSecretKey: string;
+var
+  Guid: TGUID;
+begin
+  Result := '';
+  while Length(Result) < 64 do
+  begin
+    CreateGUID(Guid);
+    Result := Result + StringReplace(StringReplace(GUIDToString(Guid), '{', '', []), '}', '', []);
+    Result := StringReplace(Result, '-', '', [rfReplaceAll]);
+  end;
+  Result := Copy(Result, 1, 64);
+end;
+
+// Read an existing Paperless secret key from docker-compose.yml.
+// Einen vorhandenen Paperless Secret Key aus docker-compose.yml lesen.
+function ReadPaperlessSecretKeyFromCompose(const ComposePath: string): string;
+const
+  SecretPrefix = 'PAPERLESS_SECRET_KEY:';
+var
+  Lines: TStringList;
+  I, PrefixPos: Integer;
+  Line: string;
+begin
+  Result := '';
+  if not FileExists(ComposePath) then Exit;
+
+  Lines := TStringList.Create;
+  try
+    Lines.LoadFromFile(ComposePath, TEncoding.UTF8);
+    for I := 0 to Lines.Count - 1 do
+    begin
+      Line := Trim(Lines[I]);
+      PrefixPos := Pos(SecretPrefix, Line);
+      if PrefixPos = 1 then
+      begin
+        Result := Trim(Copy(Line, Length(SecretPrefix) + 1, MaxInt));
+        Result := StringReplace(Result, '"', '', [rfReplaceAll]);
+        Exit;
+      end;
+    end;
+  finally
+    Lines.Free;
+  end;
+end;
+
+// Reuse the saved key, import an existing compose key, use the legacy key, or create a new key.
+// Gespeicherten Key verwenden, vorhandenen Compose-Key importieren, Legacy-Key nutzen oder neuen Key erzeugen.
+function GetOrCreatePaperlessSecretKey(const Ini: TIniFile; const ComposePath: string; ExistingInstallation: Boolean): string;
+begin
+  Result := Ini.ReadString(IniSectionSecurity, IniKeyPaperlessSecretKey, '').Trim;
+  if Result <> '' then Exit;
+
+  Result := ReadPaperlessSecretKeyFromCompose(ComposePath);
+  if Result <> '' then
+  begin
+    Ini.WriteString(IniSectionSecurity, IniKeyPaperlessSecretKey, Result);
+    Ini.UpdateFile;
+    LogInfo('Existing Paperless secret key imported from docker-compose.yml.');
+    Exit;
+  end;
+
+  if ExistingInstallation then
+  begin
+    Result := LegacyPaperlessSecretKey;
+    Ini.WriteString(IniSectionSecurity, IniKeyPaperlessSecretKey, Result);
+    Ini.UpdateFile;
+    LogWarning('Legacy Paperless secret key used for existing installation.');
+    Exit;
+  end;
+
+  Result := GeneratePaperlessSecretKey;
+  Ini.WriteString(IniSectionSecurity, IniKeyPaperlessSecretKey, Result);
+  Ini.UpdateFile;
+  LogInfo('New Paperless secret key generated and saved.');
+end;
+
+// Write the active Paperless secret key into the backup folder.
+// Den aktiven Paperless Secret Key in den Backup-Ordner schreiben.
+procedure WritePaperlessSecretKeyBackup(const TargetPath: string; const Ini: TIniFile);
+var
+  ComposePath, SecretKey: string;
+  Txt: TStringList;
+begin
+  SecretKey := Ini.ReadString(IniSectionSecurity, IniKeyPaperlessSecretKey, '').Trim;
+
+  if SecretKey = '' then
+  begin
+    ComposePath := IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + DockerComposeFileName;
+    SecretKey := ReadPaperlessSecretKeyFromCompose(ComposePath);
+  end;
+
+  if SecretKey = '' then
+    SecretKey := LegacyPaperlessSecretKey;
+
+  Txt := TStringList.Create;
+  try
+    Txt.Add('PAPERLESS_SECRET_KEY=' + SecretKey);
+    Txt.SaveToFile(IncludeTrailingPathDelimiter(TargetPath) + PaperlessSecretKeyFileName, TEncoding.UTF8);
+    LogInfo('Paperless secret key backup file written.');
+  finally
+    Txt.Free;
+  end;
+end;
 
 // Close the whole program when the notice form was opened as the first form.
 // Das gesamte Programm schließen, wenn das Hinweisfenster als erstes Fenster geöffnet wurde.
@@ -453,10 +560,14 @@ end;
 procedure THinweisFrm.CreateDockerComposeFile;
 var
   ComposePath, ComposeContent: string;
+  PaperlessSecretKey: string;
+  ExistingInstallation: Boolean;
   CmdFile: TStringList;
   Ini: TIniFile;
   Versions: TDockerImageVersions;
 begin
+  ComposePath := IncludeTrailingPathDelimiter(AppDataFolder) + DockerComposeFileName;
+  ExistingInstallation := IsPaperlessInstallation or PaperlessContainerExists or PaperlessContainerRunning;
 
   // Read image versions from the INI file and apply defaults when empty.
   // Image-Versionen aus der INI-Datei lesen und bei leeren Werten Standardwerte verwenden.
@@ -497,12 +608,12 @@ begin
     tika_version := MainformFrm.tika_version_edit.Text;
     alpine_version := MainformFrm.alpine_version_edit.Text;
     busybox_version := MainformFrm.busybox_version_edit.Text;
+    PaperlessSecretKey := GetOrCreatePaperlessSecretKey(Ini, ComposePath, ExistingInstallation);
 
   finally
     Ini.Free;
   end;
 
-  ComposePath := IncludeTrailingPathDelimiter(AppDataFolder) + DockerComposeFileName;
   Versions.Paperless := paperless_ngx_version;
   Versions.Postgres := postgresql_version;
   Versions.Redis := redis_version;
@@ -510,7 +621,7 @@ begin
   Versions.Tika := tika_version;
   Versions.Alpine := alpine_version;
   Versions.Busybox := busybox_version;
-  ComposeContent := CreateDockerComposeContent(Versions, PaperlessInput, TrashRetentionDays);
+  ComposeContent := CreateDockerComposeContent(Versions, PaperlessInput, PaperlessSecretKey, TrashRetentionDays);
 
   // Write docker-compose.yml.
   // docker-compose.yml schreiben.
@@ -772,6 +883,8 @@ begin
     // Write the version file into the backup subfolder.
     // Die Versionsdatei in den Backup-Unterordner schreiben.
     Txt.SaveToFile(IncludeTrailingPathDelimiter(FinalPath) + ImageVersionsFileName, TEncoding.UTF8);
+
+    WritePaperlessSecretKeyBackup(FinalPath, Ini);
   finally
     Ini.Free;
     Txt.Free;

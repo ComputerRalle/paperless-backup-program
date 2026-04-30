@@ -6,6 +6,14 @@ Alle wichtigen Aenderungen an diesem Projekt werden hier dokumentiert.
 
 ## Unreleased / Noch nicht veroeffentlicht
 
+- Added `paperless_secret_key.txt` to successful backups so the active Paperless secret key is preserved.
+- `paperless_secret_key.txt` zu erfolgreichen Backups ergaenzt, damit der aktive Paperless Secret Key erhalten bleibt.
+- Kept the legacy Paperless secret key fallback for existing installations.
+- Legacy-Fallback fuer bestehende Paperless-Installationen beibehalten.
+- Replaced the hard-coded Paperless secret key with a generated and persisted installation key.
+- Fest eingetragenen Paperless Secret Key durch einen erzeugten und gespeicherten Installations-Key ersetzt.
+- Added an application logger and first diagnostic log entries.
+- Anwendungslogger und erste Diagnose-Logeintraege ergaenzt.
 - Switched the project license to GNU General Public License v3.
 - Projektlizenz auf GNU General Public License v3 umgestellt.
 - Updated copyright notices to `Copyright (C) 2026 Ralf-Peter Kleinert / ComputerRalle`.

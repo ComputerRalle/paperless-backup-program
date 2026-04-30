@@ -37,11 +37,14 @@ const
   EmailEnvFileName = 'email-versand.env';
   ContainerVolumeInfoFileName = 'ContainerUndVolumesInfo.txt';
   ImageVersionsFileName = 'image_versionen.txt';
+  PaperlessSecretKeyFileName = 'paperless_secret_key.txt';
   UpdateIniFileName = 'update.ini';
+  ApplicationLogFileName = 'PaperlessBackupProgram.log';
 
   // INI sections and keys.
   // INI-Abschnitte und Schluessel.
   IniSectionVersions = 'Versionen';
+  IniSectionSecurity = 'Sicherheit';
   IniKeyPaperlessVersion = 'Paperless-Version';
   IniKeyPostgresVersion = 'Postgres-Version';
   IniKeyRedisVersion = 'Redis-Version';
@@ -49,6 +52,7 @@ const
   IniKeyTikaVersion = 'Tika-Version';
   IniKeyAlpineVersion = 'Alpine-Version';
   IniKeyBusyboxVersion = 'Busybox-Version';
+  IniKeyPaperlessSecretKey = 'Paperless-Secret-Key';
 
   // Default Docker image versions.
   // Standardversionen der Docker-Images.
@@ -59,6 +63,7 @@ const
   DefaultTikaVersion = 'latest';
   DefaultAlpineVersion = '3';
   DefaultBusyboxVersion = '1';
+  LegacyPaperlessSecretKey = 'aksjdfhs87H/(&986jlkhgiu87659zol';
 
   // External links.
   // Externe Links.

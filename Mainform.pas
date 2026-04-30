@@ -23,7 +23,7 @@ uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, ShellAPI, Vcl.ComCtrls, Vcl.ExtCtrls, Vcl.Buttons,
   System.IOUtils, Vcl.Samples.Spin, System.IniFiles, DateUtils, HinweisForm, System.Generics.Collections, System.Generics.Defaults, Vcl.Menus,
-  System.Net.URLClient, System.Net.HttpClient, System.Net.HttpClientComponent, ScriptGenerator, AppConfig;
+  System.Net.URLClient, System.Net.HttpClient, System.Net.HttpClientComponent, ScriptGenerator, AppConfig, AppLogger;
 
 type
   TMainformFrm = class(TForm)
@@ -263,6 +263,7 @@ var
 begin
 
   ProgramVersion := GetExeVersion;
+  LogInfo('Checking program update. Current version: ' + ProgramVersion);
 
   if not FileExists(IncludeTrailingPathDelimiter(AppDataFolder) + UpdateIniFileName) then
   VersionInIni := ProgramVersion;
@@ -278,6 +279,7 @@ begin
   except
     VersionInIni := ProgramVersion; // No update check result when the server is unavailable.
     // Kein Ergebnis der Update-Prüfung, wenn der Server nicht erreichbar ist.
+    LogWarning('Update check failed. Server update.ini could not be loaded.');
     Exit;
   end;
 
@@ -287,6 +289,7 @@ begin
       try
         Sl.LoadFromFile(IncludeTrailingPathDelimiter(AppDataFolder) + UpdateIniFileName);
         VersionInIni := Trim(Sl[0]);
+        LogInfo('Update version read from update.ini: ' + VersionInIni);
       finally
         Sl.Free;
       end;
@@ -300,12 +303,14 @@ begin
     ProgramUpdateLbl.StyleElements := StyleElements - [seFont];
     ProgramUpdateLbl.Font.Color := clYellow;
     ProgramUpdateLbl.Font.Style := [fsBold];
+    LogInfo('Program update available.');
   end else
   begin
     ProgramUpdateLbl.ParentColor := False;
     ProgramUpdateLbl.Caption := 'Programm aktuell';
     ProgramUpdateLbl.StyleElements := StyleElements - [seFont];
     ProgramUpdateLbl.Font.Color := clYellow;
+    LogInfo('Program is up to date.');
   end;
 end;
 
@@ -555,6 +560,7 @@ end;
 // Die Anwendung vom Hauptformular aus schließen.
 procedure TMainformFrm.FormClose(Sender: TObject; var Action: TCloseAction);
 begin
+  LogInfo('Application closing.');
   Action := caNone;         // Stop default close handling.
   // Die Standard-Schließbehandlung stoppen.
   PostQuitMessage(0);       // End the message loop.
@@ -571,6 +577,8 @@ begin
   // Create the user data folder if it does not exist.
   // Den Benutzerdatenordner erstellen, falls er nicht existiert.
   if not DirectoryExists(AppDataFolder) then ForceDirectories(AppDataFolder);
+  InitLogger(AppDataFolder);
+  LogInfo('Application started.');
 
   // Initialize runtime state.
   // Den Laufzeitzustand initialisieren.
