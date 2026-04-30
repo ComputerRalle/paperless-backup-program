@@ -6,6 +6,12 @@ Alle wichtigen Aenderungen an diesem Projekt werden hier dokumentiert.
 
 ## Unreleased / Noch nicht veroeffentlicht
 
+- Imported the Paperless secret key during restore only when `paperless_secret_key.txt` exists in the selected backup.
+- Paperless Secret Key bei der Wiederherstellung nur importiert, wenn `paperless_secret_key.txt` im ausgewaehlten Backup vorhanden ist.
+- Separated new and legacy Paperless secret keys so fresh installations no longer receive the legacy key.
+- Neue und Legacy-Paperless-Secret-Keys getrennt, damit Neuinstallationen nicht mehr den Legacy-Key erhalten.
+- Renamed `HinweisForm` to `SetupForm` to better match the setup workflow.
+- `HinweisForm` in `SetupForm` umbenannt, damit der Name besser zum Einrichtungsablauf passt.
 - Added `paperless_secret_key.txt` to successful backups so the active Paperless secret key is preserved.
 - `paperless_secret_key.txt` zu erfolgreichen Backups ergaenzt, damit der aktive Paperless Secret Key erhalten bleibt.
 - Kept the legacy Paperless secret key fallback for existing installations.

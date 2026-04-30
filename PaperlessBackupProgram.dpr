@@ -9,7 +9,7 @@ uses
   AppLogger in 'AppLogger.pas',
   ScriptGenerator in 'ScriptGenerator.pas',
   DockerComposeGenerator in 'DockerComposeGenerator.pas',
-  HinweisForm in 'HinweisForm.pas' {HinweisFrm};
+  SetupForm in 'SetupForm.pas' {SetupFrm};
 
 {$R *.res}
 
@@ -18,6 +18,6 @@ begin
   Application.MainFormOnTaskbar := True;
   TStyleManager.TrySetStyle('Windows11 Modern Dark');
   Application.CreateForm(TMainformFrm, MainformFrm);
-  Application.CreateForm(THinweisFrm, HinweisFrm);
+  Application.CreateForm(TSetupFrm, SetupFrm);
   Application.Run;
 end.

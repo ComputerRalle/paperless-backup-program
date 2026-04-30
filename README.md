@@ -56,12 +56,16 @@ Die Anwendung speichert Laufzeiteinstellungen im Benutzerprofil:
 - Die Wiederherstellung sollte vor Updates von Paperless-ngx oder Docker-Images getestet werden.
 - The Paperless secret key is generated once and stored in `Einstellungen.ini`.
 - Der Paperless Secret Key wird einmal erzeugt und in `Einstellungen.ini` gespeichert.
+- Legacy installations store the old key separately as `Legacy-Paperless-Secret-Key`.
+- Legacy-Installationen speichern den alten Key getrennt als `Legacy-Paperless-Secret-Key`.
 - Keep this settings file when reusing an existing Paperless installation.
 - Diese Einstellungsdatei behalten, wenn eine bestehende Paperless-Installation weiterverwendet wird.
-- Existing installations without a saved key keep using the legacy key from earlier program versions.
-- Bestehende Installationen ohne gespeicherten Key verwenden weiter den Legacy-Key aus frueheren Programmversionen.
+- Existing installations without a saved key import the key from `docker-compose.yml` when available.
+- Bestehende Installationen ohne gespeicherten Key importieren den Key aus `docker-compose.yml`, wenn er vorhanden ist.
 - Each successful backup stores the active Paperless secret key in `paperless_secret_key.txt`.
 - Jedes erfolgreiche Backup speichert den aktiven Paperless Secret Key in `paperless_secret_key.txt`.
+- Restore imports the secret key only when the selected backup contains `paperless_secret_key.txt`.
+- Die Wiederherstellung importiert den Secret Key nur, wenn das ausgewaehlte Backup `paperless_secret_key.txt` enthaelt.
 - Keep this backup file private because it contains sensitive installation data.
 - Diese Backup-Datei privat halten, da sie sensible Installationsdaten enthaelt.
 - Use at your own risk.
@@ -71,8 +75,8 @@ Die Anwendung speichert Laufzeiteinstellungen im Benutzerprofil:
 
 - `Mainform.pas` - main application form and workflow coordination.
 - `Mainform.pas` - Hauptformular und Ablaufsteuerung der Anwendung.
-- `HinweisForm.pas` - first-run notice, Docker check, and installation workflow.
-- `HinweisForm.pas` - Ersthinweis, Docker-Pruefung und Installationsablauf.
+- `SetupForm.pas` - first-run notice, Docker check, and installation workflow.
+- `SetupForm.pas` - Ersthinweis, Docker-Pruefung und Installationsablauf.
 - `AppConfig.pas` - central file names, URLs, INI keys, and Docker defaults.
 - `AppConfig.pas` - zentrale Dateinamen, URLs, INI-Schluessel und Docker-Standardwerte.
 - `AppLogger.pas` - application logging for basic diagnostics.

@@ -53,6 +53,7 @@ const
   IniKeyAlpineVersion = 'Alpine-Version';
   IniKeyBusyboxVersion = 'Busybox-Version';
   IniKeyPaperlessSecretKey = 'Paperless-Secret-Key';
+  IniKeyLegacyPaperlessSecretKey = 'Legacy-Paperless-Secret-Key';
 
   // Default Docker image versions.
   // Standardversionen der Docker-Images.

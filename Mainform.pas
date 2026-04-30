@@ -22,7 +22,7 @@ interface
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, ShellAPI, Vcl.ComCtrls, Vcl.ExtCtrls, Vcl.Buttons,
-  System.IOUtils, Vcl.Samples.Spin, System.IniFiles, DateUtils, HinweisForm, System.Generics.Collections, System.Generics.Defaults, Vcl.Menus,
+  System.IOUtils, Vcl.Samples.Spin, System.IniFiles, DateUtils, SetupForm, System.Generics.Collections, System.Generics.Defaults, Vcl.Menus,
   System.Net.URLClient, System.Net.HttpClient, System.Net.HttpClientComponent, ScriptGenerator, AppConfig, AppLogger;
 
 type
@@ -250,6 +250,80 @@ var
 implementation
 
 {$R *.dfm}
+
+// Read PAPERLESS_SECRET_KEY from a backup metadata file.
+// PAPERLESS_SECRET_KEY aus einer Backup-Metadatendatei lesen.
+function ReadPaperlessSecretKeyFromBackupFile(const SecretKeyFilePath: string): string;
+var
+  Lines: TStringList;
+  I, SeparatorPos: Integer;
+  Line: string;
+begin
+  Result := '';
+  if not FileExists(SecretKeyFilePath) then Exit;
+
+  Lines := TStringList.Create;
+  try
+    Lines.LoadFromFile(SecretKeyFilePath, TEncoding.UTF8);
+    for I := 0 to Lines.Count - 1 do
+    begin
+      Line := Trim(Lines[I]);
+      if Line.StartsWith('PAPERLESS_SECRET_KEY=') then
+      begin
+        SeparatorPos := Pos('=', Line);
+        Result := Trim(Copy(Line, SeparatorPos + 1, MaxInt));
+        Result := StringReplace(Result, '"', '', [rfReplaceAll]);
+        Exit;
+      end;
+    end;
+  finally
+    Lines.Free;
+  end;
+end;
+
+// Import the Paperless secret key only when the selected backup contains it.
+// Den Paperless Secret Key nur importieren, wenn das ausgewählte Backup ihn enthält.
+function ImportPaperlessSecretKeyFromBackup(const BackupFolder: string): Boolean;
+var
+  Ini: TIniFile;
+  SecretKey, SecretKeyFilePath, SettingsIniPath: string;
+begin
+  Result := False;
+  SecretKeyFilePath := IncludeTrailingPathDelimiter(BackupFolder) + PaperlessSecretKeyFileName;
+  if not FileExists(SecretKeyFilePath) then
+  begin
+    LogInfo('No Paperless secret key backup file found. Restore keeps current key handling.');
+    Exit;
+  end;
+
+  SecretKey := ReadPaperlessSecretKeyFromBackupFile(SecretKeyFilePath);
+  if SecretKey = '' then
+  begin
+    LogWarning('Paperless secret key backup file exists but contains no readable key.');
+    Exit;
+  end;
+
+  SettingsIniPath := IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName;
+  Ini := TIniFile.Create(SettingsIniPath);
+  try
+    if SecretKey = LegacyPaperlessSecretKey then
+    begin
+      Ini.WriteString(IniSectionSecurity, IniKeyLegacyPaperlessSecretKey, SecretKey);
+      Ini.DeleteKey(IniSectionSecurity, IniKeyPaperlessSecretKey);
+    end
+    else
+    begin
+      Ini.WriteString(IniSectionSecurity, IniKeyPaperlessSecretKey, SecretKey);
+      Ini.DeleteKey(IniSectionSecurity, IniKeyLegacyPaperlessSecretKey);
+    end;
+    Ini.UpdateFile;
+  finally
+    Ini.Free;
+  end;
+
+  Result := True;
+  LogInfo('Paperless secret key imported from selected backup.');
+end;
 
 // Load update.ini from the web server and show whether a program update is available.
 // update.ini vom Webserver laden und anzeigen, ob ein Programmupdate verfügbar ist.
@@ -640,20 +714,20 @@ begin
     // Den Hinweis nach 30 Tagen erneut anzeigen.
     if DaysBetween(Now, FileDateToDateTime(FileAge(IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + SettingsFileName))) > 30 then
     begin
-      HinweisFrm := THinweisFrm.Create(Self);
+      SetupFrm := TSetupFrm.Create(Self);
       try
-        HinweisFrm.ShowModal;
+        SetupFrm.ShowModal;
       finally
-        HinweisFrm.Free;
+        SetupFrm.Free;
       end;
     end;
   end else
     begin
-      HinweisFrm := THinweisFrm.Create(Self);
+      SetupFrm := TSetupFrm.Create(Self);
       try
-        HinweisFrm.ShowModal;
+        SetupFrm.ShowModal;
       finally
-        HinweisFrm.Free;
+        SetupFrm.Free;
       end;
   end;
 
@@ -868,8 +942,8 @@ begin
       );
 
       ShouldWriteNewCompose := True;
-      HinweisFrm.CreateDockerComposeFile;
-      HinweisFrm.InstallPaperlessBtnClick(Self);
+      SetupFrm.CreateDockerComposeFile;
+      SetupFrm.InstallPaperlessBtnClick(Self);
     end;
 
     ComposePath := NewComposePath;
@@ -1602,7 +1676,7 @@ begin
   begin
     // Write a new docker-compose.yml file.
     // Eine neue docker-compose.yml-Datei schreiben.
-     HinweisFrm.CreateDockerComposeFile;
+     SetupFrm.CreateDockerComposeFile;
   end
   else
   begin
@@ -1688,7 +1762,7 @@ begin
       'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
     PaperlessUpdate := True;
     IsUpdate := True;
-    HinweisFrm.CreateDockerComposeFile;
+    SetupFrm.CreateDockerComposeFile;
   end;
 end;
 
@@ -2038,6 +2112,15 @@ begin
     if FolderDialog.Execute then
     begin
       BackupFolder := FolderDialog.FileName;
+      if ImportPaperlessSecretKeyFromBackup(BackupFolder) then
+      begin
+        ShouldWriteNewCompose := True;
+        try
+          SetupFrm.CreateDockerComposeFile;
+        finally
+          ShouldWriteNewCompose := False;
+        end;
+      end;
       CreateRestoreScript(ComposePath, BackupFolder);
     end
     else
@@ -2141,29 +2224,29 @@ begin
                 'Sie können Paperless nun im Browser öffnen (http://localhost:8000). Geben Sie Paperless ein wenig Zeit zum starten.',
                 'Installation abgeschlossen', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
 
-              HinweisFrm.DockerGefundenLbl.Caption := 'Paperless erfolgreich installiert.';
-              HinweisFrm.PaperlessInstallierenBtn.Enabled := False;
-              HinweisFrm.BitteBestaetigenLbl.Visible := True;
+              SetupFrm.DockerGefundenLbl.Caption := 'Paperless erfolgreich installiert.';
+              SetupFrm.PaperlessInstallierenBtn.Enabled := False;
+              SetupFrm.BitteBestaetigenLbl.Visible := True;
 
-              HinweisFrm.HinweisMemo.Lines.Clear;
-              HinweisFrm.HinweisMemo.Lines.Add('Ihr Paperless wurde erfolgreich installiert.');
-              HinweisFrm.HinweisMemo.Lines.Add(' ');
-              HinweisFrm.HinweisMemo.Lines.Add('Nun können Sie Paperless starten, indem Sie Ihren Browser öffnen');
-              HinweisFrm.HinweisMemo.Lines.Add('und folgende Adresse eingeben oder kopieren und einfügen, oder oben den gelben Link klicken:');
-              HinweisFrm.HinweisMemo.Lines.Add(' ');
-              HinweisFrm.HinweisMemo.Lines.Add(PaperlessLocalUrl);
-              HinweisFrm.HinweisMemo.Lines.Add(' ');
-              HinweisFrm.HinweisMemo.Lines.Add('Bitte geben Sie dem System ein wenig Zeit, bevor Sie die Seite aufrufen.');
-              HinweisFrm.HinweisMemo.Lines.Add(' ');
-              HinweisFrm.HinweisMemo.Lines.Add('Nach dem Öffnen von Paperless werden Sie gebeten einen Benutzernamen und ein Passwort zu vergeben. Speichern Sie diese Zugangsdaten in einem Passwortmanager wie KeePassXC!');
-              HinweisFrm.LinkKlickLbl.Caption := PaperlessFallbackLocalUrl;
-              HinweisFrm.Label1.Caption := 'Paperless öffnen:';
-              HinweisFrm.SieBenoetigenDockerLbl.Caption := 'Alles installiert.';
-              HinweisFrm.KeePassXCLbl.Visible := True;
-              HinweisFrm.Label1.Visible := True;
-              HinweisFrm.LinkKlickLbl.Visible := True;
-              HinweisFrm.WillkommenLbl.Visible := False;
-              HinweisFrm.ComputerRalleLbl.Visible := False;
+              SetupFrm.HinweisMemo.Lines.Clear;
+              SetupFrm.HinweisMemo.Lines.Add('Ihr Paperless wurde erfolgreich installiert.');
+              SetupFrm.HinweisMemo.Lines.Add(' ');
+              SetupFrm.HinweisMemo.Lines.Add('Nun können Sie Paperless starten, indem Sie Ihren Browser öffnen');
+              SetupFrm.HinweisMemo.Lines.Add('und folgende Adresse eingeben oder kopieren und einfügen, oder oben den gelben Link klicken:');
+              SetupFrm.HinweisMemo.Lines.Add(' ');
+              SetupFrm.HinweisMemo.Lines.Add(PaperlessLocalUrl);
+              SetupFrm.HinweisMemo.Lines.Add(' ');
+              SetupFrm.HinweisMemo.Lines.Add('Bitte geben Sie dem System ein wenig Zeit, bevor Sie die Seite aufrufen.');
+              SetupFrm.HinweisMemo.Lines.Add(' ');
+              SetupFrm.HinweisMemo.Lines.Add('Nach dem Öffnen von Paperless werden Sie gebeten einen Benutzernamen und ein Passwort zu vergeben. Speichern Sie diese Zugangsdaten in einem Passwortmanager wie KeePassXC!');
+              SetupFrm.LinkKlickLbl.Caption := PaperlessFallbackLocalUrl;
+              SetupFrm.Label1.Caption := 'Paperless öffnen:';
+              SetupFrm.SieBenoetigenDockerLbl.Caption := 'Alles installiert.';
+              SetupFrm.KeePassXCLbl.Visible := True;
+              SetupFrm.Label1.Visible := True;
+              SetupFrm.LinkKlickLbl.Visible := True;
+              SetupFrm.WillkommenLbl.Visible := False;
+              SetupFrm.ComputerRalleLbl.Visible := False;
               IsPaperlessInstallation := False;
             end
             else if IsBackup = True then
@@ -2175,7 +2258,7 @@ begin
                 'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
               end;
 
-              HinweisFrm.WriteImageVersion(BackupPath);
+              SetupFrm.WriteImageVersion(BackupPath);
 
             end
             else
