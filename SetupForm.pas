@@ -1,4 +1,4 @@
-// --------------------------------------------------------------
+﻿// --------------------------------------------------------------
 // Original author: Ralf-Peter Kleinert - 2025
 // Ursprünglicher Autor: Ralf-Peter Kleinert - 2025
 // Alias: #ComputerRalle / DIGITAL-easy
@@ -254,7 +254,6 @@ begin
   ProgressBar2.Max := 100;
   ProgressBar2.Position := 0;
   ProgressBar2.Visible := False;
-
   // Make link labels readable in dark mode.
   // Link-Beschriftungen im dunklen Modus lesbar machen.
   with LinkKlickLbl do
@@ -830,9 +829,11 @@ var
   StartupInfo: TStartupInfo;
   ProcessInfo: TProcessInformation;
   Buffer: array[0..2047] of AnsiChar;
-  BytesRead: DWORD;
+  BytesRead, BytesAvailable, ReadSize: DWORD;
   WaitResult: DWORD;
+  StartTick: UInt64;
   TotalOutput: string;
+  Chunk: AnsiString;
 begin
   Result := False;
   Output.Clear;
@@ -868,28 +869,49 @@ begin
       CloseHandle(WritePipe); // Stop writing so the reader can finish.
       // Schreiben beenden, damit der Leser fertig werden kann.
       WritePipe := 0;
-
-      WaitResult := WaitForSingleObject(ProcessInfo.hProcess, CommandTimeoutMs);
-      if WaitResult = WAIT_TIMEOUT then
+      TotalOutput := '';
+      StartTick := GetTickCount64;
+      repeat
+        WaitResult := WaitForSingleObject(ProcessInfo.hProcess, 50);
+        repeat
+          BytesAvailable := 0;
+          if not PeekNamedPipe(ReadPipe, nil, 0, nil, @BytesAvailable, nil) then
+            Break;
+          if BytesAvailable = 0 then
+            Break;
+          BytesRead := 0;
+          if BytesAvailable > SizeOf(Buffer) then
+            ReadSize := SizeOf(Buffer)
+          else
+            ReadSize := BytesAvailable;
+          if ReadFile(ReadPipe, Buffer, ReadSize, BytesRead, nil) and (BytesRead > 0) then
+          begin
+            SetString(Chunk, PAnsiChar(@Buffer[0]), BytesRead);
+            TotalOutput := TotalOutput + string(Chunk);
+          end
+          else
+            Break;
+        until False;
+        if (WaitResult = WAIT_TIMEOUT) and (GetTickCount64 - StartTick > CommandTimeoutMs) then
+          Break;
+      until WaitResult <> WAIT_TIMEOUT;
+      if WaitResult <> WAIT_OBJECT_0 then
       begin
         TerminateProcess(ProcessInfo.hProcess, DWORD(-1));
         CloseHandle(ProcessInfo.hProcess);
         CloseHandle(ProcessInfo.hThread);
         Exit;
       end;
-
-      TotalOutput := '';
       repeat
         BytesRead := 0;
         if ReadFile(ReadPipe, Buffer, SizeOf(Buffer) - 1, BytesRead, nil) and (BytesRead > 0) then
         begin
-          Buffer[BytesRead] := #0;
-          TotalOutput := TotalOutput + string(Buffer);
+          SetString(Chunk, PAnsiChar(@Buffer[0]), BytesRead);
+          TotalOutput := TotalOutput + string(Chunk);
         end;
       until BytesRead = 0;
 
       Output.Text := Trim(TotalOutput);
-
       CloseHandle(ProcessInfo.hProcess);
       CloseHandle(ProcessInfo.hThread);
       Result := True;

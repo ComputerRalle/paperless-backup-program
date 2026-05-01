@@ -289,6 +289,35 @@ begin
     Lines.Free;
   end;
 end;
+// Return true when email-versand.env already contains user mail settings.
+// True zurueckgeben, wenn email-versand.env bereits Maildaten des Benutzers enthaelt.
+function EmailEnvHasConfiguredValues(const EnvList: TStrings): Boolean;
+begin
+  Result :=
+    (Trim(EnvList.Values['PAPERLESS_EMAIL_HOST']) <> '') or
+    (Trim(EnvList.Values['PAPERLESS_EMAIL_PORT']) <> '') or
+    (Trim(EnvList.Values['PAPERLESS_EMAIL_HOST_USER']) <> '') or
+    (Trim(EnvList.Values['PAPERLESS_EMAIL_HOST_PASSWORD']) <> '') or
+    (Trim(EnvList.Values['PAPERLESS_EMAIL_FROM']) <> '') or
+    (Trim(EnvList.Values['PAPERLESS_EMAIL_USE_TLS']) <> '') or
+    (Trim(EnvList.Values['PAPERLESS_EMAIL_USE_SSL']) <> '');
+end;
+// Return true when the existing email env file must be preserved.
+// True zurueckgeben, wenn die vorhandene E-Mail-Env-Datei erhalten bleiben muss.
+function ExistingEmailEnvIsConfigured(const EnvFilePath: string): Boolean;
+var
+  EnvList: TStringList;
+begin
+  Result := False;
+  if not FileExists(EnvFilePath) then Exit;
+  EnvList := TStringList.Create;
+  try
+    EnvList.LoadFromFile(EnvFilePath);
+    Result := EmailEnvHasConfiguredValues(EnvList);
+  finally
+    EnvList.Free;
+  end;
+end;
 // Apply the restore key from the backup file or use the legacy key for older backups.
 // Den Wiederherstellungs-Key aus der Backup-Datei anwenden oder bei alten Backups den Legacy-Key nutzen.
 function ApplyPaperlessSecretKeyForRestore(const BackupFolder: string): Boolean;
@@ -1598,7 +1627,6 @@ end;
 procedure TMainformFrm.SaveRetentionBtnClick(Sender: TObject);
 var
   Ini: TIniFile;
-  MaxBackupFolders: Integer;
 begin
   HideWelcomeLabel;
   Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
@@ -1609,13 +1637,6 @@ begin
     // Write immediately.
     // Sofort schreiben.
     Ini.UpdateFile;
-    // Read the value back safely.
-    // Den Wert sicher zurücklesen.
-    try
-      MaxBackupFolders := Ini.ReadInteger('Zeitplan', 'BackupsBehalten', 0);
-    except
-      MaxBackupFolders := 0;
-    end;
   finally
     Ini.Free;
   end;
@@ -1926,56 +1947,56 @@ begin
     // Eine Stringliste zum Lesen der .env-Datei verwenden.
     EnvList := TStringList.Create;
     try
-      // Read the .env file.
-      // Die .env-Datei lesen.
-      EnvList.LoadFromFile(EnvFilePath);
-
-      // Check whether setup is still pending.
-      // Prüfen, ob die Einrichtung noch aussteht.
-      if EnvList.Values['Eingerichtet'] = 'Nein' then
-      begin
-        RequireCompletedSettings;
-      end
-      else
-      begin
-        // Copy saved values into the edit fields.
-        // Gespeicherte Werte in die Eingabefelder übernehmen.
-        SMTPServerEdit.Text := EnvList.Values['PAPERLESS_EMAIL_HOST'];
-        SMTPPortEdit.Text := EnvList.Values['PAPERLESS_EMAIL_PORT'];
-        UserNameEdit.Text := EnvList.Values['PAPERLESS_EMAIL_HOST_USER'];
-        MailAccountPasswordEdit.Text := EnvList.Values['PAPERLESS_EMAIL_HOST_PASSWORD'];
-        EMailSentFromEdit.Text := EnvList.Values['PAPERLESS_EMAIL_FROM'];
-
-        // Restore the SSL/TLS selection.
-        // Die SSL/TLS-Auswahl wiederherstellen.
-        if EnvList.Values['PAPERLESS_EMAIL_USE_SSL'] = 'true' then
+      try
+        // Read the .env file.
+        // Die .env-Datei lesen.
+        EnvList.LoadFromFile(EnvFilePath);
+        // Check whether setup is still pending.
+        // Prüfen, ob die Einrichtung noch aussteht.
+        if (EnvList.Values['Eingerichtet'] = 'Nein') and not EmailEnvHasConfiguredValues(EnvList) then
         begin
-          SSLoTLSRg.ItemIndex := 0;  // SSL
-          // SSL
-        end
-        else if EnvList.Values['PAPERLESS_EMAIL_USE_TLS'] = 'true' then
-        begin
-          SSLoTLSRg.ItemIndex := 1;  // TLS
-          // TLS
+          RequireCompletedSettings;
         end
         else
         begin
-          // No SSL/TLS option is selected.
-          // Keine SSL/TLS-Option ist ausgewählt.
-          SSLoTLSRg.ItemIndex := -1;
+          // Copy saved values into the edit fields.
+          // Gespeicherte Werte in die Eingabefelder übernehmen.
+          SMTPServerEdit.Text := EnvList.Values['PAPERLESS_EMAIL_HOST'];
+          SMTPPortEdit.Text := EnvList.Values['PAPERLESS_EMAIL_PORT'];
+          UserNameEdit.Text := EnvList.Values['PAPERLESS_EMAIL_HOST_USER'];
+          MailAccountPasswordEdit.Text := EnvList.Values['PAPERLESS_EMAIL_HOST_PASSWORD'];
+          EMailSentFromEdit.Text := EnvList.Values['PAPERLESS_EMAIL_FROM'];
+          // Restore the SSL/TLS selection.
+          // Die SSL/TLS-Auswahl wiederherstellen.
+          if EnvList.Values['PAPERLESS_EMAIL_USE_SSL'] = 'true' then
+          begin
+            SSLoTLSRg.ItemIndex := 0;  // SSL
+            // SSL
+          end
+          else if EnvList.Values['PAPERLESS_EMAIL_USE_TLS'] = 'true' then
+          begin
+            SSLoTLSRg.ItemIndex := 1;  // TLS
+            // TLS
+          end
+          else
+          begin
+            // No SSL/TLS option is selected.
+            // Keine SSL/TLS-Option ist ausgewählt.
+            SSLoTLSRg.ItemIndex := -1;
+          end;
+          // Empty values also mean no selection.
+          // Leere Werte bedeuten ebenfalls keine Auswahl.
+          if (EnvList.Values['PAPERLESS_EMAIL_USE_SSL'] = '') and (EnvList.Values['PAPERLESS_EMAIL_USE_TLS'] = '') then
+          begin
+            SSLoTLSRg.ItemIndex := -1;
+          end;
         end;
-
-        // Empty values also mean no selection.
-        // Leere Werte bedeuten ebenfalls keine Auswahl.
-        if (EnvList.Values['PAPERLESS_EMAIL_USE_SSL'] = '') and (EnvList.Values['PAPERLESS_EMAIL_USE_TLS'] = '') then
-        begin
-          SSLoTLSRg.ItemIndex := -1;
-        end;
+      except
+        on E: Exception do
+          CenteredShowMessage('Fehler beim Laden der Konfiguration: ' + E.Message);
       end;
-
-    except
-      on E: Exception do
-        CenteredShowMessage('Fehler beim Laden der Konfiguration: ' + E.Message);
+    finally
+      EnvList.Free;
     end;
   end
   else
@@ -2122,7 +2143,12 @@ begin
     CenteredShowMessage('Der angegebene AppData-Ordner existiert nicht.');
     Exit;
   end;
-
+  if ExistingEmailEnvIsConfigured(EnvFilePath) then
+  begin
+    LoadEmailSettings;
+    LogInfo('Existing configured email-versand.env preserved.');
+    Exit;
+  end;
   // Build the .env file content.
   // Den Inhalt der .env-Datei zusammenbauen.
   EnvList := TStringList.Create;
@@ -2188,7 +2214,18 @@ begin
     CenteredShowMessage('Der angegebene AppData-Ordner existiert nicht.');
     Exit;
   end;
-
+  if ExistingEmailEnvIsConfigured(EnvFilePath) and
+     (Trim(SMTPServerEdit.Text) = '') and
+     (Trim(SMTPPortEdit.Text) = '') and
+     (Trim(UserNameEdit.Text) = '') and
+     (Trim(MailAccountPasswordEdit.Text) = '') and
+     (Trim(EMailSentFromEdit.Text) = '') and
+     (SSLoTLSRg.ItemIndex = -1) then
+  begin
+    LoadEmailSettings;
+    CenteredShowMessage('Vorhandene Mail-Einstellungen wurden geladen und nicht überschrieben.');
+    Exit;
+  end;
   // Build the .env file content.
   // Den Inhalt der .env-Datei zusammenbauen.
   EnvList := TStringList.Create;
@@ -3049,7 +3086,6 @@ begin
     if (WaitResult = WAIT_TIMEOUT) and (GetTickCount64 - StartTick > CommandTimeoutMs) then
       Break;
   until WaitResult <> WAIT_TIMEOUT;
-
   if WaitResult <> WAIT_OBJECT_0 then
   begin
     TerminateProcess(PI.hProcess, DWORD(-1));
@@ -3058,7 +3094,6 @@ begin
     CloseHandle(StdOutRead);
     Exit('');
   end;
-
   repeat
     BytesRead := 0;
     ReadFile(StdOutRead, Buffer, SizeOf(Buffer), BytesRead, nil);

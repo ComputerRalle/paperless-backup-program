@@ -2,8 +2,8 @@ object SetupFrm: TSetupFrm
   Left = 0
   Top = 0
   Caption = 'Willkommen im Paperless Backup Programm'
-  ClientHeight = 612
-  ClientWidth = 848
+  ClientHeight = 611
+  ClientWidth = 844
   Color = clBtnFace
   Constraints.MaxHeight = 650
   Constraints.MaxWidth = 860
@@ -137,7 +137,7 @@ object SetupFrm: TSetupFrm
   object InstallLbl: TLabel
     Left = 21
     Top = 409
-    Width = 819
+    Width = 738
     Height = 18
     Caption = 
       'Um ein Backup oder eine Wiederherstellung zu machen, muss das Pr' +
@@ -156,14 +156,13 @@ object SetupFrm: TSetupFrm
   object Panel14: TPanel
     Left = 0
     Top = 0
-    Width = 848
+    Width = 844
     Height = 56
     Align = alTop
     BevelOuter = bvNone
     Color = 3767324
     ParentBackground = False
     TabOrder = 2
-    ExplicitWidth = 844
     object Label8: TLabel
       Left = 20
       Top = 19
@@ -182,7 +181,7 @@ object SetupFrm: TSetupFrm
     object Label9: TLabel
       Left = 579
       Top = 21
-      Width = 246
+      Width = 249
       Height = 16
       Caption = 'Getestet mit: Paperless-ngx v2.20.15'
       Color = clWhite
@@ -197,13 +196,11 @@ object SetupFrm: TSetupFrm
   end
   object StatusBar1: TStatusBar
     Left = 0
-    Top = 593
-    Width = 848
+    Top = 592
+    Width = 844
     Height = 19
     Panels = <>
     SizeGrip = False
-    ExplicitTop = 592
-    ExplicitWidth = 844
   end
   object PaperlessInstallierenBtn: TButton
     Left = 21
