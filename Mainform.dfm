@@ -60291,7 +60291,7 @@ object MainformFrm: TMainformFrm
           Font.Color = clYellow
           Font.Height = -15
           Font.Name = 'Verdana'
-          Font.Style = [fsBold, fsUnderline]
+          Font.Style = [fsBold]
           ParentFont = False
           OnClick = OpenPaperlessBrowserLblClick
         end

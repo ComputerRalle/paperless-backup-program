@@ -1297,7 +1297,9 @@ begin
   Panel16.ParentBackground := False;
   Panel16.StyleElements := Panel16.StyleElements - [seClient];
   Panel16.Color := $00234D11;
-
+  OpenPaperlessBrowserLbl.StyleElements := OpenPaperlessBrowserLbl.StyleElements - [seFont];
+  OpenPaperlessBrowserLbl.Font.Color := clYellow;
+  OpenPaperlessBrowserLbl.Font.Style := [fsBold];
   StaticText3.Caption := '';
   ScriptSavedLbl.Caption := '';
   StaticText3.Caption := '';
