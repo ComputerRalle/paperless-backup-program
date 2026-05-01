@@ -161,6 +161,7 @@ type
     NetHTTPClient1: TNetHTTPClient;
     ProgramUpdateLbl: TLabel;
     ProgressBar1: TProgressBar;
+    BusyWaitLbl: TLabel;
     procedure StartPaperlessBackupBtnClick(Sender: TObject);
     procedure BuyMeACoffeeBtnClick(Sender: TObject);
     procedure StartCmdScript;
@@ -227,6 +228,9 @@ type
     procedure WaitForScriptWithProgress(const ProcessHandle: THandle; const StatusText, OutputLogPath: string);
     procedure CreateDockerComposeWithSetupForm;
     procedure WriteImageVersionWithSetupForm(const TargetPath: string);
+    procedure BeginScriptBusyState;
+    procedure EndScriptBusyState;
+    procedure SaveAndDisableInteractiveControls(const ParentControl: TWinControl);
   public
   end;
 
@@ -254,6 +258,9 @@ var
   PaperlessUpdate: Boolean;
   TrashRetentionDays: Integer;
   CurrentTestedPaperlessVersion: String;
+  ScriptBusy: Boolean;
+  ScriptBusyTabIndex: Integer;
+  ScriptBusyControlStates: TDictionary<TControl, Boolean>;
 
 
 implementation
@@ -459,6 +466,80 @@ begin
     end;
   end;
 end;
+
+// Store and disable interactive controls while a script is running.
+// Interaktive Steuerelemente waehrend eines laufenden Skripts merken und sperren.
+procedure TMainformFrm.SaveAndDisableInteractiveControls(const ParentControl: TWinControl);
+var
+  I: Integer;
+  ChildControl: TControl;
+  ChildWinControl: TWinControl;
+  ShouldDisable: Boolean;
+begin
+  for I := 0 to ParentControl.ControlCount - 1 do
+  begin
+    ChildControl := ParentControl.Controls[I];
+    ChildWinControl := nil;
+    if ChildControl is TWinControl then
+      ChildWinControl := TWinControl(ChildControl);
+
+    ShouldDisable :=
+      (ChildControl is TButton) or
+      (ChildControl is TCheckBox) or
+      (ChildControl is TEdit) or
+      (ChildControl is TSpinEdit) or
+      (ChildControl is TRadioGroup);
+
+    if ShouldDisable and (ChildControl <> BuyMeACoffeBtn) then
+    begin
+      if not ScriptBusyControlStates.ContainsKey(ChildControl) then
+        ScriptBusyControlStates.Add(ChildControl, ChildControl.Enabled);
+      ChildControl.Enabled := False;
+    end;
+
+    if Assigned(ChildWinControl) then
+      SaveAndDisableInteractiveControls(ChildWinControl);
+  end;
+end;
+
+// Put the main form into a non-interactive script-running state.
+// Hauptformular in einen nicht interaktiven Skriptmodus versetzen.
+procedure TMainformFrm.BeginScriptBusyState;
+begin
+  if ScriptBusy then Exit;
+
+  ScriptBusy := True;
+  ScriptBusyTabIndex := TabControl1.TabIndex;
+  if not Assigned(ScriptBusyControlStates) then
+    ScriptBusyControlStates := TDictionary<TControl, Boolean>.Create
+  else
+    ScriptBusyControlStates.Clear;
+
+  SaveAndDisableInteractiveControls(Self);
+  BuyMeACoffeBtn.Enabled := True;
+  BusyWaitLbl.Visible := True;
+end;
+
+// Restore the main form after a script has finished.
+// Hauptformular nach einem Skriptlauf wiederherstellen.
+procedure TMainformFrm.EndScriptBusyState;
+var
+  ControlState: TPair<TControl, Boolean>;
+begin
+  if not ScriptBusy then Exit;
+
+  if Assigned(ScriptBusyControlStates) then
+  begin
+    for ControlState in ScriptBusyControlStates do
+      if Assigned(ControlState.Key) then
+        ControlState.Key.Enabled := ControlState.Value;
+    ScriptBusyControlStates.Clear;
+  end;
+
+  BuyMeACoffeBtn.Enabled := True;
+  BusyWaitLbl.Visible := False;
+  ScriptBusy := False;
+end;
 // Quote a value for use inside a PowerShell command string.
 // Einen Wert fuer die Verwendung in einer PowerShell-Befehlszeile quoten.
 function TMainformFrm.PowerShellQuote(const Value: string): string;
@@ -552,8 +633,10 @@ begin
     Exit;
   end;
 
+  BeginScriptBusyState;
   StartPaperlessBackupBtn.Enabled := False;
   RestorePaperlessBackupBtn.Enabled := False;
+  BusyWaitLbl.Visible := True;
   BackupWiederherProgNeuStartLbl.Visible := True;
   BackupWiederherProgNeuStartLbl.Caption := ShortenScriptStatusText(StatusText);
   ProgressBar1.Min := 0;
@@ -603,6 +686,7 @@ begin
     Exit;
   end;
 
+  EndScriptBusyState;
   StartPaperlessBackupBtn.Enabled := True;
   RestorePaperlessBackupBtn.Enabled := True;
   BackupWiederherProgNeuStartLbl.Visible := True;
@@ -846,6 +930,7 @@ end;
 procedure TMainformFrm.FormClose(Sender: TObject; var Action: TCloseAction);
 begin
   LogInfo('Application closing.');
+  FreeAndNil(ScriptBusyControlStates);
   Action := caNone;         // Stop default close handling.
   // Die Standard-Schließbehandlung stoppen.
   PostQuitMessage(0);       // End the message loop.
@@ -874,6 +959,10 @@ begin
   IsUpdate := False;
   PaperlessUpdate := False;
   TrashRetentionDays := 365;
+  ScriptBusy := False;
+  ScriptBusyTabIndex := 0;
+  ScriptBusyControlStates := nil;
+  BusyWaitLbl.Visible := False;
   ProgressBar1.Visible := False;
   ProgressBar1.Position := 0;
 end;
@@ -1329,6 +1418,12 @@ procedure TMainformFrm.TabControl1Change(Sender: TObject);
 var
   Ini: TIniFile;
 begin
+  if ScriptBusy then
+  begin
+    TabControl1.TabIndex := ScriptBusyTabIndex;
+    Exit;
+  end;
+
   Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
     try
       Ini.WriteString('Pfade', 'DockerComposePfad', IncludeTrailingPathDelimiter(ExtractFilePath(ComposePath)) + DockerComposeFileName);

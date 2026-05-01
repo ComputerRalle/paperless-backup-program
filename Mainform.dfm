@@ -150,6 +150,20 @@ object MainformFrm: TMainformFrm
             'ogramm neu gestartet werden'
           Visible = False
         end
+        object BusyWaitLbl: TLabel
+          Left = 31
+          Top = 13
+          Width = 130
+          Height = 18
+          Caption = 'Bitte warten Sie ...'
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWindowText
+          Font.Height = -15
+          Font.Name = 'Verdana'
+          Font.Style = [fsBold]
+          ParentFont = False
+          Visible = False
+        end
         object ProgressBar1: TProgressBar
           Left = 30
           Top = 69
