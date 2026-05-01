@@ -1,4 +1,4 @@
-﻿// --------------------------------------------------------------
+// --------------------------------------------------------------
 // Original author: Ralf-Peter Kleinert - 2025
 // Ursprünglicher Autor: Ralf-Peter Kleinert - 2025
 // Alias: #ComputerRalle / DIGITAL-easy
@@ -254,6 +254,7 @@ begin
   ProgressBar2.Max := 100;
   ProgressBar2.Position := 0;
   ProgressBar2.Visible := False;
+
   // Make link labels readable in dark mode.
   // Link-Beschriftungen im dunklen Modus lesbar machen.
   with LinkKlickLbl do
