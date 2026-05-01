@@ -107,6 +107,7 @@ type
     Label16: TLabel;
     Label17: TLabel;
     HabeUpdaetGemachtCb: TCheckBox;
+    OpenPaperlessBrowserLbl: TLabel;
     Label18: TLabel;
     SettingsPan: TPanel;
     Label26: TLabel;
@@ -196,6 +197,7 @@ type
     procedure StartAndMonitorRestart;
     procedure SaveBlankEmailSettings();
     procedure UpdateDoneCbClick(Sender: TObject);
+    procedure OpenPaperlessBrowserLblClick(Sender: TObject);
     procedure TrashRetentionEditChange(Sender: TObject);
     procedure SaveSettingsBtnClick(Sender: TObject);
     procedure ImprintLblClick(Sender: TObject);
@@ -467,7 +469,6 @@ begin
     end;
   end;
 end;
-
 // Store and disable interactive controls while a script is running.
 // Interaktive Steuerelemente waehrend eines laufenden Skripts merken und sperren.
 procedure TMainformFrm.SaveAndDisableInteractiveControls(const ParentControl: TWinControl);
@@ -483,44 +484,37 @@ begin
     ChildWinControl := nil;
     if ChildControl is TWinControl then
       ChildWinControl := TWinControl(ChildControl);
-
     ShouldDisable :=
       (ChildControl is TButton) or
       (ChildControl is TCheckBox) or
       (ChildControl is TEdit) or
       (ChildControl is TSpinEdit) or
       (ChildControl is TRadioGroup);
-
     if ShouldDisable and (ChildControl <> BuyMeACoffeBtn) then
     begin
       if not ScriptBusyControlStates.ContainsKey(ChildControl) then
         ScriptBusyControlStates.Add(ChildControl, ChildControl.Enabled);
       ChildControl.Enabled := False;
     end;
-
     if Assigned(ChildWinControl) then
       SaveAndDisableInteractiveControls(ChildWinControl);
   end;
 end;
-
 // Put the main form into a non-interactive script-running state.
 // Hauptformular in einen nicht interaktiven Skriptmodus versetzen.
 procedure TMainformFrm.BeginScriptBusyState;
 begin
   if ScriptBusy then Exit;
-
   ScriptBusy := True;
   ScriptBusyTabIndex := TabControl1.TabIndex;
   if not Assigned(ScriptBusyControlStates) then
     ScriptBusyControlStates := TDictionary<TControl, Boolean>.Create
   else
     ScriptBusyControlStates.Clear;
-
   SaveAndDisableInteractiveControls(Self);
   BuyMeACoffeBtn.Enabled := True;
   BusyWaitLbl.Visible := True;
 end;
-
 // Restore the main form after a script has finished.
 // Hauptformular nach einem Skriptlauf wiederherstellen.
 procedure TMainformFrm.EndScriptBusyState;
@@ -528,7 +522,6 @@ var
   ControlState: TPair<TControl, Boolean>;
 begin
   if not ScriptBusy then Exit;
-
   if Assigned(ScriptBusyControlStates) then
   begin
     for ControlState in ScriptBusyControlStates do
@@ -536,7 +529,6 @@ begin
         ControlState.Key.Enabled := ControlState.Value;
     ScriptBusyControlStates.Clear;
   end;
-
   BuyMeACoffeBtn.Enabled := True;
   BusyWaitLbl.Visible := False;
   ScriptBusy := False;
@@ -616,7 +608,6 @@ begin
   if Length(Result) > MaxStatusTextLength then
     Result := Copy(Result, 1, MaxStatusTextLength - 3).TrimRight + '...';
 end;
-
 // Build the headline shown above the live script output.
 // Die Ueberschrift oberhalb der laufenden Skriptausgabe erzeugen.
 function TMainformFrm.BuildBusyWaitText(const StatusText: string): string;
@@ -647,7 +638,6 @@ begin
     Application.ProcessMessages;
     Exit;
   end;
-
   BeginScriptBusyState;
   StartPaperlessBackupBtn.Enabled := False;
   RestorePaperlessBackupBtn.Enabled := False;
@@ -676,7 +666,6 @@ begin
     Application.ProcessMessages;
     Exit;
   end;
-
   BackupWiederherProgNeuStartLbl.Visible := True;
   BackupWiederherProgNeuStartLbl.Caption := ShortenScriptStatusText(StatusText);
   if ProgressBar1.Position >= ProgressBar1.Max then
@@ -701,7 +690,6 @@ begin
     Application.ProcessMessages;
     Exit;
   end;
-
   EndScriptBusyState;
   StartPaperlessBackupBtn.Enabled := True;
   RestorePaperlessBackupBtn.Enabled := True;
@@ -780,7 +768,6 @@ begin
     CenteredShowMessage('Bitte zuerst den Paperless-Ordner auswählen.');
     Exit;
   end;
-
   WriteComposeContainerAndVolumeInfo(ComposePath);
   StartPaperlessBackupBtn.Enabled := False;
   RestorePaperlessBackupBtn.Enabled := False;
@@ -1447,7 +1434,6 @@ begin
     TabControl1.TabIndex := ScriptBusyTabIndex;
     Exit;
   end;
-
   Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
     try
       Ini.WriteString('Pfade', 'DockerComposePfad', IncludeTrailingPathDelimiter(ExtractFilePath(ComposePath)) + DockerComposeFileName);
@@ -2192,7 +2178,6 @@ var
   SettingsSaved: Boolean;
 begin
   SettingsSaved := False;
-
   // Build the full path to the file.
   // Den vollständigen Pfad zur Datei erstellen.
   EnvFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + EmailEnvFileName;
@@ -2247,9 +2232,7 @@ begin
   // Clean up.
   // Aufräumen.
   EnvList.Free;
-
   if not SettingsSaved then Exit;
-
     // Restart after changing email settings.
     // Nach Änderung der E-Mail-Einstellungen neu starten.
      CenteredMessageBox('Paperless muss neu gestartet werden, um die Einstellungen zu übernehmen.', 'Information',
@@ -2527,7 +2510,12 @@ begin
   PaperlessUpdateBtn.Enabled := False else
   PaperlessUpdateBtn.Enabled := True;
 end;
-
+// Open the local Paperless installation in the default browser.
+// Die lokale Paperless-Installation im Standardbrowser oeffnen.
+procedure TMainformFrm.OpenPaperlessBrowserLblClick(Sender: TObject);
+begin
+  ShellExecute(0, 'open', PaperlessLocalUrlWithSlash, nil, nil, SW_SHOWNORMAL);
+end;
 // Create paperless-restore.ps1 for the selected backup folder.
 // paperless-restore.ps1 für den ausgewählten Backup-Ordner erstellen.
 // The script restores the database dump and all Paperless Docker volumes.
@@ -3018,7 +3006,6 @@ begin
 
   CloseHandle(StdOutWrite);
   StdOutWrite := 0;
-
   WaitResult := WaitForSingleObject(PI.hProcess, CommandTimeoutMs);
   if WaitResult = WAIT_TIMEOUT then
   begin
@@ -3028,7 +3015,6 @@ begin
     CloseHandle(StdOutRead);
     Exit('');
   end;
-
   Output := '';
   repeat
     BytesRead := 0;
