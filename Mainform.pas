@@ -222,6 +222,7 @@ type
     function BuildPowerShellCommand(const ScriptPath, OutputLogPath: string): string;
     function ReadLastScriptOutputLine(const OutputLogPath, FallbackText: string): string;
     function ShortenScriptStatusText(const StatusText: string): string;
+    function BuildBusyWaitText(const StatusText: string): string;
     procedure PrepareScriptProgress(const StatusText: string);
     procedure UpdateScriptProgress(const StatusText: string);
     procedure FinishScriptProgress(const StatusText: string; const Success: Boolean);
@@ -615,6 +616,20 @@ begin
   if Length(Result) > MaxStatusTextLength then
     Result := Copy(Result, 1, MaxStatusTextLength - 3).TrimRight + '...';
 end;
+
+// Build the headline shown above the live script output.
+// Die Ueberschrift oberhalb der laufenden Skriptausgabe erzeugen.
+function TMainformFrm.BuildBusyWaitText(const StatusText: string): string;
+begin
+  if IsBackup then
+    Result := 'Backup läuft. Bitte warten ...'
+  else if IsUpdate or PaperlessUpdate or StatusText.Contains('Update') then
+    Result := 'Update läuft. Bitte warten ...'
+  else if StatusText.Contains('Neustart') then
+    Result := 'Neustart läuft. Bitte warten ...'
+  else
+    Result := 'Wiederherstellung läuft. Bitte warten ...';
+end;
 // Prepare the in-application script status display.
 // Die Statusanzeige fuer laufende Skripte in der Anwendung vorbereiten.
 procedure TMainformFrm.PrepareScriptProgress(const StatusText: string);
@@ -637,6 +652,7 @@ begin
   StartPaperlessBackupBtn.Enabled := False;
   RestorePaperlessBackupBtn.Enabled := False;
   BusyWaitLbl.Visible := True;
+  BusyWaitLbl.Caption := BuildBusyWaitText(StatusText);
   BackupWiederherProgNeuStartLbl.Visible := True;
   BackupWiederherProgNeuStartLbl.Caption := ShortenScriptStatusText(StatusText);
   ProgressBar1.Min := 0;
@@ -759,6 +775,12 @@ var
   StoredPath: string;
   TextFilePath: string;
 begin
+  if ComposePath.Trim = '' then
+  begin
+    CenteredShowMessage('Bitte zuerst den Paperless-Ordner auswählen.');
+    Exit;
+  end;
+
   WriteComposeContainerAndVolumeInfo(ComposePath);
   StartPaperlessBackupBtn.Enabled := False;
   RestorePaperlessBackupBtn.Enabled := False;
@@ -846,6 +868,8 @@ begin
         else
         begin
           CenteredShowMessage('Es wurde kein Ordner gewählt. Backupvorgang abgebrochen.');
+          StartPaperlessBackupBtn.Enabled := True;
+          RestorePaperlessBackupBtn.Enabled := True;
           Exit;
         end;
       finally
@@ -1706,7 +1730,13 @@ begin
   ShellExecuteInfo.lpFile := PChar('powershell.exe');
   ShellExecuteInfo.lpParameters := PChar('-NoProfile -ExecutionPolicy Bypass -File "' + CmdTargetPath + '"');
   ShellExecuteInfo.nShow := SW_SHOWNORMAL;
-  ShellExecuteEx(@ShellExecuteInfo);
+  if ShellExecuteEx(@ShellExecuteInfo) then
+  begin
+    if ShellExecuteInfo.hProcess <> 0 then
+      CloseHandle(ShellExecuteInfo.hProcess);
+  end
+  else
+    CenteredShowMessage('Zeitplan-Entfernen-Skript konnte nicht gestartet werden.');
 
   // Reset the checkbox.
   // Die Checkbox zurücksetzen.
@@ -1884,7 +1914,13 @@ begin
   ShellExecuteInfo.lpFile := PChar('powershell.exe');
   ShellExecuteInfo.lpParameters := PChar('-NoProfile -ExecutionPolicy Bypass -File "' + ScriptPath + '"');
   ShellExecuteInfo.nShow := SW_SHOWNORMAL;
-  ShellExecuteEx(@ShellExecuteInfo);
+  if ShellExecuteEx(@ShellExecuteInfo) then
+  begin
+    if ShellExecuteInfo.hProcess <> 0 then
+      CloseHandle(ShellExecuteInfo.hProcess);
+  end
+  else
+    CenteredShowMessage('Zeitplan-Anlegen-Skript konnte nicht gestartet werden.');
 end;
 
 // Load saved Paperless email settings from email-versand.env.
@@ -2153,7 +2189,10 @@ procedure TMainformFrm.SaveEmailSettingsBtnClick(Sender: TObject);
 var
   EnvList: TStringList;
   EnvFilePath: string;
+  SettingsSaved: Boolean;
 begin
+  SettingsSaved := False;
+
   // Build the full path to the file.
   // Den vollständigen Pfad zur Datei erstellen.
   EnvFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + EmailEnvFileName;
@@ -2199,10 +2238,7 @@ begin
     // Save the file.
     // Die Datei speichern.
     EnvList.SaveToFile(EnvFilePath, TEncoding.ANSI);
-
-    // Show confirmation when no restart is pending.
-    // Bestätigung anzeigen, wenn kein Neustart aussteht.
-    if IsUpdate = False then
+    SettingsSaved := True;
   except
     on E: Exception do
       CenteredShowMessage('Fehler beim Speichern der Datei: ' + E.Message);
@@ -2211,6 +2247,8 @@ begin
   // Clean up.
   // Aufräumen.
   EnvList.Free;
+
+  if not SettingsSaved then Exit;
 
     // Restart after changing email settings.
     // Nach Änderung der E-Mail-Einstellungen neu starten.
@@ -2325,43 +2363,53 @@ begin
   MaxBackupFolders := KeepBackupsSpE.Value;
   if (MaxBackupFolders > 0) and DirectoryExists(BackupPath) then
   begin
-    BackupFolderList := TDirectory.GetDirectories(BackupPath);
-    TArray.Sort<string>(BackupFolderList, TComparer<string>.Construct(
-      function(const L, R: string): Integer
-      var
-        DL, DR: TDateTime;
-        function FolderNameToDateTime(const Folder: string): TDateTime;
+    try
+      BackupFolderList := TDirectory.GetDirectories(BackupPath);
+      TArray.Sort<string>(BackupFolderList, TComparer<string>.Construct(
+        function(const L, R: string): Integer
         var
-          Name: string;
-          Year, Month, Day, Hour, Minute, Second: Word;
-        begin
-          Result := 0;
-          Name := ExtractFileName(Folder);
-          try
-            Year   := StrToInt(Copy(Name, 1, 4));
-            Month  := StrToInt(Copy(Name, 6, 2));
-            Day    := StrToInt(Copy(Name, 9, 2));
-            Hour := StrToInt(Copy(Name, 12, 2));
-            Minute := StrToInt(Copy(Name, 15, 2));
-            Second:= StrToInt(Copy(Name, 18, 2));
-            Result := EncodeDateTime(Year, Month, Day, Hour, Minute, Second, 0);
-          except
+          DL, DR: TDateTime;
+          function FolderNameToDateTime(const Folder: string): TDateTime;
+          var
+            Name: string;
+            Year, Month, Day, Hour, Minute, Second: Word;
+          begin
             Result := 0;
+            Name := ExtractFileName(Folder);
+            try
+              Year   := StrToInt(Copy(Name, 1, 4));
+              Month  := StrToInt(Copy(Name, 6, 2));
+              Day    := StrToInt(Copy(Name, 9, 2));
+              Hour := StrToInt(Copy(Name, 12, 2));
+              Minute := StrToInt(Copy(Name, 15, 2));
+              Second:= StrToInt(Copy(Name, 18, 2));
+              Result := EncodeDateTime(Year, Month, Day, Hour, Minute, Second, 0);
+            except
+              Result := 0;
+            end;
+          end;
+        begin
+          DL := FolderNameToDateTime(L);
+          DR := FolderNameToDateTime(R);
+          Result := CompareDateTime(DL, DR); // Ascending: oldest first.
+          // Aufsteigend: älteste zuerst.
+        end));
+      if Length(BackupFolderList) > MaxBackupFolders then
+      begin
+        for var i := 0 to Length(BackupFolderList) - MaxBackupFolders - 1 do
+        begin
+          try
+            TDirectory.Delete(BackupFolderList[i], True); // Delete oldest folders.
+            // Die ältesten Ordner löschen.
+          except
+            on E: Exception do
+              LogWarning('Could not delete old planned backup folder "' + BackupFolderList[i] + '": ' + E.Message);
           end;
         end;
-      begin
-        DL := FolderNameToDateTime(L);
-        DR := FolderNameToDateTime(R);
-        Result := CompareDateTime(DL, DR); // Ascending: oldest first.
-        // Aufsteigend: älteste zuerst.
-      end));
-    if Length(BackupFolderList) > MaxBackupFolders then
-    begin
-      for var i := 0 to Length(BackupFolderList) - MaxBackupFolders - 1 do
-      begin
-        TDirectory.Delete(BackupFolderList[i], True); // Delete oldest folders.
-        // Die ältesten Ordner löschen.
       end;
+    except
+      on E: Exception do
+        LogWarning('Could not clean planned backup folders: ' + E.Message);
     end;
   end;
 end;
@@ -2424,6 +2472,8 @@ begin
   if ComposePath = '' then
   begin
     CenteredShowMessage('Bitte zuerst den Paperless-Ordner auswählen.');
+    StartPaperlessBackupBtn.Enabled := True;
+    RestorePaperlessBackupBtn.Enabled := True;
     Exit;
   end;
   // Start the restore folder picker in the last known backup target folder.
@@ -2932,6 +2982,8 @@ end;
 // Run a shell command hidden and return its text output.
 // Einen Shell-Befehl versteckt ausführen und seine Textausgabe zurückgeben.
 function TMainformFrm.ExecuteShellCommand(const Command, Params: string): string;
+const
+  CommandTimeoutMs = 120000;
 var
   SA: TSecurityAttributes;
   SI: TStartupInfo;
@@ -2939,6 +2991,7 @@ var
   StdOutRead, StdOutWrite: THandle;
   Buffer: array[0..4095] of AnsiChar;
   BytesRead: DWORD;
+  WaitResult: DWORD;
   Output: AnsiString;
 begin
   ZeroMemory(@SA, SizeOf(SA));
@@ -2964,6 +3017,17 @@ begin
   end;
 
   CloseHandle(StdOutWrite);
+  StdOutWrite := 0;
+
+  WaitResult := WaitForSingleObject(PI.hProcess, CommandTimeoutMs);
+  if WaitResult = WAIT_TIMEOUT then
+  begin
+    TerminateProcess(PI.hProcess, DWORD(-1));
+    CloseHandle(PI.hProcess);
+    CloseHandle(PI.hThread);
+    CloseHandle(StdOutRead);
+    Exit('');
+  end;
 
   Output := '';
   repeat
