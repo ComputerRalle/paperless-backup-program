@@ -763,8 +763,8 @@ begin
   if not FileExists(SourceEnvPath) then
     Exit;
   if not RequestPasswordDialog(
-    'Mail-Einstellungen verschluesseln',
-    'Die Datei email-versand.env enthaelt Mailkontodaten und wird fuer das Backup verschluesselt.' + sLineBreak + sLineBreak +
+    'Mail-Einstellungen verschlüsseln',
+    'Die Datei email-versand.env enthält Mailkontodaten und wird für das Backup verschlüsselt.' + sLineBreak + sLineBreak +
     'Bitte bewahren Sie Ihr Passwort sicher auf, z.B. in KeePass. Wenn Sie das Passwort verlieren, kann die Mail-Einstellungsdatei nicht wiederhergestellt werden.',
     True,
     Password) then
@@ -780,7 +780,7 @@ begin
     LogInfo('Encrypted email env file written to backup.');
   except
     on E: Exception do
-      CenteredShowMessage('Mail-Einstellungen konnten nicht verschluesselt werden: ' + E.Message);
+    CenteredShowMessage('Mail-Einstellungen konnten nicht verschlüsselt werden: ' + E.Message);
   end;
 end;
 procedure TMainformFrm.RestoreEmailEnvFromBackup(const SourceBackupPath, TargetComposePath: string);
@@ -795,7 +795,7 @@ begin
   end;
   if not RequestPasswordDialog(
     'Mail-Einstellungen wiederherstellen',
-    'Im Backup wurde eine verschluesselte Mail-Einstellungsdatei gefunden.' + sLineBreak + sLineBreak +
+    'Im Backup wurde eine verschlüsselte Mail-Einstellungsdatei gefunden.' + sLineBreak + sLineBreak +
     'Bitte geben Sie das Passwort ein. Wenn Sie das Passwort verlieren, kann die Mail-Einstellungsdatei nicht wiederhergestellt werden.',
     False,
     Password) then

@@ -247,7 +247,7 @@ begin
       begin
         if PasswordEdit.Text <> ConfirmEdit.Text then
         begin
-          CenteredShowMessage('Die Passwoerter stimmen nicht ueberein.');
+          CenteredShowMessage('Die Passwörter stimmen nicht überein.');
           Continue;
         end;
       end;
