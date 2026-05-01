@@ -6,6 +6,16 @@ Alle wichtigen Aenderungen an diesem Projekt werden hier dokumentiert.
 
 ## Unreleased / Noch nicht veroeffentlicht
 
+- Added password-based encryption for Paperless mail settings in backups as `email-versand.env.enc`.
+- Passwortbasierte Verschluesselung fuer Paperless-Mail-Einstellungen in Backups als `email-versand.env.enc` ergaenzt.
+- Added a masked password dialog with password confirmation for encrypted mail settings backups.
+- Maskierten Passwortdialog mit Passwortwiederholung fuer verschluesselte Mail-Einstellungs-Backups ergaenzt.
+- Restores now decrypt `email-versand.env.enc` back to `email-versand.env` when the encrypted file exists and the user provides the correct password.
+- Wiederherstellungen entschluesseln `email-versand.env.enc` wieder zu `email-versand.env`, wenn die verschluesselte Datei vorhanden ist und das richtige Passwort eingegeben wird.
+- Kept mail settings restore optional so older backups without `email-versand.env.enc` continue without error.
+- Wiederherstellung der Mail-Einstellungen optional gehalten, damit aeltere Backups ohne `email-versand.env.enc` ohne Fehler weiterlaufen.
+- Documented the Windows CNG based encryption approach and password-loss limitation.
+- Windows-CNG-basierte Verschluesselung und die Einschraenkung bei verlorenem Passwort dokumentiert.
 - Switched generated backup, restore, restart, update, and scheduler scripts from CMD to PowerShell.
 - Generierte Backup-, Wiederherstellungs-, Neustart-, Update- und Zeitplan-Skripte von CMD auf PowerShell umgestellt.
 - Switched generated PowerShell scripts from the isolated Django ContentType migration to the full Django database migration.

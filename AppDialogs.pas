@@ -26,6 +26,7 @@ procedure CenteredShowMessage(const Msg: string);
 function CenteredMessageDlg(const Msg: string; DlgType: TMsgDlgType; Buttons: TMsgDlgButtons; HelpCtx: Longint): Integer;
 function CenteredMessageBox(const Text, Caption: string; Flags: Cardinal): Integer;
 function RequestPasswordDialog(const DialogCaption, Prompt: string; const ConfirmPassword: Boolean; out Password: string): Boolean;
+function RequestPasswordOrSkipDialog(const DialogCaption, Prompt, SkipButtonCaption: string; out Password: string): Integer;
 
 implementation
 
@@ -254,6 +255,99 @@ begin
 
       Password := PasswordEdit.Text;
       Result := True;
+      Exit;
+    finally
+      Dialog.Free;
+    end;
+  until False;
+end;
+
+function RequestPasswordOrSkipDialog(const DialogCaption, Prompt, SkipButtonCaption: string; out Password: string): Integer;
+var
+  Dialog: TForm;
+  PromptLbl, PasswordLbl: TLabel;
+  PasswordEdit: TEdit;
+  OkBtn, SkipBtn, CancelBtn: TButton;
+  OwnerHandle: HWND;
+  ButtonTop: Integer;
+begin
+  Password := '';
+
+  repeat
+    Dialog := TForm.Create(nil);
+    try
+      Dialog.BorderStyle := bsDialog;
+      Dialog.Caption := DialogCaption;
+      Dialog.ClientWidth := 640;
+      Dialog.ClientHeight := 250;
+      Dialog.Position := poDesigned;
+
+      PromptLbl := TLabel.Create(Dialog);
+      PromptLbl.Parent := Dialog;
+      PromptLbl.Left := 16;
+      PromptLbl.Top := 16;
+      PromptLbl.Width := Dialog.ClientWidth - 32;
+      PromptLbl.AutoSize := False;
+      PromptLbl.WordWrap := True;
+      PromptLbl.Caption := Prompt;
+      PromptLbl.Height := 92;
+
+      PasswordLbl := TLabel.Create(Dialog);
+      PasswordLbl.Parent := Dialog;
+      PasswordLbl.Left := 16;
+      PasswordLbl.Top := PromptLbl.Top + PromptLbl.Height + 12;
+      PasswordLbl.Caption := 'Passwort:';
+
+      PasswordEdit := TEdit.Create(Dialog);
+      PasswordEdit.Parent := Dialog;
+      PasswordEdit.Left := 160;
+      PasswordEdit.Top := PasswordLbl.Top - 3;
+      PasswordEdit.Width := Dialog.ClientWidth - 176;
+      PasswordEdit.PasswordChar := '*';
+
+      ButtonTop := PasswordEdit.Top + 42;
+
+      OkBtn := TButton.Create(Dialog);
+      OkBtn.Parent := Dialog;
+      OkBtn.Caption := 'OK';
+      OkBtn.ModalResult := mrOk;
+      OkBtn.Default := True;
+      OkBtn.Width := 90;
+      OkBtn.Left := Dialog.ClientWidth - 420;
+      OkBtn.Top := ButtonTop;
+
+      SkipBtn := TButton.Create(Dialog);
+      SkipBtn.Parent := Dialog;
+      SkipBtn.Caption := SkipButtonCaption;
+      SkipBtn.ModalResult := mrIgnore;
+      SkipBtn.Width := 200;
+      SkipBtn.Left := Dialog.ClientWidth - 322;
+      SkipBtn.Top := ButtonTop;
+
+      CancelBtn := TButton.Create(Dialog);
+      CancelBtn.Parent := Dialog;
+      CancelBtn.Caption := 'Abbrechen';
+      CancelBtn.ModalResult := mrCancel;
+      CancelBtn.Cancel := True;
+      CancelBtn.Width := 100;
+      CancelBtn.Left := Dialog.ClientWidth - 108;
+      CancelBtn.Top := ButtonTop;
+
+      Dialog.ClientHeight := ButtonTop + 48;
+      OwnerHandle := ActiveFormHandle;
+      CenterWindowOnOwner(Dialog.Handle, OwnerHandle);
+
+      Result := Dialog.ShowModal;
+      if Result <> mrOk then
+        Exit;
+
+      if Trim(PasswordEdit.Text) = '' then
+      begin
+        CenteredShowMessage('Bitte geben Sie ein Passwort ein.');
+        Continue;
+      end;
+
+      Password := PasswordEdit.Text;
       Exit;
     finally
       Dialog.Free;

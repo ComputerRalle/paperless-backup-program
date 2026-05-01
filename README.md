@@ -24,6 +24,8 @@ vorbereiten und ausgewaehlte Docker-Image-Versionen verwalten.
 - Docker-Image-Versionen mit Backups speichern, um spaeter die Kompatibilitaet pruefen zu koennen.
 - Configure Paperless mail settings through `email-versand.env`.
 - Paperless-Mail-Einstellungen ueber `email-versand.env` konfigurieren.
+- Store Paperless mail settings in backups as encrypted `email-versand.env.enc`.
+- Paperless-Mail-Einstellungen in Backups als verschluesselte `email-versand.env.enc` speichern.
 
 ## Requirements / Voraussetzungen
 
@@ -68,6 +70,10 @@ Die Anwendung speichert Laufzeiteinstellungen im Benutzerprofil:
 - Die Wiederherstellung importiert den Secret Key aus `paperless_secret_key.txt`; aeltere Backups ohne diese Datei verwenden den Legacy-Key.
 - Keep this backup file private because it contains sensitive installation data.
 - Diese Backup-Datei privat halten, da sie sensible Installationsdaten enthaelt.
+- Mail settings are encrypted in backups with a user-provided password using Windows CNG (`bcrypt.dll`), PBKDF2-HMAC-SHA256, AES-256-CBC, and HMAC-SHA256.
+- Mail-Einstellungen werden in Backups mit einem vom Benutzer vergebenen Passwort verschluesselt. Verwendet werden Windows CNG (`bcrypt.dll`), PBKDF2-HMAC-SHA256, AES-256-CBC und HMAC-SHA256.
+- The backup password is not stored. If it is lost, `email-versand.env.enc` cannot be restored.
+- Das Backup-Passwort wird nicht gespeichert. Wenn es verloren geht, kann `email-versand.env.enc` nicht wiederhergestellt werden.
 - Use at your own risk.
 - Verwendung auf eigene Gefahr.
 
@@ -83,6 +89,8 @@ Die Anwendung speichert Laufzeiteinstellungen im Benutzerprofil:
 - `AppLogger.pas` - Anwendungslogging fuer einfache Diagnose.
 - `AppDialogs.pas` - centered application dialogs and message boxes.
 - `AppDialogs.pas` - zentrierte Anwendungsdialoge und Meldungsfenster.
+- `Crypto.pas` - password-based encryption helpers for sensitive backup files.
+- `Crypto.pas` - passwortbasierte Verschluesselungshelfer fuer sensible Backup-Dateien.
 - `ScriptGenerator.pas` - generation of backup, restore, restart, and scheduler scripts.
 - `ScriptGenerator.pas` - generation of PowerShell backup, restore, restart, and scheduler scripts.
 - `ScriptGenerator.pas` - Erzeugung von PowerShell-Skripten fuer Backup, Wiederherstellung, Neustart und Zeitplan.

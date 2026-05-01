@@ -786,6 +786,7 @@ end;
 procedure TMainformFrm.RestoreEmailEnvFromBackup(const SourceBackupPath, TargetComposePath: string);
 var
   SourceEncryptedPath, TargetEnvPath, Password: string;
+  PasswordResult: Integer;
 begin
   SourceEncryptedPath := IncludeTrailingPathDelimiter(SourceBackupPath) + EmailEnvEncryptedFileName;
   if not FileExists(SourceEncryptedPath) then
@@ -793,12 +794,19 @@ begin
     LogInfo('No encrypted email env file found in backup. Restore step skipped.');
     Exit;
   end;
-  if not RequestPasswordDialog(
+  PasswordResult := RequestPasswordOrSkipDialog(
     'Mail-Einstellungen wiederherstellen',
     'Im Backup wurde eine verschlüsselte Mail-Einstellungsdatei gefunden.' + sLineBreak + sLineBreak +
     'Bitte geben Sie das Passwort ein. Wenn Sie das Passwort verlieren, kann die Mail-Einstellungsdatei nicht wiederhergestellt werden.',
-    False,
-    Password) then
+    'Ohne Mail wiederherstellen',
+    Password);
+  if PasswordResult = mrIgnore then
+  begin
+    CenteredShowMessage('Wiederherstellung wird ohne Mail-Einstellungen fortgesetzt.');
+    LogInfo('Encrypted email env restore skipped by user.');
+    Exit;
+  end;
+  if PasswordResult <> mrOk then
   begin
     CenteredShowMessage('Mail-Einstellungen wurden nicht wiederhergestellt.');
     Exit;
@@ -809,7 +817,19 @@ begin
     LogInfo('Encrypted email env file restored.');
   except
     on E: Exception do
-      CenteredShowMessage('Mail-Einstellungen konnten nicht wiederhergestellt werden: ' + E.Message);
+    begin
+      LogWarning('Encrypted email env restore failed: ' + E.Message);
+      if CenteredMessageDlg(
+        'Passwort falsch. Paperless ohne Maileinstellungen wiederherstellen?',
+        mtConfirmation,
+        [mbYes, mbNo],
+        0) = mrYes then
+      begin
+        CenteredShowMessage('Wiederherstellung wird ohne Mail-Einstellungen fortgesetzt.');
+        Exit;
+      end;
+      CenteredShowMessage('Mail-Einstellungen wurden nicht wiederhergestellt.');
+    end;
   end;
 end;
 // Open the support page in the default browser.
