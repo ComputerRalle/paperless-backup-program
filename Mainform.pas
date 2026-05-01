@@ -239,6 +239,7 @@ var
   // Laufzeitmodus-Flags. Sie entscheiden, welches Skript erstellt wird und was nach dessen Ende passiert.
   IsBackup: Boolean;
   IsPaperlessInstallation, ShouldOpenPaperless: Boolean;
+  IsApplyingEmailSettings: Boolean;
   InternalName, FileVersion: string;
   // Docker container and volume names detected from the current compose project.
   // Docker-Container- und Volume-Namen, die aus dem aktuellen Compose-Projekt erkannt wurden.
@@ -604,7 +605,9 @@ end;
 // Die Ueberschrift oberhalb der laufenden Skriptausgabe erzeugen.
 function TMainformFrm.BuildBusyWaitText(const StatusText: string): string;
 begin
-  if IsBackup then
+  if StatusText.Contains('Mail-Einstellungen') then
+    Result := 'Mail-Einstellungen werden angewendet. Bitte warten ...'
+  else if IsBackup then
     Result := 'Backup läuft. Bitte warten ...'
   else if IsUpdate or PaperlessUpdate or StatusText.Contains('Update') then
     Result := 'Update läuft. Bitte warten ...'
@@ -966,6 +969,7 @@ begin
   IsBackup := False;
   IsPaperlessInstallation := False;
   ShouldOpenPaperless := False;
+  IsApplyingEmailSettings := False;
   IsUpdate := False;
   PaperlessUpdate := False;
   TrashRetentionDays := 365;
@@ -2236,7 +2240,9 @@ begin
     TabControl1Change(TabControl1);
     Application.ProcessMessages;
     SaveEmailSettingsBtn.Enabled:=False;
+    IsApplyingEmailSettings := True;
     CreateRestartScript(ExtractFilePath(ComposePath));
+    IsApplyingEmailSettings := False;
 end;
 
 // Create the default email-versand.env file when it is missing.
@@ -2715,7 +2721,9 @@ var
   RunningStatus: string;
   OutputLogPath: string;
   ExitCode: DWORD;
+  WasApplyingEmailSettings: Boolean;
 begin
+  WasApplyingEmailSettings := IsApplyingEmailSettings;
   FillChar(StartupInfo, SizeOf(TStartupInfo), 0);
   StartupInfo.cb := SizeOf(TStartupInfo);
   StartupInfo.dwFlags := STARTF_USESHOWWINDOW;
@@ -2723,7 +2731,9 @@ begin
   OutputLogPath := PrepareScriptOutputLog;
   Cmd := BuildPowerShellCommand(CmdTargetPath, OutputLogPath); // Script path.
   // Skriptpfad.
-  if PaperlessUpdate then
+  if WasApplyingEmailSettings then
+    RunningStatus := 'Mail-Einstellungen werden angewendet...'
+  else if PaperlessUpdate then
     RunningStatus := 'Update wird gestartet...'
   else
     RunningStatus := 'Neustart wird gestartet...';
@@ -2749,10 +2759,20 @@ begin
       // Exit-Code 0 bedeutet Erfolg.
       if ExitCode = 0 then
       begin
-        FinishScriptProgress('Neustart abgeschlossen.', True);
-        CenteredMessageBox('Neustart abgeschlossen. Sie können das Programm jetzt schließen.' + #13#10 +
-          'Bitte geben Sie den Paperless Komponenten Zeit zum starten.',
-          'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
+        if WasApplyingEmailSettings then
+        begin
+          FinishScriptProgress('Mail-Einstellungen angewendet.', True);
+          CenteredMessageBox('Mail-Einstellungen wurden angewendet. Sie können das Programm jetzt schließen.' + #13#10 +
+            'Bitte geben Sie den Paperless Komponenten Zeit zum starten.',
+            'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
+        end
+        else
+        begin
+          FinishScriptProgress('Neustart abgeschlossen.', True);
+          CenteredMessageBox('Neustart abgeschlossen. Sie können das Programm jetzt schließen.' + #13#10 +
+            'Bitte geben Sie den Paperless Komponenten Zeit zum starten.',
+            'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
+        end;
       end
       else
       begin
@@ -2769,6 +2789,8 @@ begin
     end;
     ActiveControl := nil; // Remove focus from the current control.
     // Den Fokus vom aktuellen Steuerelement entfernen.
+    if WasApplyingEmailSettings then
+      IsApplyingEmailSettings := False;
   end;
 
   if PaperlessUpdate = true then
