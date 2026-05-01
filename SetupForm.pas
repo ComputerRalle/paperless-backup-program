@@ -393,8 +393,12 @@ begin
   // Step 2: Ask for confirmation before installation.
   // Schritt 2: Vor der Installation nach Bestätigung fragen.
   if CenteredMessageDlg('Möchten Sie Paperless jetzt installieren?', mtConfirmation, [mbYes, mbNo], 0) = mrNo then
+  begin
+    WantsInstall := False;
+    IsPaperlessInstallation := False;
+    ShouldOpenPaperless := False;
     Exit;
-
+  end;
   IsPaperlessInstallation := True;
   ShouldOpenPaperless := True;
 

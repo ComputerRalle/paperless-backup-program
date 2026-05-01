@@ -1382,8 +1382,13 @@ begin
         SetupFrm.Free;
         SetupFrm := nil;
       end;
+      if not WantsInstall then
+      begin
+        CenteredShowMessage('Paperless-Installation wurde abgebrochen. Das Programm wird beendet.');
+        Application.Terminate;
+        Exit;
+      end;
     end;
-
     ComposePath := NewComposePath;
   end else
     begin
