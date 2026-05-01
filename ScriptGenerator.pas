@@ -108,6 +108,30 @@ begin
   Lines.Add('');
 end;
 
+procedure AddEmailEnvBackup(const Lines: TStringList);
+begin
+  Lines.Add('  $EmailEnvFile = Join-Path $ComposeDir "email-versand.env"');
+  Lines.Add('  if (Test-Path -LiteralPath $EmailEnvFile) {');
+  Lines.Add('    Copy-Item -LiteralPath $EmailEnvFile -Destination (Join-Path $BackupDir "email-versand.env") -Force');
+  Lines.Add('    Write-Host "email-versand.env wurde ins Backup kopiert."');
+  Lines.Add('  } else {');
+  Lines.Add('    Write-Host "Hinweis: email-versand.env nicht vorhanden. Schritt wird uebersprungen."');
+  Lines.Add('  }');
+  Lines.Add('');
+end;
+
+procedure AddEmailEnvRestore(const Lines: TStringList);
+begin
+  Lines.Add('  $BackupEmailEnvFile = Join-Path $BackupDir "email-versand.env"');
+  Lines.Add('  if (Test-Path -LiteralPath $BackupEmailEnvFile) {');
+  Lines.Add('    Copy-Item -LiteralPath $BackupEmailEnvFile -Destination (Join-Path $ComposeDir "email-versand.env") -Force');
+  Lines.Add('    Write-Host "email-versand.env wurde wiederhergestellt."');
+  Lines.Add('  } else {');
+  Lines.Add('    Write-Host "Hinweis: email-versand.env nicht im Backup gefunden. Schritt wird uebersprungen."');
+  Lines.Add('  }');
+  Lines.Add('');
+end;
+
 procedure AddBestEffortDjangoMigration(const Lines: TStringList);
 begin
   Lines.Add('  Write-Host "Aktualisiere Django-Datenbankstruktur..."');
@@ -146,6 +170,7 @@ begin
     AddVolumeBackup(Lines, Volumes.DbData, 'db_data');
     AddVolumeBackup(Lines, Volumes.ExportData, 'export');
     AddVolumeBackup(Lines, Volumes.Media, 'media');
+    AddEmailEnvBackup(Lines);
     Lines.Add('  Write-Host "Starte Docker-Container neu..."');
     Lines.Add('  Invoke-DockerStep { docker compose up -d } "Fehler beim Starten der Container. Manuell pruefen."');
     Lines.Add('  Write-Host "Nicht mehr verwendete Volumes werden geloescht"');
@@ -191,6 +216,7 @@ begin
     AddVolumeBackup(Lines, Volumes.Data, 'data');
     AddVolumeBackup(Lines, Volumes.Media, 'media');
     AddVolumeBackup(Lines, Volumes.ExportData, 'export');
+    AddEmailEnvBackup(Lines);
     Lines.Add('  Invoke-DockerStep { docker compose up -d } "Fehler beim Starten der Container."');
     Lines.Add('  Invoke-DockerStep { docker volume prune -f } "Fehler beim Bereinigen nicht verwendeter Volumes."');
     Lines.Add('  Add-Content -LiteralPath $PlannedLog -Value ("Backup abgeschlossen: " + (Get-Date))');
@@ -221,6 +247,7 @@ begin
     AddVolumeRestore(Lines, Volumes.Data, 'data');
     AddVolumeRestore(Lines, Volumes.Media, 'media');
     AddVolumeRestore(Lines, Volumes.ExportData, 'export');
+    AddEmailEnvRestore(Lines);
     Lines.Add('  Write-Host "Starte Container..."');
     Lines.Add('  Invoke-DockerStep { docker compose up -d } "Fehler beim Starten der Container."');
     Lines.Add('  Write-Host "Wiederherstellen der PostgreSQL-Datenbank. Bitte haben Sie Geduld..."');
