@@ -79,7 +79,6 @@ begin
   Lines.Add('} catch {');
   Lines.Add('  Write-Host ""');
   Lines.Add('  Write-Host $_.Exception.Message -ForegroundColor Red');
-  Lines.Add('  Read-Host "Fehler. Zum Schliessen ENTER druecken"');
   Lines.Add('  exit 1');
   Lines.Add('}');
   Lines.Add('');

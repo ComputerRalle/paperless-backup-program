@@ -225,6 +225,8 @@ type
     procedure UpdateScriptProgress(const StatusText: string);
     procedure FinishScriptProgress(const StatusText: string; const Success: Boolean);
     procedure WaitForScriptWithProgress(const ProcessHandle: THandle; const StatusText, OutputLogPath: string);
+    procedure CreateDockerComposeWithSetupForm;
+    procedure WriteImageVersionWithSetupForm(const TargetPath: string);
   public
   end;
 
@@ -419,6 +421,44 @@ begin
     PChar('-NoProfile -ExecutionPolicy Bypass -File "' + CmdTargetPath + '"'),
     nil, SW_SHOWNORMAL);
 end;
+// Run setup-form compose generation even when the notice form is not open.
+// Compose-Erzeugung ueber das Setup-Formular ausfuehren, auch wenn der Hinweisdialog nicht geoeffnet ist.
+procedure TMainformFrm.CreateDockerComposeWithSetupForm;
+var
+  CreatedSetupForm: Boolean;
+begin
+  CreatedSetupForm := not Assigned(SetupFrm);
+  if CreatedSetupForm then
+    SetupFrm := TSetupFrm.Create(Self);
+  try
+    SetupFrm.CreateDockerComposeFile;
+  finally
+    if CreatedSetupForm then
+    begin
+      SetupFrm.Free;
+      SetupFrm := nil;
+    end;
+  end;
+end;
+// Write image-version metadata even when the setup form is not currently open.
+// Image-Versionen schreiben, auch wenn das Setup-Formular gerade nicht geoeffnet ist.
+procedure TMainformFrm.WriteImageVersionWithSetupForm(const TargetPath: string);
+var
+  CreatedSetupForm: Boolean;
+begin
+  CreatedSetupForm := not Assigned(SetupFrm);
+  if CreatedSetupForm then
+    SetupFrm := TSetupFrm.Create(Self);
+  try
+    SetupFrm.WriteImageVersion(TargetPath);
+  finally
+    if CreatedSetupForm then
+    begin
+      SetupFrm.Free;
+      SetupFrm := nil;
+    end;
+  end;
+end;
 // Quote a value for use inside a PowerShell command string.
 // Einen Wert fuer die Verwendung in einer PowerShell-Befehlszeile quoten.
 function TMainformFrm.PowerShellQuote(const Value: string): string;
@@ -498,6 +538,19 @@ end;
 // Die Statusanzeige fuer laufende Skripte in der Anwendung vorbereiten.
 procedure TMainformFrm.PrepareScriptProgress(const StatusText: string);
 begin
+  if IsPaperlessInstallation and Assigned(SetupFrm) then
+  begin
+    SetupFrm.PaperlessInstallierenBtn.Enabled := False;
+    SetupFrm.InstallLbl.Visible := True;
+    SetupFrm.InstallLbl.AutoSize := False;
+    SetupFrm.InstallLbl.Caption := ShortenScriptStatusText(StatusText);
+    SetupFrm.ProgressBar2.Min := 0;
+    SetupFrm.ProgressBar2.Max := 100;
+    SetupFrm.ProgressBar2.Position := 0;
+    SetupFrm.ProgressBar2.Visible := True;
+    Application.ProcessMessages;
+    Exit;
+  end;
   StartPaperlessBackupBtn.Enabled := False;
   RestorePaperlessBackupBtn.Enabled := False;
   BackupWiederherProgNeuStartLbl.Visible := True;
@@ -512,6 +565,17 @@ end;
 // Das Statuslabel aktualisieren und die Fortschrittsanzeige waehrend eines Skripts bewegen.
 procedure TMainformFrm.UpdateScriptProgress(const StatusText: string);
 begin
+  if IsPaperlessInstallation and Assigned(SetupFrm) then
+  begin
+    SetupFrm.InstallLbl.Visible := True;
+    SetupFrm.InstallLbl.Caption := ShortenScriptStatusText(StatusText);
+    if SetupFrm.ProgressBar2.Position >= SetupFrm.ProgressBar2.Max then
+      SetupFrm.ProgressBar2.Position := SetupFrm.ProgressBar2.Min
+    else
+      SetupFrm.ProgressBar2.Position := SetupFrm.ProgressBar2.Position + 2;
+    Application.ProcessMessages;
+    Exit;
+  end;
   BackupWiederherProgNeuStartLbl.Visible := True;
   BackupWiederherProgNeuStartLbl.Caption := ShortenScriptStatusText(StatusText);
   if ProgressBar1.Position >= ProgressBar1.Max then
@@ -524,6 +588,18 @@ end;
 // Die Statusanzeige fuer laufende Skripte abschliessen.
 procedure TMainformFrm.FinishScriptProgress(const StatusText: string; const Success: Boolean);
 begin
+  if IsPaperlessInstallation and Assigned(SetupFrm) then
+  begin
+    SetupFrm.PaperlessInstallierenBtn.Enabled := True;
+    SetupFrm.InstallLbl.Visible := True;
+    SetupFrm.InstallLbl.Caption := ShortenScriptStatusText(StatusText);
+    if Success then
+      SetupFrm.ProgressBar2.Position := SetupFrm.ProgressBar2.Max
+    else
+      SetupFrm.ProgressBar2.Position := SetupFrm.ProgressBar2.Min;
+    Application.ProcessMessages;
+    Exit;
+  end;
   StartPaperlessBackupBtn.Enabled := True;
   RestorePaperlessBackupBtn.Enabled := True;
   BackupWiederherProgNeuStartLbl.Visible := True;
@@ -852,7 +928,9 @@ begin
         SetupFrm.ShowModal;
       finally
         SetupFrm.Free;
+        SetupFrm := nil;
       end;
+      if Application.Terminated then Exit;
     end;
   end else
     begin
@@ -861,7 +939,9 @@ begin
         SetupFrm.ShowModal;
       finally
         SetupFrm.Free;
+        SetupFrm := nil;
       end;
+      if Application.Terminated then Exit;
   end;
 
 
@@ -1075,8 +1155,14 @@ begin
       );
 
       ShouldWriteNewCompose := True;
-      SetupFrm.CreateDockerComposeFile;
-      SetupFrm.InstallPaperlessBtnClick(Self);
+      CreateDockerComposeWithSetupForm;
+      SetupFrm := TSetupFrm.Create(Self);
+      try
+        SetupFrm.InstallPaperlessBtnClick(Self);
+      finally
+        SetupFrm.Free;
+        SetupFrm := nil;
+      end;
     end;
 
     ComposePath := NewComposePath;
@@ -1803,7 +1889,7 @@ begin
   begin
     // Write a new docker-compose.yml file.
     // Eine neue docker-compose.yml-Datei schreiben.
-     SetupFrm.CreateDockerComposeFile;
+     CreateDockerComposeWithSetupForm;
   end
   else
   begin
@@ -1890,9 +1976,12 @@ begin
       'Sollten Updates vorliegen, werden diese installiert.' + #13#10 +
       'Geben Sie Paperless nach dem Neustart Zeit.',
       'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
+    TabControl1.TabIndex := 0;
+    TabControl1Change(TabControl1);
+    Application.ProcessMessages;
     PaperlessUpdate := True;
     IsUpdate := True;
-    SetupFrm.CreateDockerComposeFile;
+    CreateDockerComposeWithSetupForm;
   end;
 end;
 
@@ -2259,7 +2348,7 @@ begin
       begin
         ShouldWriteNewCompose := True;
         try
-          SetupFrm.CreateDockerComposeFile;
+          CreateDockerComposeWithSetupForm;
         finally
           ShouldWriteNewCompose := False;
         end;
@@ -2413,7 +2502,7 @@ begin
                 'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
               end;
 
-              SetupFrm.WriteImageVersion(BackupPath);
+              WriteImageVersionWithSetupForm(BackupPath);
 
             end
             else

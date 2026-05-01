@@ -33,27 +33,50 @@ uses
 
 threadvar
   MessageBoxHook: HHOOK;
+  MessageBoxOwnerHandle: HWND;
 
 // Return the rectangle that should own centered dialogs.
 // Das Rechteck zurueckgeben, an dem Dialoge zentriert werden sollen.
-function MainFormRect: TRect;
+function ActiveFormHandle: HWND;
+var
+  ActiveForm: TCustomForm;
 begin
+  ActiveForm := Screen.ActiveCustomForm;
+  if Assigned(ActiveForm) and ActiveForm.HandleAllocated then
+  begin
+    Result := ActiveForm.Handle;
+    Exit;
+  end;
+
   if Assigned(Application.MainForm) and Application.MainForm.HandleAllocated then
-    GetWindowRect(Application.MainForm.Handle, Result)
+  begin
+    Result := Application.MainForm.Handle;
+    Exit;
+  end;
+
+  Result := Application.Handle;
+end;
+
+// Return the rectangle of the form that should own centered dialogs.
+// Das Rechteck des Formulars zurueckgeben, zu dem Dialoge gehoeren sollen.
+function OwnerFormRect(const OwnerHandle: HWND): TRect;
+begin
+  if OwnerHandle <> 0 then
+    GetWindowRect(OwnerHandle, Result)
   else
     Result := Screen.WorkAreaRect;
 end;
 
-// Center a window over the main form.
-// Ein Fenster ueber dem Hauptformular zentrieren.
-procedure CenterWindowOnMainForm(WindowHandle: HWND);
+// Center a window over its owning form.
+// Ein Fenster ueber seinem besitzenden Formular zentrieren.
+procedure CenterWindowOnOwner(WindowHandle, OwnerHandle: HWND);
 var
   OwnerRect, DialogRect: TRect;
   DialogWidth, DialogHeight, NewLeft, NewTop: Integer;
 begin
   if WindowHandle = 0 then Exit;
 
-  OwnerRect := MainFormRect;
+  OwnerRect := OwnerFormRect(OwnerHandle);
   GetWindowRect(WindowHandle, DialogRect);
   DialogWidth := DialogRect.Right - DialogRect.Left;
   DialogHeight := DialogRect.Bottom - DialogRect.Top;
@@ -69,7 +92,7 @@ function MessageBoxCbtHook(Code: Integer; WParam: WPARAM; LParam: LPARAM): LRESU
 begin
   if Code = HCBT_ACTIVATE then
   begin
-    CenterWindowOnMainForm(HWND(WParam));
+    CenterWindowOnOwner(HWND(WParam), MessageBoxOwnerHandle);
     if MessageBoxHook <> 0 then
     begin
       UnhookWindowsHookEx(MessageBoxHook);
@@ -88,12 +111,14 @@ end;
 function CenteredMessageDlg(const Msg: string; DlgType: TMsgDlgType; Buttons: TMsgDlgButtons; HelpCtx: Longint): Integer;
 var
   Dialog: TForm;
+  OwnerHandle: HWND;
 begin
+  OwnerHandle := ActiveFormHandle;
   Dialog := CreateMessageDialog(Msg, DlgType, Buttons);
   try
     Dialog.HelpContext := HelpCtx;
-    Dialog.Position := poMainFormCenter;
-    CenterWindowOnMainForm(Dialog.Handle);
+    Dialog.Position := poDesigned;
+    CenterWindowOnOwner(Dialog.Handle, OwnerHandle);
     Result := Dialog.ShowModal;
   finally
     Dialog.Free;
@@ -104,10 +129,8 @@ function CenteredMessageBox(const Text, Caption: string; Flags: Cardinal): Integ
 var
   OwnerHandle: HWND;
 begin
-  if Assigned(Application.MainForm) and Application.MainForm.HandleAllocated then
-    OwnerHandle := Application.MainForm.Handle
-  else
-    OwnerHandle := Application.Handle;
+  OwnerHandle := ActiveFormHandle;
+  MessageBoxOwnerHandle := OwnerHandle;
 
   MessageBoxHook := SetWindowsHookEx(WH_CBT, @MessageBoxCbtHook, 0, GetCurrentThreadId);
   try
@@ -118,6 +141,7 @@ begin
       UnhookWindowsHookEx(MessageBoxHook);
       MessageBoxHook := 0;
     end;
+    MessageBoxOwnerHandle := 0;
   end;
 end;
 

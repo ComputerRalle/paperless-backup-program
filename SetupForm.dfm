@@ -14,14 +14,14 @@ object SetupFrm: TSetupFrm
   Font.Height = -15
   Font.Name = 'Verdana'
   Font.Style = []
-  Position = poMainFormCenter
+  Position = poScreenCenter
   OnClose = FormClose
   OnCreate = FormCreate
   OnShow = FormShow
   TextHeight = 18
   object DockerGefundenLbl: TLabel
     Left = 20
-    Top = 453
+    Top = 472
     Width = 593
     Height = 25
     AutoSize = False
@@ -32,8 +32,8 @@ object SetupFrm: TSetupFrm
   end
   object BitteBestaetigenLbl: TLabel
     Left = 560
-    Top = 453
-    Width = 265
+    Top = 472
+    Width = 280
     Height = 25
     AutoSize = False
     Caption = '"Hinweis vertanden" best'#228'tigen:'
@@ -134,8 +134,18 @@ object SetupFrm: TSetupFrm
     Visible = False
     OnClick = ComputerRalleLblClick
   end
+  object InstallLbl: TLabel
+    Left = 21
+    Top = 409
+    Width = 738
+    Height = 18
+    Caption = 
+      'Um ein Backup oder eine Wiederherstellung zu machen, muss das Pr' +
+      'ogramm neu gestartet werden'
+    Visible = False
+  end
   object HinweisVerstandenBtn: TButton
-    Left = 575
+    Left = 590
     Top = 504
     Width = 250
     Height = 60
@@ -171,9 +181,9 @@ object SetupFrm: TSetupFrm
     object Label9: TLabel
       Left = 579
       Top = 21
-      Width = 246
+      Width = 249
       Height = 16
-      Caption = 'Getestet mit: Paperless-ngx v2.17.1 '
+      Caption = 'Getestet mit: Paperless-ngx v2.20.15'
       Color = clWhite
       Font.Charset = DEFAULT_CHARSET
       Font.Color = clWindowText
@@ -193,7 +203,7 @@ object SetupFrm: TSetupFrm
     SizeGrip = False
   end
   object PaperlessInstallierenBtn: TButton
-    Left = 31
+    Left = 21
     Top = 504
     Width = 250
     Height = 60
@@ -206,7 +216,7 @@ object SetupFrm: TSetupFrm
     Left = 20
     Top = 148
     Width = 820
-    Height = 279
+    Height = 249
     Lines.Strings = (
       'Willkommen im Paperless Backup Programm.'
       ''
@@ -233,5 +243,12 @@ object SetupFrm: TSetupFrm
       'Sie verwenden das Programm auf eigene Verantwortung.')
     ReadOnly = True
     TabOrder = 4
+  end
+  object ProgressBar2: TProgressBar
+    Left = 20
+    Top = 440
+    Width = 820
+    Height = 17
+    TabOrder = 5
   end
 end
