@@ -2216,6 +2216,9 @@ begin
     // Nach Änderung der E-Mail-Einstellungen neu starten.
      CenteredMessageBox('Paperless muss neu gestartet werden, um die Einstellungen zu übernehmen.', 'Information',
      MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
+    TabControl1.TabIndex := 0;
+    TabControl1Change(TabControl1);
+    Application.ProcessMessages;
     SaveEmailSettingsBtn.Enabled:=False;
     CreateRestartScript(ExtractFilePath(ComposePath));
 end;
