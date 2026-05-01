@@ -225,6 +225,7 @@ type
     procedure BeginScriptBusyState;
     procedure EndScriptBusyState;
     procedure SaveAndDisableInteractiveControls(const ParentControl: TWinControl);
+    procedure HideWelcomeLabel;
   public
   end;
 
@@ -713,11 +714,19 @@ begin
       UpdateScriptProgress(CurrentStatusText);
   end;
 end;
+// Hide the intro headline after the user starts interacting with the program.
+// Die Willkommensueberschrift nach der ersten Benutzeraktion ausblenden.
+procedure TMainformFrm.HideWelcomeLabel;
+begin
+  if Assigned(Label32) then
+    Label32.Visible := False;
+end;
 // Open the support page in the default browser.
 // Die Unterstützungsseite im Standardbrowser öffnen.
 procedure TMainformFrm.BuyMeACoffeeBtnClick(Sender: TObject);
 begin
- ShellExecute(0, 'open', BuyMeACoffeeUrl, nil, nil, SW_SHOWNORMAL);
+  HideWelcomeLabel;
+  ShellExecute(0, 'open', BuyMeACoffeeUrl, nil, nil, SW_SHOWNORMAL);
 end;
 
 // Enable or disable manual Docker image version editing.
@@ -754,6 +763,7 @@ var
   StoredPath: string;
   TextFilePath: string;
 begin
+  HideWelcomeLabel;
   if ComposePath.Trim = '' then
   begin
     CenteredShowMessage('Bitte zuerst den Paperless-Ordner auswählen.');
@@ -1247,7 +1257,11 @@ begin
       );
 
       ShouldWriteNewCompose := True;
-      CreateDockerComposeWithSetupForm;
+      try
+        CreateDockerComposeWithSetupForm;
+      finally
+        ShouldWriteNewCompose := False;
+      end;
       SetupFrm := TSetupFrm.Create(Self);
       try
         SetupFrm.InstallPaperlessBtnClick(Self);
@@ -1409,6 +1423,7 @@ procedure TMainformFrm.TabControl1Change(Sender: TObject);
 var
   Ini: TIniFile;
 begin
+  HideWelcomeLabel;
   if ScriptBusy then
   begin
     TabControl1.TabIndex := ScriptBusyTabIndex;
@@ -1581,6 +1596,7 @@ var
   Ini: TIniFile;
   MaxBackupFolders: Integer;
 begin
+  HideWelcomeLabel;
   Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
     // Save the retention setting.
@@ -2155,6 +2171,7 @@ var
   EnvFilePath: string;
   SettingsSaved: Boolean;
 begin
+  HideWelcomeLabel;
   SettingsSaved := False;
   // Build the full path to the file.
   // Den vollständigen Pfad zur Datei erstellen.
@@ -2422,6 +2439,7 @@ var
   Ini: TIniFile;
   RestoreDefaultFolder: string;
 begin
+  HideWelcomeLabel;
   WriteComposeContainerAndVolumeInfo(ExtractFilePath(ComposePath));
   StartPaperlessBackupBtn.Enabled := False;
   RestorePaperlessBackupBtn.Enabled := False;
@@ -2490,6 +2508,7 @@ end;
 // Die lokale Paperless-Installation im Standardbrowser oeffnen.
 procedure TMainformFrm.OpenPaperlessBrowserLblClick(Sender: TObject);
 begin
+  HideWelcomeLabel;
   ShellExecute(0, 'open', PaperlessLocalUrlWithSlash, nil, nil, SW_SHOWNORMAL);
 end;
 // Create paperless-restore.ps1 for the selected backup folder.
@@ -2836,6 +2855,7 @@ end;
 // Die Einstellungsseite anzeigen, auf der Image-Versionen und Update-Einstellungen bearbeitet werden.
 procedure TMainformFrm.PaperlessUpdateBtnClick(Sender: TObject);
 begin
+  HideWelcomeLabel;
   TabControl1.TabIndex := 4;
   BackupRestorePan.Visible := False;
   BackupPlanPan.Visible := False;
@@ -2952,9 +2972,10 @@ var
   PI: TProcessInformation;
   StdOutRead, StdOutWrite: THandle;
   Buffer: array[0..4095] of AnsiChar;
-  BytesRead: DWORD;
+  BytesRead, BytesAvailable, ReadSize: DWORD;
   WaitResult: DWORD;
-  Output: AnsiString;
+  StartTick: UInt64;
+  Output, Chunk: AnsiString;
 begin
   ZeroMemory(@SA, SizeOf(SA));
   SA.nLength := SizeOf(SA);
@@ -2980,8 +3001,34 @@ begin
 
   CloseHandle(StdOutWrite);
   StdOutWrite := 0;
-  WaitResult := WaitForSingleObject(PI.hProcess, CommandTimeoutMs);
-  if WaitResult = WAIT_TIMEOUT then
+  Output := '';
+  StartTick := GetTickCount64;
+  repeat
+    WaitResult := WaitForSingleObject(PI.hProcess, 50);
+    repeat
+      BytesAvailable := 0;
+      if not PeekNamedPipe(StdOutRead, nil, 0, nil, @BytesAvailable, nil) then
+        Break;
+      if BytesAvailable = 0 then
+        Break;
+      BytesRead := 0;
+      if BytesAvailable > SizeOf(Buffer) then
+        ReadSize := SizeOf(Buffer)
+      else
+        ReadSize := BytesAvailable;
+      if ReadFile(StdOutRead, Buffer, ReadSize, BytesRead, nil) and (BytesRead > 0) then
+      begin
+        SetString(Chunk, PAnsiChar(@Buffer[0]), BytesRead);
+        Output := Output + Chunk;
+      end
+      else
+        Break;
+    until False;
+    if (WaitResult = WAIT_TIMEOUT) and (GetTickCount64 - StartTick > CommandTimeoutMs) then
+      Break;
+  until WaitResult <> WAIT_TIMEOUT;
+
+  if WaitResult <> WAIT_OBJECT_0 then
   begin
     TerminateProcess(PI.hProcess, DWORD(-1));
     CloseHandle(PI.hProcess);
@@ -2989,12 +3036,15 @@ begin
     CloseHandle(StdOutRead);
     Exit('');
   end;
-  Output := '';
+
   repeat
     BytesRead := 0;
     ReadFile(StdOutRead, Buffer, SizeOf(Buffer), BytesRead, nil);
     if BytesRead > 0 then
-      Output := Output + Copy(Buffer, 1, BytesRead);
+    begin
+      SetString(Chunk, PAnsiChar(@Buffer[0]), BytesRead);
+      Output := Output + Chunk;
+    end;
   until BytesRead = 0;
 
   CloseHandle(StdOutRead);
