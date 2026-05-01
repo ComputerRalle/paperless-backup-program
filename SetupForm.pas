@@ -710,7 +710,11 @@ begin
         CmdFile.Add('  Invoke-Step { docker compose -f docker-compose.yml pull } "Fehler beim Herunterladen aktualisierter Images."');
         CmdFile.Add('  Invoke-Step { docker compose -f docker-compose.yml up -d } "Fehler beim Starten der Container."');
         CmdFile.Add('  Write-Host "Aktualisiere Django-Datenbankstruktur..."');
-        CmdFile.Add('  Invoke-Step { docker exec -i paperless-ngx-paperless-1 python3 manage.py migrate } "Fehler bei Django-Datenbankmigration."');
+        CmdFile.Add('  docker compose -f docker-compose.yml exec -T paperless python3 manage.py migrate');
+        CmdFile.Add('  if ($LASTEXITCODE -ne 0) {');
+        CmdFile.Add('    Write-Host "Hinweis: Django-Datenbankmigration konnte jetzt nicht abgeschlossen werden. Das Skript laeuft weiter." -ForegroundColor Yellow');
+        CmdFile.Add('    $global:LASTEXITCODE = 0');
+        CmdFile.Add('  }');
         CmdFile.Add('  Write-Host "Aktualisiere PostgreSQL Collation Version..."');
         CmdFile.Add(Format('  Invoke-Step { docker exec -i %s psql -U paperless -d paperless -c "ALTER DATABASE paperless REFRESH COLLATION VERSION;" } "Fehler beim Aktualisieren der PostgreSQL Collation Version."', [PaperlessDBName]));
         CmdFile.Add('  Write-Host "Nicht mehr verwendete Volumes werden geloescht"');

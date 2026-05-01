@@ -551,6 +551,7 @@ begin
     Application.ProcessMessages;
     Exit;
   end;
+
   StartPaperlessBackupBtn.Enabled := False;
   RestorePaperlessBackupBtn.Enabled := False;
   BackupWiederherProgNeuStartLbl.Visible := True;
@@ -576,6 +577,7 @@ begin
     Application.ProcessMessages;
     Exit;
   end;
+
   BackupWiederherProgNeuStartLbl.Visible := True;
   BackupWiederherProgNeuStartLbl.Caption := ShortenScriptStatusText(StatusText);
   if ProgressBar1.Position >= ProgressBar1.Max then
@@ -600,6 +602,7 @@ begin
     Application.ProcessMessages;
     Exit;
   end;
+
   StartPaperlessBackupBtn.Enabled := True;
   RestorePaperlessBackupBtn.Enabled := True;
   BackupWiederherProgNeuStartLbl.Visible := True;

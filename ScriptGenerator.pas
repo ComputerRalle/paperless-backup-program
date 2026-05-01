@@ -111,7 +111,7 @@ end;
 procedure AddBestEffortDjangoMigration(const Lines: TStringList);
 begin
   Lines.Add('  Write-Host "Aktualisiere Django-Datenbankstruktur..."');
-  Lines.Add('  docker exec -i paperless-ngx-paperless-1 python3 manage.py migrate');
+  Lines.Add('  docker compose exec -T paperless python3 manage.py migrate');
   Lines.Add('  if ($LASTEXITCODE -ne 0) {');
   Lines.Add('    Write-Host "Hinweis: Django-Datenbankmigration konnte jetzt nicht abgeschlossen werden. Das Skript laeuft weiter." -ForegroundColor Yellow');
   Lines.Add('    $global:LASTEXITCODE = 0');
