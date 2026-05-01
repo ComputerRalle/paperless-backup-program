@@ -30,10 +30,7 @@ type
     StatusBar1: TStatusBar;
     Panel2: TPanel;
     BackupRestorePan: TPanel;
-    StaticText2: TStaticText;
-    StaticText3: TStaticText;
     Panel3: TPanel;
-    ScriptSavedLbl: TLabel;
     StartPaperlessBackupBtn: TButton;
     RestorePaperlessBackupBtn: TButton;
     Panel4: TPanel;
@@ -46,7 +43,6 @@ type
     Image1: TImage;
     BackupWiederherProgNeuStartLbl: TLabel;
     Label3: TLabel;
-    AutostartLbl: TLabel;
     TabControl1: TTabControl;
     BackupPlanPan: TPanel;
     Panel9: TPanel;
@@ -107,7 +103,6 @@ type
     Label16: TLabel;
     Label17: TLabel;
     HabeUpdaetGemachtCb: TCheckBox;
-    OpenPaperlessBrowserLbl: TLabel;
     Label18: TLabel;
     SettingsPan: TPanel;
     Label26: TLabel;
@@ -137,12 +132,6 @@ type
     Web2Lbl: TLabel;
     Label31: TLabel;
     NewsletterLbl: TLabel;
-    Label32: TLabel;
-    Label33: TLabel;
-    Label34: TLabel;
-    Label35: TLabel;
-    Label36: TLabel;
-    Label37: TLabel;
     redis_version_edit: TEdit;
     postgres_version_edit: TEdit;
     Label38: TLabel;
@@ -163,6 +152,8 @@ type
     ProgramUpdateLbl: TLabel;
     ProgressBar1: TProgressBar;
     BusyWaitLbl: TLabel;
+    Button1: TButton;
+    Label32: TLabel;
     procedure StartPaperlessBackupBtnClick(Sender: TObject);
     procedure BuyMeACoffeeBtnClick(Sender: TObject);
     procedure StartCmdScript;
@@ -771,7 +762,6 @@ begin
   WriteComposeContainerAndVolumeInfo(ComposePath);
   StartPaperlessBackupBtn.Enabled := False;
   RestorePaperlessBackupBtn.Enabled := False;
-  AutostartLbl.Visible := False;
   ReadContainerNamesFromFile;
   IsPaperlessInstallation := False;
 
@@ -932,7 +922,6 @@ begin
   Volumes.ExportData := Volume_export;
   Volumes.Media := Volume_media;
   CreateManualBackupCmdScript(CmdTargetPath, ComposePath, BackupPath, AppDataFolder, PaperlessDBName, Volumes);
-  ScriptSavedLbl.Caption := 'Backup-Skript wurde erstellt: ' + CmdTargetPath;
   StartAndMonitorCmdScript;
 end;
 
@@ -1297,15 +1286,6 @@ begin
   Panel16.ParentBackground := False;
   Panel16.StyleElements := Panel16.StyleElements - [seClient];
   Panel16.Color := $00234D11;
-  OpenPaperlessBrowserLbl.StyleElements := OpenPaperlessBrowserLbl.StyleElements - [seFont];
-  OpenPaperlessBrowserLbl.Font.Color := clYellow;
-  OpenPaperlessBrowserLbl.Font.Style := [fsBold];
-  StaticText3.Caption := '';
-  ScriptSavedLbl.Caption := '';
-  StaticText3.Caption := '';
-  StaticText2.Visible := False;
-  StaticText3.Visible := False;
-  ScriptSavedLbl.Visible := False;
 
   // Load the backup path if it exists.
   // Den Backup-Pfad laden, falls er existiert.
@@ -1324,8 +1304,6 @@ begin
   begin
     ComposePath := StoredPath;
     ComposeName := ExtractFileName(ExcludeTrailingPathDelimiter(ComposePath));
-    StaticText2.Caption := 'Aktuell ist folgender Pfad ausgewählt, in dem die docker-compose.yml Datei liegt: ';
-    StaticText3.Caption := ComposePath;
     StartPaperlessBackupBtn.Enabled := True;
     RestorePaperlessBackupBtn.Enabled := True;
     BackupWiederherProgNeuStartLbl.Visible := False;
@@ -1337,10 +1315,7 @@ begin
   begin
     RestorePaperlessBackupBtn.Visible:=False;
     StartPaperlessBackupBtn.Visible:=False;
-    StaticText2.Visible:=False;
-    StaticText3.Visible:=False;
     BackupWiederherProgNeuStartLbl.Visible:=False;
-    AutostartLbl.Visible:=True;
     TabControl1.Enabled:=False;
     IsAutostart := True;
     RunAutostartBackup();
@@ -1559,7 +1534,6 @@ begin
 
    end;
 
-   AutostartLbl.Visible:=False;
    CheckScheduleAllowed;
 end;
 
@@ -1710,7 +1684,6 @@ begin
   // Ein Skript erstellen, das die geplante Aufgabe entfernt.
   CmdTargetPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'Backup-Zeitplan-Entfernen.ps1';
   CreateDeleteBackupScheduleCmdScript(CmdTargetPath);
-  ScriptSavedLbl.Caption := 'Skript gespeichert: ' + CmdTargetPath;
 
   // Run the script silently in the background.
   // Das Skript still im Hintergrund ausführen.
@@ -2345,7 +2318,6 @@ begin
   Volumes.ExportData := Volume_export;
   Volumes.Media := Volume_media;
   CreatePlannedBackupCmdScript(CmdTargetPath, ComposePath, BackupPath, AppDataFolder, PaperlessDBName, Volumes);
-  ScriptSavedLbl.Caption := 'Plan gespeichert: ' + CmdTargetPath;
   // Delete old backup folders when a retention limit is set.
   // Alte Backup-Ordner löschen, wenn eine Aufbewahrungsgrenze gesetzt ist.
   MaxBackupFolders := KeepBackupsSpE.Value;
@@ -2453,7 +2425,6 @@ begin
   WriteComposeContainerAndVolumeInfo(ExtractFilePath(ComposePath));
   StartPaperlessBackupBtn.Enabled := False;
   RestorePaperlessBackupBtn.Enabled := False;
-  AutostartLbl.Visible:=False;
   ReadContainerNamesFromFile;
   IsBackup := False;
   IsPaperlessInstallation := False;
@@ -2542,7 +2513,6 @@ begin
   Volumes.ExportData := Volume_export;
   Volumes.Media := Volume_media;
   CreateRestoreCmdScript(CmdTargetPath, ComposePath, BackupFolder, PaperlessDBName, Volumes);
-  ScriptSavedLbl.Caption := 'Restore-Skript wurde erstellt: ' + CmdTargetPath;
   StartAndMonitorCmdScript;
 end;
 
@@ -2841,7 +2811,6 @@ begin
   ComposeName := StringReplace(ExtractFileName(ExcludeTrailingPathDelimiter(ComposePath)), ' ', '-', [rfReplaceAll]);
   CmdTargetPath := IncludeTrailingPathDelimiter(ComposePath) + 'paperless-neustart.ps1';
   CreateRestartCmdScript(CmdTargetPath, ComposePath);
-  ScriptSavedLbl.Caption := 'Backup-Skript wurde erstellt: ' + CmdTargetPath;
   StartAndMonitorRestart;
 end;
 

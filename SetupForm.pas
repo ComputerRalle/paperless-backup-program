@@ -486,9 +486,12 @@ end;
 // Start an external command, wait for it, and return its exit code.
 // Einen externen Befehl starten, darauf warten und den Exit-Code zurückgeben.
 function TSetupFrm.RunCommand(const ExeName, Params: string; out ExitCode: Cardinal): Boolean;
+const
+  CommandTimeoutMs = 120000;
 var
   SEInfo: TShellExecuteInfo;
   ProcHandle: THandle;
+  WaitResult: DWORD;
 begin
   // Clear the ShellExecuteInfo structure before use.
   // Die ShellExecuteInfo-Struktur vor der Verwendung leeren.
@@ -527,7 +530,15 @@ begin
     ProcHandle := SEInfo.hProcess;
     // Wait until the process exits.
     // Warten, bis der Prozess beendet ist.
-    WaitForSingleObject(ProcHandle, INFINITE);
+    WaitResult := WaitForSingleObject(ProcHandle, CommandTimeoutMs);
+    if WaitResult = WAIT_TIMEOUT then
+    begin
+      TerminateProcess(ProcHandle, DWORD(-1));
+      ExitCode := DWORD(-1);
+      CloseHandle(ProcHandle);
+      Result := False;
+      Exit;
+    end;
     // Read the process exit code.
     // Den Exit-Code des Prozesses lesen.
     GetExitCodeProcess(ProcHandle, ExitCode);
@@ -809,6 +820,8 @@ end;
 // Start a command hidden and capture its console output.
 // Einen Befehl versteckt starten und seine Konsolenausgabe erfassen.
 function TSetupFrm.RunCommandAndCapture(const ExeName: string; const Params: array of string; Output: TStrings): Boolean;
+const
+  CommandTimeoutMs = 120000;
 var
   CmdLine: string;
   I: Integer;
@@ -818,6 +831,7 @@ var
   ProcessInfo: TProcessInformation;
   Buffer: array[0..2047] of AnsiChar;
   BytesRead: DWORD;
+  WaitResult: DWORD;
   TotalOutput: string;
 begin
   Result := False;
@@ -853,6 +867,16 @@ begin
     begin
       CloseHandle(WritePipe); // Stop writing so the reader can finish.
       // Schreiben beenden, damit der Leser fertig werden kann.
+      WritePipe := 0;
+
+      WaitResult := WaitForSingleObject(ProcessInfo.hProcess, CommandTimeoutMs);
+      if WaitResult = WAIT_TIMEOUT then
+      begin
+        TerminateProcess(ProcessInfo.hProcess, DWORD(-1));
+        CloseHandle(ProcessInfo.hProcess);
+        CloseHandle(ProcessInfo.hThread);
+        Exit;
+      end;
 
       TotalOutput := '';
       repeat
@@ -866,12 +890,13 @@ begin
 
       Output.Text := Trim(TotalOutput);
 
-      WaitForSingleObject(ProcessInfo.hProcess, INFINITE);
       CloseHandle(ProcessInfo.hProcess);
       CloseHandle(ProcessInfo.hThread);
       Result := True;
     end;
   finally
+    if WritePipe <> 0 then
+      CloseHandle(WritePipe);
     CloseHandle(ReadPipe);
   end;
 end;

@@ -61,9 +61,7 @@ end;
 // Das Rechteck des Formulars zurueckgeben, zu dem Dialoge gehoeren sollen.
 function OwnerFormRect(const OwnerHandle: HWND): TRect;
 begin
-  if OwnerHandle <> 0 then
-    GetWindowRect(OwnerHandle, Result)
-  else
+  if (OwnerHandle = 0) or not GetWindowRect(OwnerHandle, Result) then
     Result := Screen.WorkAreaRect;
 end;
 
