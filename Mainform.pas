@@ -23,7 +23,7 @@ uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, ShellAPI, Vcl.ComCtrls, Vcl.ExtCtrls, Vcl.Buttons,
   System.IOUtils, Vcl.Samples.Spin, System.IniFiles, DateUtils, SetupForm, System.Generics.Collections, System.Generics.Defaults, Vcl.Menus,
-  System.Net.URLClient, System.Net.HttpClient, System.Net.HttpClientComponent, ScriptGenerator, AppConfig, AppLogger, AppDialogs;
+  System.Net.URLClient, System.Net.HttpClient, System.Net.HttpClientComponent, ScriptGenerator, AppConfig, AppLogger, AppDialogs, Crypto;
 
 type
   TMainformFrm = class(TForm)
@@ -226,6 +226,8 @@ type
     procedure EndScriptBusyState;
     procedure SaveAndDisableInteractiveControls(const ParentControl: TWinControl);
     procedure HideWelcomeLabel;
+    procedure EncryptEmailEnvForBackup(const TargetBackupPath: string);
+    procedure RestoreEmailEnvFromBackup(const SourceBackupPath, TargetComposePath: string);
   public
   end;
 
@@ -753,6 +755,63 @@ begin
   if Assigned(Label32) then
     Label32.Visible := False;
 end;
+procedure TMainformFrm.EncryptEmailEnvForBackup(const TargetBackupPath: string);
+var
+  SourceEnvPath, TargetEncryptedPath, LocalEncryptedPath, Password: string;
+begin
+  SourceEnvPath := IncludeTrailingPathDelimiter(AppDataFolder) + EmailEnvFileName;
+  if not FileExists(SourceEnvPath) then
+    Exit;
+  if not RequestPasswordDialog(
+    'Mail-Einstellungen verschluesseln',
+    'Die Datei email-versand.env enthaelt Mailkontodaten und wird fuer das Backup verschluesselt.' + sLineBreak + sLineBreak +
+    'Bitte bewahren Sie Ihr Passwort sicher auf, z.B. in KeePass. Wenn Sie das Passwort verlieren, kann die Mail-Einstellungsdatei nicht wiederhergestellt werden.',
+    True,
+    Password) then
+  begin
+    CenteredShowMessage('Mail-Einstellungen werden nicht ins Backup aufgenommen.');
+    Exit;
+  end;
+  TargetEncryptedPath := IncludeTrailingPathDelimiter(TargetBackupPath) + EmailEnvEncryptedFileName;
+  LocalEncryptedPath := IncludeTrailingPathDelimiter(AppDataFolder) + EmailEnvEncryptedFileName;
+  try
+    EncryptFileWithPassword(SourceEnvPath, TargetEncryptedPath, Password);
+    EncryptFileWithPassword(SourceEnvPath, LocalEncryptedPath, Password);
+    LogInfo('Encrypted email env file written to backup.');
+  except
+    on E: Exception do
+      CenteredShowMessage('Mail-Einstellungen konnten nicht verschluesselt werden: ' + E.Message);
+  end;
+end;
+procedure TMainformFrm.RestoreEmailEnvFromBackup(const SourceBackupPath, TargetComposePath: string);
+var
+  SourceEncryptedPath, TargetEnvPath, Password: string;
+begin
+  SourceEncryptedPath := IncludeTrailingPathDelimiter(SourceBackupPath) + EmailEnvEncryptedFileName;
+  if not FileExists(SourceEncryptedPath) then
+  begin
+    LogInfo('No encrypted email env file found in backup. Restore step skipped.');
+    Exit;
+  end;
+  if not RequestPasswordDialog(
+    'Mail-Einstellungen wiederherstellen',
+    'Im Backup wurde eine verschluesselte Mail-Einstellungsdatei gefunden.' + sLineBreak + sLineBreak +
+    'Bitte geben Sie das Passwort ein. Wenn Sie das Passwort verlieren, kann die Mail-Einstellungsdatei nicht wiederhergestellt werden.',
+    False,
+    Password) then
+  begin
+    CenteredShowMessage('Mail-Einstellungen wurden nicht wiederhergestellt.');
+    Exit;
+  end;
+  TargetEnvPath := IncludeTrailingPathDelimiter(ExtractFilePath(TargetComposePath)) + EmailEnvFileName;
+  try
+    DecryptFileWithPassword(SourceEncryptedPath, TargetEnvPath, Password);
+    LogInfo('Encrypted email env file restored.');
+  except
+    on E: Exception do
+      CenteredShowMessage('Mail-Einstellungen konnten nicht wiederhergestellt werden: ' + E.Message);
+  end;
+end;
 // Open the support page in the default browser.
 // Die Unterstützungsseite im Standardbrowser öffnen.
 procedure TMainformFrm.BuyMeACoffeeBtnClick(Sender: TObject);
@@ -958,6 +1017,7 @@ begin
   end;
 
   if not DirectoryExists(BackupPath) then ForceDirectories(BackupPath);
+  EncryptEmailEnvForBackup(BackupPath);
   CmdTargetPath := IncludeTrailingPathDelimiter(ComposePath) + 'paperless-backup.ps1';
   Volumes.Data := Volume_data;
   Volumes.DbData := Volume_db_data;
@@ -2524,6 +2584,7 @@ begin
           ShouldWriteNewCompose := False;
         end;
       end;
+      RestoreEmailEnvFromBackup(BackupFolder, ComposePath);
       CreateRestoreScript(ComposePath, BackupFolder);
     end
     else

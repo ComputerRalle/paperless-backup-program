@@ -35,6 +35,7 @@ const
   NoticeAcceptedFileName = 'HinweisVerstanden.txt';
   DockerComposeFileName = 'docker-compose.yml';
   EmailEnvFileName = 'email-versand.env';
+  EmailEnvEncryptedFileName = 'email-versand.env.enc';
   ContainerVolumeInfoFileName = 'ContainerUndVolumesInfo.txt';
   ImageVersionsFileName = 'image_versionen.txt';
   PaperlessSecretKeyFileName = 'paperless_secret_key.txt';

@@ -25,11 +25,12 @@ uses
 procedure CenteredShowMessage(const Msg: string);
 function CenteredMessageDlg(const Msg: string; DlgType: TMsgDlgType; Buttons: TMsgDlgButtons; HelpCtx: Longint): Integer;
 function CenteredMessageBox(const Text, Caption: string; Flags: Cardinal): Integer;
+function RequestPasswordDialog(const DialogCaption, Prompt: string; const ConfirmPassword: Boolean; out Password: string): Boolean;
 
 implementation
 
 uses
-  System.Types, Vcl.Forms, Vcl.Controls;
+  System.SysUtils, System.Types, Vcl.Forms, Vcl.Controls, Vcl.StdCtrls;
 
 threadvar
   MessageBoxHook: HHOOK;
@@ -141,6 +142,123 @@ begin
     end;
     MessageBoxOwnerHandle := 0;
   end;
+end;
+
+function RequestPasswordDialog(const DialogCaption, Prompt: string; const ConfirmPassword: Boolean; out Password: string): Boolean;
+var
+  Dialog: TForm;
+  PromptLbl, PasswordLbl, ConfirmLbl: TLabel;
+  PasswordEdit, ConfirmEdit: TEdit;
+  OkBtn, CancelBtn: TButton;
+  OwnerHandle: HWND;
+  PromptTop, ButtonTop: Integer;
+begin
+  Result := False;
+  Password := '';
+
+  repeat
+    Dialog := TForm.Create(nil);
+    try
+      Dialog.BorderStyle := bsDialog;
+      Dialog.Caption := DialogCaption;
+      Dialog.ClientWidth := 520;
+      Dialog.ClientHeight := 250;
+      Dialog.Position := poDesigned;
+
+      PromptLbl := TLabel.Create(Dialog);
+      PromptLbl.Parent := Dialog;
+      PromptLbl.Left := 16;
+      PromptLbl.Top := 16;
+      PromptLbl.Width := Dialog.ClientWidth - 32;
+      PromptLbl.AutoSize := False;
+      PromptLbl.WordWrap := True;
+      PromptLbl.Caption := Prompt;
+      PromptLbl.Height := 92;
+
+      PromptTop := PromptLbl.Top + PromptLbl.Height + 12;
+
+      PasswordLbl := TLabel.Create(Dialog);
+      PasswordLbl.Parent := Dialog;
+      PasswordLbl.Left := 16;
+      PasswordLbl.Top := PromptTop;
+      PasswordLbl.Caption := 'Passwort:';
+
+      PasswordEdit := TEdit.Create(Dialog);
+      PasswordEdit.Parent := Dialog;
+      PasswordEdit.Left := 160;
+      PasswordEdit.Top := PasswordLbl.Top - 3;
+      PasswordEdit.Width := Dialog.ClientWidth - 176;
+      PasswordEdit.PasswordChar := '*';
+
+      if ConfirmPassword then
+      begin
+        ConfirmLbl := TLabel.Create(Dialog);
+        ConfirmLbl.Parent := Dialog;
+        ConfirmLbl.Left := 16;
+        ConfirmLbl.Top := PasswordLbl.Top + 36;
+        ConfirmLbl.Caption := 'Passwort wiederholen:';
+
+        ConfirmEdit := TEdit.Create(Dialog);
+        ConfirmEdit.Parent := Dialog;
+        ConfirmEdit.Left := 160;
+        ConfirmEdit.Top := ConfirmLbl.Top - 3;
+        ConfirmEdit.Width := Dialog.ClientWidth - 176;
+        ConfirmEdit.PasswordChar := '*';
+        ButtonTop := ConfirmEdit.Top + 42;
+      end
+      else
+      begin
+        ConfirmEdit := nil;
+        ButtonTop := PasswordEdit.Top + 42;
+      end;
+
+      OkBtn := TButton.Create(Dialog);
+      OkBtn.Parent := Dialog;
+      OkBtn.Caption := 'OK';
+      OkBtn.ModalResult := mrOk;
+      OkBtn.Default := True;
+      OkBtn.Width := 100;
+      OkBtn.Left := Dialog.ClientWidth - 224;
+      OkBtn.Top := ButtonTop;
+
+      CancelBtn := TButton.Create(Dialog);
+      CancelBtn.Parent := Dialog;
+      CancelBtn.Caption := 'Abbrechen';
+      CancelBtn.ModalResult := mrCancel;
+      CancelBtn.Cancel := True;
+      CancelBtn.Width := 100;
+      CancelBtn.Left := Dialog.ClientWidth - 116;
+      CancelBtn.Top := ButtonTop;
+
+      Dialog.ClientHeight := ButtonTop + 48;
+      OwnerHandle := ActiveFormHandle;
+      CenterWindowOnOwner(Dialog.Handle, OwnerHandle);
+
+      if Dialog.ShowModal <> mrOk then
+        Exit(False);
+
+      if Trim(PasswordEdit.Text) = '' then
+      begin
+        CenteredShowMessage('Bitte geben Sie ein Passwort ein.');
+        Continue;
+      end;
+
+      if ConfirmPassword then
+      begin
+        if PasswordEdit.Text <> ConfirmEdit.Text then
+        begin
+          CenteredShowMessage('Die Passwoerter stimmen nicht ueberein.');
+          Continue;
+        end;
+      end;
+
+      Password := PasswordEdit.Text;
+      Result := True;
+      Exit;
+    finally
+      Dialog.Free;
+    end;
+  until False;
 end;
 
 end.
