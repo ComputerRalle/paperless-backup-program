@@ -92,6 +92,7 @@ object MainformFrm: TMainformFrm
           Width = 31
           Height = 18
           Caption = 'Text'
+          Visible = False
         end
         object AutostartLbl: TLabel
           Left = 31
@@ -114,6 +115,7 @@ object MainformFrm: TMainformFrm
           Height = 22
           Caption = 'Sie haben folgenden Ordner gew'#228'hlt: Noch kein Ordner gew'#228'hlt...'
           TabOrder = 0
+          Visible = False
         end
         object StaticText3: TStaticText
           Left = 31
@@ -122,6 +124,7 @@ object MainformFrm: TMainformFrm
           Height = 22
           Caption = 'Text'
           TabOrder = 1
+          Visible = False
         end
       end
       object Panel3: TPanel

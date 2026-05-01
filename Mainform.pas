@@ -1301,6 +1301,9 @@ begin
   StaticText3.Caption := '';
   ScriptSavedLbl.Caption := '';
   StaticText3.Caption := '';
+  StaticText2.Visible := False;
+  StaticText3.Visible := False;
+  ScriptSavedLbl.Visible := False;
 
   // Load the backup path if it exists.
   // Den Backup-Pfad laden, falls er existiert.
