@@ -639,13 +639,13 @@ begin
   if StatusText.Contains('Mail-Einstellungen') then
     Result := 'Mail-Einstellungen werden angewendet. Bitte warten ...'
   else if IsBackup then
-    Result := 'Backup läuft. Bitte warten ...'
+    Result := 'Backup läuft.'
   else if IsUpdate or PaperlessUpdate or StatusText.Contains('Update') then
-    Result := 'Update läuft. Bitte warten ...'
+    Result := 'Update läuft.'
   else if StatusText.Contains('Neustart') then
     Result := 'Neustart läuft. Bitte warten ...'
   else
-    Result := 'Wiederherstellung läuft. Bitte warten ...';
+    Result := 'Wiederherstellung läuft.';
 end;
 // Prepare the in-application script status display.
 // Die Statusanzeige fuer laufende Skripte in der Anwendung vorbereiten.
