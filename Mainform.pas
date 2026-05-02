@@ -2400,8 +2400,6 @@ procedure TMainformFrm.RequireCompletedSettings;
 var
   Response: Integer;
 begin
-  IsUpdate:= True;
-
   // Ask before changing the compose file and restarting Paperless.
   // Vor dem Ändern der Compose-Datei und dem Neustart von Paperless nachfragen.
   Response := CenteredMessageDlg('E-Mail-Einstellungen stehen aus. Dazu muss Paperless gestoppt werden.' + sLineBreak +
@@ -2415,6 +2413,7 @@ begin
   // Fortfahren, wenn der Benutzer bestätigt.
   if Response = mrOk then
   begin
+    IsUpdate:= True;
     // Write a new docker-compose.yml file.
     // Eine neue docker-compose.yml-Datei schreiben.
      CreateDockerComposeWithSetupForm;
@@ -2423,7 +2422,9 @@ begin
   begin
     // Stop when the user cancels.
     // Abbrechen, wenn der Benutzer abbricht.
+    IsUpdate := False;
     CenteredShowMessage('Der Vorgang wurde abgebrochen.');
+    Exit;
   end;
 end;
 
@@ -2616,6 +2617,16 @@ begin
     CenteredShowMessage('Vorhandene Mail-Einstellungen wurden geladen und nicht überschrieben.');
     Exit;
   end;
+  if CenteredMessageDlg(
+    'Paperless muss neu gestartet werden, um die Einstellungen zu übernehmen. ' +
+    'Möchten Sie die E-Mail-Einstellungen speichern und Paperless neu starten?',
+    mtConfirmation,
+    [mbOk, mbCancel],
+    0) <> mrOk then
+  begin
+    CenteredShowMessage('Der Vorgang wurde abgebrochen.');
+    Exit;
+  end;
   // Build the .env file content.
   // Den Inhalt der .env-Datei zusammenbauen.
   EnvList := TStringList.Create;
@@ -2661,8 +2672,6 @@ begin
   if not SettingsSaved then Exit;
     // Restart after changing email settings.
     // Nach Änderung der E-Mail-Einstellungen neu starten.
-     CenteredMessageBox('Paperless muss neu gestartet werden, um die Einstellungen zu übernehmen.', 'Information',
-     MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
     TabControl1.TabIndex := 0;
     TabControl1Change(TabControl1);
     Application.ProcessMessages;
