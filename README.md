@@ -73,7 +73,11 @@ Die Anwendung speichert Laufzeiteinstellungen im Benutzerprofil:
 - Mail settings are encrypted in backups with a user-provided password using Windows CNG (`bcrypt.dll`), PBKDF2-HMAC-SHA256, AES-256-CBC, and HMAC-SHA256.
 - Mail-Einstellungen werden in Backups mit einem vom Benutzer vergebenen Passwort verschluesselt. Verwendet werden Windows CNG (`bcrypt.dll`), PBKDF2-HMAC-SHA256, AES-256-CBC und HMAC-SHA256.
 - The backup password is not stored. If it is lost, `email-versand.env.enc` cannot be restored.
-- Das Backup-Passwort wird nicht gespeichert. Wenn es verloren geht, kann `email-versand.env.enc` nicht wiederhergestellt werden.
+- Das Backup-Passwort wird nicht gespeichert. Bei Passwortverlust koennen die Mail-Einstellungen aus `email-versand.env.enc` nicht wiederhergestellt werden.
+- The encrypted mail settings backup is portable across Windows PCs, but only with the correct password.
+- Das verschluesselte Mail-Einstellungs-Backup ist auf andere Windows-PCs uebertragbar, aber nur mit dem richtigen Passwort.
+- Manual backups create or update `email-versand.env.enc`; scheduled backups can only copy an already prepared encrypted file because they cannot ask for a password.
+- Manuelle Backups erzeugen oder aktualisieren `email-versand.env.enc`; geplante Backups koennen nur eine bereits vorbereitete verschluesselte Datei kopieren, weil sie kein Passwort abfragen koennen.
 - Use at your own risk.
 - Verwendung auf eigene Gefahr.
 
@@ -92,7 +96,6 @@ Die Anwendung speichert Laufzeiteinstellungen im Benutzerprofil:
 - `Crypto.pas` - password-based encryption helpers for sensitive backup files.
 - `Crypto.pas` - passwortbasierte Verschluesselungshelfer fuer sensible Backup-Dateien.
 - `ScriptGenerator.pas` - generation of backup, restore, restart, and scheduler scripts.
-- `ScriptGenerator.pas` - generation of PowerShell backup, restore, restart, and scheduler scripts.
 - `ScriptGenerator.pas` - Erzeugung von PowerShell-Skripten fuer Backup, Wiederherstellung, Neustart und Zeitplan.
 - `DockerComposeGenerator.pas` - generation of the Paperless Docker Compose file.
 - `DockerComposeGenerator.pas` - Erzeugung der Paperless-Docker-Compose-Datei.

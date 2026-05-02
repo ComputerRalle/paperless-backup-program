@@ -25,8 +25,7 @@ object SetupFrm: TSetupFrm
     Width = 593
     Height = 25
     AutoSize = False
-    Caption = 
-      'Docker Desktop wurde gefunden. Installation von Paperless-ngx ka' +
+    Caption = 'Docker Desktop wurde gefunden. Installation von Paperless-ngx ka' +
       'nn beginnen.'
     Visible = False
   end
@@ -139,8 +138,7 @@ object SetupFrm: TSetupFrm
     Top = 409
     Width = 738
     Height = 18
-    Caption = 
-      'Um ein Backup oder eine Wiederherstellung zu machen, muss das Pr' +
+    Caption = 'Um ein Backup oder eine Wiederherstellung zu machen, muss das Pr' +
       'ogramm neu gestartet werden'
     Visible = False
   end

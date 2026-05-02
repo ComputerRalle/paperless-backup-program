@@ -254,6 +254,7 @@ var
   WantsInstall: Boolean;
   IsUpdate: Boolean;
   PaperlessUpdate: Boolean;
+  IsRestoreApplyingSettings: Boolean;
   TrashRetentionDays: Integer;
   CurrentTestedPaperlessVersion: String;
   ScriptBusy: Boolean;
@@ -639,13 +640,17 @@ begin
   if StatusText.Contains('Mail-Einstellungen') then
     Result := 'Mail-Einstellungen werden angewendet. Bitte warten ...'
   else if IsBackup then
-    Result := 'Backup läuft.'
+    Result := 'Backup läuft. Bitte warten ...'
+  else if IsRestoreApplyingSettings then
+    Result := 'Wiederherstellung läuft. Bitte warten ...'
   else if IsUpdate or PaperlessUpdate or StatusText.Contains('Update') then
-    Result := 'Update läuft.'
+    Result := 'Update läuft. Bitte warten ...'
+  else if IsPaperlessInstallation then
+    Result := 'Installation läuft. Bitte warten ...'
   else if StatusText.Contains('Neustart') then
     Result := 'Neustart läuft. Bitte warten ...'
   else
-    Result := 'Wiederherstellung läuft.';
+    Result := 'Wiederherstellung läuft. Bitte warten ...';
 end;
 // Prepare the in-application script status display.
 // Die Statusanzeige fuer laufende Skripte in der Anwendung vorbereiten.
@@ -656,7 +661,7 @@ begin
     SetupFrm.PaperlessInstallierenBtn.Enabled := False;
     SetupFrm.InstallLbl.Visible := True;
     SetupFrm.InstallLbl.AutoSize := False;
-    SetupFrm.InstallLbl.Caption := ShortenScriptStatusText(StatusText);
+    SetupFrm.InstallLbl.Caption := 'Installation läuft. Bitte warten ...';
     SetupFrm.ProgressBar2.Min := 0;
     SetupFrm.ProgressBar2.Max := 100;
     SetupFrm.ProgressBar2.Position := 0;
@@ -684,7 +689,7 @@ begin
   if IsPaperlessInstallation and Assigned(SetupFrm) then
   begin
     SetupFrm.InstallLbl.Visible := True;
-    SetupFrm.InstallLbl.Caption := ShortenScriptStatusText(StatusText);
+    SetupFrm.InstallLbl.Caption := 'Installation läuft. Bitte warten ...';
     if SetupFrm.ProgressBar2.Position >= SetupFrm.ProgressBar2.Max then
       SetupFrm.ProgressBar2.Position := SetupFrm.ProgressBar2.Min
     else
@@ -767,7 +772,8 @@ begin
     'Die Datei email-versand.env enthält Mailkontodaten und wird für das Backup verschlüsselt.' + sLineBreak + sLineBreak +
     'Bitte bewahren Sie Ihr Passwort sicher auf, z.B. in KeePass. Wenn Sie das Passwort verlieren, kann die Mail-Einstellungsdatei nicht wiederhergestellt werden.',
     True,
-    Password) then
+    Password,
+    'Backup ohne Mail-Einstellungen durchführen') then
   begin
     CenteredShowMessage('Mail-Einstellungen werden nicht ins Backup aufgenommen.');
     Exit;
@@ -1081,6 +1087,7 @@ begin
   IsApplyingEmailSettings := False;
   IsUpdate := False;
   PaperlessUpdate := False;
+  IsRestoreApplyingSettings := False;
   TrashRetentionDays := 365;
   ScriptBusy := False;
   ScriptBusyTabIndex := 0;
@@ -2195,11 +2202,12 @@ begin
        mtConfirmation, [mbYes, mbNo], 0) = mrYes) then
   begin
     IsUpdate := True;
-    CenteredMessageBox(
-      'Paperless wird heruntergefahren und es wird nach Updates gesucht. ' + #13#10 +
-      'Sollten Updates vorliegen, werden diese installiert.' + #13#10 +
-      'Geben Sie Paperless nach dem Neustart Zeit.',
-      'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
+    if not IsRestoreApplyingSettings then
+      CenteredMessageBox(
+        'Paperless wird heruntergefahren und es wird nach Updates gesucht. ' + #13#10 +
+        'Sollten Updates vorliegen, werden diese installiert.' + #13#10 +
+        'Geben Sie Paperless nach dem Neustart Zeit.',
+        'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
     TabControl1.TabIndex := 0;
     TabControl1Change(TabControl1);
     Application.ProcessMessages;
@@ -2685,14 +2693,16 @@ begin
   OutputLogPath := PrepareScriptOutputLog;
   Cmd := BuildPowerShellCommand(CmdTargetPath, OutputLogPath); // Script path.
   // Skriptpfad.
-  if IsUpdate then
-    RunningStatus := 'Update wird gestartet...'
+  if IsRestoreApplyingSettings then
+    RunningStatus := 'Wiederherstellung wird abgeschlossen. Bitte warten ...'
+  else if IsUpdate then
+    RunningStatus := 'Update wird gestartet. Bitte warten ...'
   else if IsPaperlessInstallation then
-    RunningStatus := 'Paperless-Installation wird gestartet...'
+    RunningStatus := 'Paperless-Installation wird gestartet. Bitte warten ...'
   else if IsBackup then
-    RunningStatus := 'Backup wird gestartet...'
+    RunningStatus := 'Backup wird gestartet. Bitte warten ...'
   else
-    RunningStatus := 'Wiederherstellung wird gestartet...';
+    RunningStatus := 'Wiederherstellung wird gestartet. Bitte warten ...';
   PrepareScriptProgress(RunningStatus);
   if CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NO_WINDOW, nil, nil, StartupInfo, ProcessInfo) then
   begin
@@ -2778,9 +2788,7 @@ begin
                   'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
                 end else
                 begin
-                  CenteredMessageBox('Wiederherstellung abgeschlossen.' + #13#10 +
-                  'Die Einstellungen werden jetzt neu angewendet, damit die Datenbank-Collation geprüft wird.',
-                  'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
+                  IsRestoreApplyingSettings := True;
                   SaveSettingsBtnClick(nil);
                 end;
               end;
@@ -2808,17 +2816,27 @@ begin
           CloseHandle(ProcessInfo.hThread);
           if ExitCode = 0 then
           begin
-            FinishScriptProgress('Update abgeschlossen.', True);
+            if IsRestoreApplyingSettings then
+              FinishScriptProgress('Wiederherstellung abgeschlossen.', True)
+            else
+              FinishScriptProgress('Update abgeschlossen.', True);
             SaveBlankEmailSettings();
-            CenteredMessageBox('Paperless wurde erfolgreich aktualisiert' + #13#10 +
-            'Sie können Paperless nun im Browser öffnen (http://localhost:8000). Geben Sie Paperless ein wenig Zeit zum starten.',
-            'Installation abgeschlossen', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
+            if IsRestoreApplyingSettings then
+            begin
+              CenteredMessageBox('Wiederherstellung abgeschlossen.', 'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
+              IsRestoreApplyingSettings := False;
+            end
+            else
+              CenteredMessageBox('Paperless wurde erfolgreich aktualisiert' + #13#10 +
+              'Sie können Paperless nun im Browser öffnen (http://localhost:8000). Geben Sie Paperless ein wenig Zeit zum starten.',
+              'Installation abgeschlossen', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
             IsUpdate := False;
           end
           else
           begin
             FinishScriptProgress('Paperless-Update fehlgeschlagen.', False);
             CenteredShowMessage('Vorgang fehlgeschlagen. Fehlercode: ' + IntToStr(ExitCode));
+            IsRestoreApplyingSettings := False;
           end;
         end;
   end
@@ -2826,6 +2844,7 @@ begin
   begin
     FinishScriptProgress('Skript konnte nicht gestartet werden.', False);
     CenteredShowMessage('Fehler beim Starten des Skripts.');
+    IsRestoreApplyingSettings := False;
   end;
   ActiveControl := nil;
 
@@ -2855,11 +2874,11 @@ begin
   Cmd := BuildPowerShellCommand(CmdTargetPath, OutputLogPath); // Script path.
   // Skriptpfad.
   if WasApplyingEmailSettings then
-    RunningStatus := 'Mail-Einstellungen werden angewendet...'
+    RunningStatus := 'Mail-Einstellungen werden angewendet. Bitte warten ...'
   else if PaperlessUpdate then
-    RunningStatus := 'Update wird gestartet...'
+    RunningStatus := 'Update wird gestartet. Bitte warten ...'
   else
-    RunningStatus := 'Neustart wird gestartet...';
+    RunningStatus := 'Neustart wird gestartet. Bitte warten ...';
   PrepareScriptProgress(RunningStatus);
   if PaperlessUpdate = False then
   begin

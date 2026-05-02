@@ -25,7 +25,7 @@ uses
 procedure CenteredShowMessage(const Msg: string);
 function CenteredMessageDlg(const Msg: string; DlgType: TMsgDlgType; Buttons: TMsgDlgButtons; HelpCtx: Longint): Integer;
 function CenteredMessageBox(const Text, Caption: string; Flags: Cardinal): Integer;
-function RequestPasswordDialog(const DialogCaption, Prompt: string; const ConfirmPassword: Boolean; out Password: string): Boolean;
+function RequestPasswordDialog(const DialogCaption, Prompt: string; const ConfirmPassword: Boolean; out Password: string; const CancelButtonCaption: string = 'Abbrechen'): Boolean;
 function RequestPasswordOrSkipDialog(const DialogCaption, Prompt, SkipButtonCaption: string; out Password: string): Integer;
 
 implementation
@@ -145,14 +145,14 @@ begin
   end;
 end;
 
-function RequestPasswordDialog(const DialogCaption, Prompt: string; const ConfirmPassword: Boolean; out Password: string): Boolean;
+function RequestPasswordDialog(const DialogCaption, Prompt: string; const ConfirmPassword: Boolean; out Password: string; const CancelButtonCaption: string): Boolean;
 var
   Dialog: TForm;
   PromptLbl, PasswordLbl, ConfirmLbl: TLabel;
   PasswordEdit, ConfirmEdit: TEdit;
   OkBtn, CancelBtn: TButton;
   OwnerHandle: HWND;
-  PromptTop, ButtonTop: Integer;
+  PromptTop, ButtonTop, CancelButtonWidth: Integer;
 begin
   Result := False;
   Password := '';
@@ -219,17 +219,21 @@ begin
       OkBtn.ModalResult := mrOk;
       OkBtn.Default := True;
       OkBtn.Width := 100;
-      OkBtn.Left := Dialog.ClientWidth - 224;
       OkBtn.Top := ButtonTop;
 
       CancelBtn := TButton.Create(Dialog);
       CancelBtn.Parent := Dialog;
-      CancelBtn.Caption := 'Abbrechen';
+      CancelBtn.Caption := CancelButtonCaption;
       CancelBtn.ModalResult := mrCancel;
       CancelBtn.Cancel := True;
-      CancelBtn.Width := 100;
-      CancelBtn.Left := Dialog.ClientWidth - 116;
+      if Length(CancelButtonCaption) > 16 then
+        CancelButtonWidth := 260
+      else
+        CancelButtonWidth := 100;
+      CancelBtn.Width := CancelButtonWidth;
+      CancelBtn.Left := Dialog.ClientWidth - CancelButtonWidth - 16;
       CancelBtn.Top := ButtonTop;
+      OkBtn.Left := CancelBtn.Left - OkBtn.Width - 8;
 
       Dialog.ClientHeight := ButtonTop + 48;
       OwnerHandle := ActiveFormHandle;
