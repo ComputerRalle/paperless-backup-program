@@ -20,7 +20,7 @@ unit Mainform;
 interface
 
 uses
-  Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes,
+  Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, System.Math,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, ShellAPI, Vcl.ComCtrls, Vcl.ExtCtrls, Vcl.Buttons,
   System.IOUtils, Vcl.Samples.Spin, System.IniFiles, DateUtils, SetupForm, System.Generics.Collections, System.Generics.Defaults, Vcl.Menus,
   System.Net.URLClient, System.Net.HttpClient, System.Net.HttpClientComponent, ScriptGenerator, AppConfig, AppLogger, AppDialogs, Crypto;
@@ -251,6 +251,9 @@ var
   ShouldWriteNewCompose: Boolean;
   IsAutostart: Boolean;
   InstallationCompletedFilePath: String;
+  RestoreEstimateText: string;
+  RestoreEstimatedSeconds: Integer;
+  RestoreProgressStartTick: UInt64;
   WantsInstall: Boolean;
   IsUpdate: Boolean;
   PaperlessUpdate: Boolean;
@@ -320,6 +323,77 @@ begin
   finally
     EnvList.Free;
   end;
+end;
+// Return the total size of a folder tree. Files that cannot be read are skipped.
+// Die Gesamtgroesse eines Ordnerbaums zurueckgeben. Nicht lesbare Dateien werden uebersprungen.
+function GetDirectorySizeBytes(const FolderPath: string): Int64;
+var
+  FilePath, ChildFolder: string;
+  FileInfo: TSearchRec;
+begin
+  Result := 0;
+  if not DirectoryExists(FolderPath) then Exit;
+  for FilePath in TDirectory.GetFiles(FolderPath) do
+  begin
+    if FindFirst(FilePath, faAnyFile, FileInfo) = 0 then
+    begin
+      try
+        Result := Result + FileInfo.Size;
+      finally
+        FindClose(FileInfo);
+      end;
+    end;
+  end;
+  for ChildFolder in TDirectory.GetDirectories(FolderPath) do
+    Result := Result + GetDirectorySizeBytes(ChildFolder);
+end;
+// Format a byte count for user-facing restore estimates.
+// Eine Byte-Anzahl fuer sichtbare Wiederherstellungs-Schaetzungen formatieren.
+function FormatByteSize(const SizeBytes: Int64): string;
+const
+  KB = 1024.0;
+  MB = KB * 1024.0;
+  GB = MB * 1024.0;
+begin
+  if SizeBytes >= Trunc(GB) then
+    Result := FormatFloat('0.0 GB', SizeBytes / GB)
+  else if SizeBytes >= Trunc(MB) then
+    Result := FormatFloat('0.0 MB', SizeBytes / MB)
+  else if SizeBytes >= Trunc(KB) then
+    Result := FormatFloat('0.0 KB', SizeBytes / KB)
+  else
+    Result := IntToStr(SizeBytes) + ' Bytes';
+end;
+// Build a conservative restore duration estimate from backup size.
+// Eine vorsichtige Schaetzung der Wiederherstellungsdauer aus der Backupgroesse bauen.
+function EstimateRestoreDurationSeconds(const SizeBytes: Int64): Integer;
+var
+  Minutes: Integer;
+begin
+  if SizeBytes <= 0 then
+    Exit(0);
+
+  // Restore includes archive extraction, database import, Docker startup, and migrations.
+  // Wiederherstellung umfasst Entpacken, Datenbankimport, Docker-Start und Migrationen.
+  Minutes := Ceil(SizeBytes / (350.0 * 1024.0 * 1024.0)) + 3;
+  if Minutes < 5 then
+    Minutes := 5;
+
+  Result := Minutes * 60;
+end;
+// Build the visible restore duration estimate.
+// Die sichtbare Schaetzung der Wiederherstellungsdauer bauen.
+function EstimateRestoreDurationText(const SizeBytes: Int64): string;
+var
+  Minutes: Integer;
+begin
+  Result := 'unbekannt';
+  if SizeBytes <= 0 then Exit;
+  Minutes := Ceil(EstimateRestoreDurationSeconds(SizeBytes) / 60.0);
+  if Minutes < 60 then
+    Result := 'ca. ' + IntToStr(Minutes) + ' Minuten'
+  else
+    Result := Format('ca. %d Std. %d Min.', [Minutes div 60, Minutes mod 60]);
 end;
 // Apply the restore key from the backup file or use the legacy key for older backups.
 // Den Wiederherstellungs-Key aus der Backup-Datei anwenden oder bei alten Backups den Legacy-Key nutzen.
@@ -633,6 +707,49 @@ begin
   if Length(Result) > MaxStatusTextLength then
     Result := Copy(Result, 1, MaxStatusTextLength - 3).TrimRight + '...';
 end;
+// Return an approximate restore progress based on the estimated duration.
+// Einen ungefaehren Wiederherstellungsfortschritt anhand der geschaetzten Dauer zurueckgeben.
+function ApproximateRestoreProgressPercent: Integer;
+var
+  ElapsedSeconds: Double;
+begin
+  Result := 0;
+  if (RestoreEstimatedSeconds <= 0) or (RestoreProgressStartTick = 0) then Exit;
+  ElapsedSeconds := (GetTickCount64 - RestoreProgressStartTick) / 1000.0;
+  Result := Floor((ElapsedSeconds / RestoreEstimatedSeconds) * 100.0);
+  if Result < 0 then
+    Result := 0
+  else if Result > 95 then
+    Result := 95;
+end;
+// Clear restore estimate state after a restore is done or failed.
+// Restore-Schaetzzustand nach Abschluss oder Fehler zuruecksetzen.
+procedure ClearRestoreProgressState;
+begin
+  RestoreEstimateText := '';
+  RestoreEstimatedSeconds := 0;
+  RestoreProgressStartTick := 0;
+end;
+// Fill the restore progress bar visibly before showing the final message.
+// Den Restore-Fortschrittsbalken vor der Abschlussmeldung sichtbar auffuellen.
+procedure AnimateProgressBarToComplete(const ProgressBar: TProgressBar);
+var
+  TargetPosition: Integer;
+begin
+  if not Assigned(ProgressBar) then Exit;
+  if ProgressBar.Position < 0 then
+    ProgressBar.Position := 0;
+  TargetPosition := ProgressBar.Position;
+  while TargetPosition < ProgressBar.Max do
+  begin
+    Inc(TargetPosition);
+    if TargetPosition > ProgressBar.Max then
+      TargetPosition := ProgressBar.Max;
+    ProgressBar.Position := TargetPosition;
+    Application.ProcessMessages;
+    Sleep(125);
+  end;
+end;
 // Build the headline shown above the live script output.
 // Die Ueberschrift oberhalb der laufenden Skriptausgabe erzeugen.
 function TMainformFrm.BuildBusyWaitText(const StatusText: string): string;
@@ -678,7 +795,14 @@ begin
   BackupWiederherProgNeuStartLbl.Caption := ShortenScriptStatusText(StatusText);
   ProgressBar1.Min := 0;
   ProgressBar1.Max := 100;
-  ProgressBar1.Position := 0;
+  if (RestoreEstimatedSeconds > 0) and ((RestoreEstimateText.Trim <> '') or IsRestoreApplyingSettings) then
+  begin
+    if RestoreProgressStartTick = 0 then
+      RestoreProgressStartTick := GetTickCount64;
+    ProgressBar1.Position := ApproximateRestoreProgressPercent;
+  end
+  else
+    ProgressBar1.Position := 0;
   ProgressBar1.Visible := True;
   Application.ProcessMessages;
 end;
@@ -698,11 +822,19 @@ begin
     Exit;
   end;
   BackupWiederherProgNeuStartLbl.Visible := True;
-  BackupWiederherProgNeuStartLbl.Caption := ShortenScriptStatusText(StatusText);
-  if ProgressBar1.Position >= ProgressBar1.Max then
-    ProgressBar1.Position := ProgressBar1.Min
+  if (RestoreEstimatedSeconds > 0) and ((RestoreEstimateText.Trim <> '') or IsRestoreApplyingSettings) then
+  begin
+    ProgressBar1.Position := ApproximateRestoreProgressPercent;
+    BackupWiederherProgNeuStartLbl.Caption := ShortenScriptStatusText(StatusText);
+  end
   else
-    ProgressBar1.Position := ProgressBar1.Position + 2;
+  begin
+    BackupWiederherProgNeuStartLbl.Caption := ShortenScriptStatusText(StatusText);
+    if ProgressBar1.Position >= ProgressBar1.Max then
+      ProgressBar1.Position := ProgressBar1.Min
+    else
+      ProgressBar1.Position := ProgressBar1.Position + 2;
+  end;
   Application.ProcessMessages;
 end;
 // Finish the in-application script status display.
@@ -725,9 +857,20 @@ begin
   StartPaperlessBackupBtn.Enabled := True;
   RestorePaperlessBackupBtn.Enabled := True;
   BackupWiederherProgNeuStartLbl.Visible := True;
-  BackupWiederherProgNeuStartLbl.Caption := ShortenScriptStatusText(StatusText);
+  if Success and (RestoreEstimatedSeconds > 0) then
+    BackupWiederherProgNeuStartLbl.Caption := 'Wiederherstellung wird abgeschlossen. Bitte warten ...'
+  else
+    BackupWiederherProgNeuStartLbl.Caption := ShortenScriptStatusText(StatusText);
   if Success then
-    ProgressBar1.Position := ProgressBar1.Max
+  begin
+    if RestoreEstimatedSeconds > 0 then
+    begin
+      AnimateProgressBarToComplete(ProgressBar1);
+      BackupWiederherProgNeuStartLbl.Caption := ShortenScriptStatusText(StatusText);
+    end
+    else
+      ProgressBar1.Position := ProgressBar1.Max;
+  end
   else
     ProgressBar1.Position := ProgressBar1.Min;
   Application.ProcessMessages;
@@ -775,7 +918,7 @@ begin
     Password,
     'Backup ohne Mail-Einstellungen durchführen') then
   begin
-    CenteredShowMessage('Mail-Einstellungen werden nicht ins Backup aufgenommen.');
+    LogInfo('Encrypted email env backup skipped by user.');
     Exit;
   end;
   TargetEncryptedPath := IncludeTrailingPathDelimiter(TargetBackupPath) + EmailEnvEncryptedFileName;
@@ -1088,6 +1231,7 @@ begin
   IsUpdate := False;
   PaperlessUpdate := False;
   IsRestoreApplyingSettings := False;
+  ClearRestoreProgressState;
   TrashRetentionDays := 365;
   ScriptBusy := False;
   ScriptBusyTabIndex := 0;
@@ -2574,8 +2718,10 @@ var
   FolderDialog: TFileOpenDialog;
   Ini: TIniFile;
   RestoreDefaultFolder: string;
+  BackupSizeBytes: Int64;
 begin
   HideWelcomeLabel;
+  ClearRestoreProgressState;
   WriteComposeContainerAndVolumeInfo(ExtractFilePath(ComposePath));
   StartPaperlessBackupBtn.Enabled := False;
   RestorePaperlessBackupBtn.Enabled := False;
@@ -2608,6 +2754,16 @@ begin
     if FolderDialog.Execute(Handle) then
     begin
       BackupFolder := FolderDialog.FileName;
+      BackupWiederherProgNeuStartLbl.Visible := True;
+      BackupWiederherProgNeuStartLbl.Caption := 'Backup wird geprüft. Bitte warten ...';
+      Application.ProcessMessages;
+      BackupSizeBytes := GetDirectorySizeBytes(BackupFolder);
+      RestoreEstimatedSeconds := EstimateRestoreDurationSeconds(BackupSizeBytes);
+      RestoreEstimateText := Format('Backup-Größe: %s. Geschätzte Wiederherstellungsdauer: %s.',
+        [FormatByteSize(BackupSizeBytes), EstimateRestoreDurationText(BackupSizeBytes)]);
+      BackupWiederherProgNeuStartLbl.Caption := RestoreEstimateText;
+      LogInfo('Restore estimate for "' + BackupFolder + '": ' + RestoreEstimateText);
+      Application.ProcessMessages;
       if ApplyPaperlessSecretKeyForRestore(BackupFolder) then
       begin
         ShouldWriteNewCompose := True;
@@ -2701,6 +2857,8 @@ begin
     RunningStatus := 'Paperless-Installation wird gestartet. Bitte warten ...'
   else if IsBackup then
     RunningStatus := 'Backup wird gestartet. Bitte warten ...'
+  else if RestoreEstimateText.Trim <> '' then
+    RunningStatus := 'Wiederherstellung wird gestartet. ' + RestoreEstimateText
   else
     RunningStatus := 'Wiederherstellung wird gestartet. Bitte warten ...';
   PrepareScriptProgress(RunningStatus);
@@ -2732,7 +2890,8 @@ begin
               SuccessStatus := 'Update abgeschlossen.'
             else
               SuccessStatus := 'Wiederherstellung abgeschlossen.';
-            FinishScriptProgress(SuccessStatus, True);
+            if SuccessStatus <> 'Wiederherstellung abgeschlossen.' then
+              FinishScriptProgress(SuccessStatus, True);
             if IsPaperlessInstallation = True then
             begin
               WriteStandardVersionAfterInstallation;
@@ -2798,11 +2957,13 @@ begin
           begin
             FinishScriptProgress('Vorgang fehlgeschlagen.', False);
             CenteredShowMessage('Vorgang fehlgeschlagen. Fehlercode: ' + IntToStr(ExitCode));
+            ClearRestoreProgressState;
           end;
         end else
         begin
           FinishScriptProgress('Skript konnte nicht gestartet werden.', False);
           CenteredShowMessage('Fehler beim Starten des Skripts.');
+          ClearRestoreProgressState;
         end;
     end else
         begin
@@ -2825,6 +2986,7 @@ begin
             begin
               CenteredMessageBox('Wiederherstellung abgeschlossen.', 'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
               IsRestoreApplyingSettings := False;
+              ClearRestoreProgressState;
             end
             else
               CenteredMessageBox('Paperless wurde erfolgreich aktualisiert' + #13#10 +
@@ -2837,6 +2999,7 @@ begin
             FinishScriptProgress('Paperless-Update fehlgeschlagen.', False);
             CenteredShowMessage('Vorgang fehlgeschlagen. Fehlercode: ' + IntToStr(ExitCode));
             IsRestoreApplyingSettings := False;
+            ClearRestoreProgressState;
           end;
         end;
   end
@@ -2845,6 +3008,7 @@ begin
     FinishScriptProgress('Skript konnte nicht gestartet werden.', False);
     CenteredShowMessage('Fehler beim Starten des Skripts.');
     IsRestoreApplyingSettings := False;
+    ClearRestoreProgressState;
   end;
   ActiveControl := nil;
 
