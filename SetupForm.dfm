@@ -25,7 +25,8 @@ object SetupFrm: TSetupFrm
     Width = 593
     Height = 25
     AutoSize = False
-    Caption = 'Docker Desktop wurde gefunden. Installation von Paperless-ngx ka' +
+    Caption = 
+      'Docker Desktop wurde gefunden. Installation von Paperless-ngx ka' +
       'nn beginnen.'
     Visible = False
   end
@@ -138,7 +139,8 @@ object SetupFrm: TSetupFrm
     Top = 409
     Width = 738
     Height = 18
-    Caption = 'Um ein Backup oder eine Wiederherstellung zu machen, muss das Pr' +
+    Caption = 
+      'Um ein Backup oder eine Wiederherstellung zu machen, muss das Pr' +
       'ogramm neu gestartet werden'
     Visible = False
   end
@@ -150,6 +152,16 @@ object SetupFrm: TSetupFrm
     Caption = 'Hinweis verstanden'
     TabOrder = 1
     OnClick = NoticeAcceptedBtnClick
+  end
+  object InstallationCancelBtn: TButton
+    Left = 305
+    Top = 504
+    Width = 250
+    Height = 60
+    Caption = 'Installation abbrechen'
+    TabOrder = 6
+    Visible = False
+    OnClick = InstallationCancelBtnClick
   end
   object Panel14: TPanel
     Left = 0
@@ -207,6 +219,8 @@ object SetupFrm: TSetupFrm
     Height = 60
     Caption = 'Paperless installieren'
     Default = True
+    DoubleBuffered = True
+    ParentDoubleBuffered = False
     TabOrder = 0
     OnClick = InstallPaperlessBtnClick
   end
@@ -240,13 +254,13 @@ object SetupFrm: TSetupFrm
       ''
       'Sie verwenden das Programm auf eigene Verantwortung.')
     ReadOnly = True
-    TabOrder = 4
+    TabOrder = 3
   end
   object ProgressBar2: TProgressBar
     Left = 20
     Top = 440
     Width = 820
     Height = 17
-    TabOrder = 5
+    TabOrder = 4
   end
 end

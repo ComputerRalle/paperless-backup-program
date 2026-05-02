@@ -59,7 +59,7 @@ object MainformFrm: TMainformFrm
       object Panel2: TPanel
         Left = 0
         Top = 300
-        Width = 840
+        Width = 836
         Height = 163
         Align = alTop
         BevelOuter = bvNone
@@ -68,7 +68,6 @@ object MainformFrm: TMainformFrm
         ParentBackground = False
         ParentCtl3D = False
         TabOrder = 0
-        ExplicitTop = 298
         object Label32: TLabel
           Left = 30
           Top = 41
@@ -128,33 +127,29 @@ object MainformFrm: TMainformFrm
       object Panel4: TPanel
         Left = 0
         Top = 298
-        Width = 840
+        Width = 836
         Height = 2
         Align = alTop
         BevelOuter = bvNone
         Color = clHighlight
         ParentBackground = False
         TabOrder = 2
-        ExplicitTop = 231
-        ExplicitWidth = 836
       end
       object Panel5: TPanel
         Left = 0
         Top = 463
-        Width = 840
+        Width = 836
         Height = 2
         Align = alTop
         BevelOuter = bvNone
         Color = clHighlight
         ParentBackground = False
         TabOrder = 3
-        ExplicitTop = 368
-        ExplicitWidth = 836
       end
       object Panel1: TPanel
         Left = 0
         Top = 56
-        Width = 840
+        Width = 836
         Height = 242
         Align = alTop
         BevelOuter = bvNone
@@ -60260,14 +60255,13 @@ object MainformFrm: TMainformFrm
       object Panel7: TPanel
         Left = 0
         Top = 0
-        Width = 840
+        Width = 836
         Height = 56
         Align = alTop
         BevelOuter = bvNone
         Color = 3767324
         ParentBackground = False
         TabOrder = 5
-        ExplicitWidth = 836
         object Label1: TLabel
           Left = 20
           Top = 19
@@ -60337,7 +60331,6 @@ object MainformFrm: TMainformFrm
       BevelOuter = bvNone
       ParentBackground = False
       TabOrder = 1
-      ExplicitLeft = 5000
       object Panel9: TPanel
         Left = 2
         Top = 57
@@ -60517,26 +60510,24 @@ object MainformFrm: TMainformFrm
       object Panel13: TPanel
         Left = 0
         Top = 56
-        Width = 840
+        Width = 836
         Height = 2
         Align = alTop
         BevelOuter = bvNone
         Color = clHighlight
         ParentBackground = False
         TabOrder = 1
-        ExplicitWidth = 836
       end
       object Panel14: TPanel
         Left = 0
         Top = 0
-        Width = 840
+        Width = 836
         Height = 56
         Align = alTop
         BevelOuter = bvNone
         Color = 3767324
         ParentBackground = False
         TabOrder = 2
-        ExplicitWidth = 836
         object Label8: TLabel
           Left = 20
           Top = 19
@@ -60606,18 +60597,16 @@ object MainformFrm: TMainformFrm
       BevelOuter = bvNone
       ParentBackground = False
       TabOrder = 2
-      ExplicitLeft = 5000
       object Panel6: TPanel
         Left = 0
         Top = 0
-        Width = 840
+        Width = 836
         Height = 56
         Align = alTop
         BevelOuter = bvNone
         Color = 3767324
         ParentBackground = False
         TabOrder = 0
-        ExplicitWidth = 836
         object Label5: TLabel
           Left = 20
           Top = 19
@@ -60666,12 +60655,11 @@ object MainformFrm: TMainformFrm
       object Panel8: TPanel
         Left = 0
         Top = 56
-        Width = 840
+        Width = 836
         Height = 386
         Align = alTop
         BevelOuter = bvNone
         TabOrder = 2
-        ExplicitWidth = 836
         object Label10: TLabel
           Left = 31
           Top = 68
@@ -60738,7 +60726,6 @@ object MainformFrm: TMainformFrm
       ParentBackground = False
       ParentColor = True
       TabOrder = 3
-      ExplicitLeft = 5000
       object EMailHostLbl: TLabel
         Left = 31
         Top = 180
@@ -60810,14 +60797,13 @@ object MainformFrm: TMainformFrm
       object Panel11: TPanel
         Left = 0
         Top = 0
-        Width = 840
+        Width = 836
         Height = 56
         Align = alTop
         BevelOuter = bvNone
         Color = 3767324
         ParentBackground = False
         TabOrder = 0
-        ExplicitWidth = 836
         object Label2: TLabel
           Left = 20
           Top = 19
@@ -60928,7 +60914,6 @@ object MainformFrm: TMainformFrm
       ParentBackground = False
       ParentColor = True
       TabOrder = 4
-      ExplicitLeft = 5000
       object Label26: TLabel
         Left = 31
         Top = 75
@@ -61011,14 +60996,13 @@ object MainformFrm: TMainformFrm
       object Panel15: TPanel
         Left = 0
         Top = 0
-        Width = 840
+        Width = 836
         Height = 56
         Align = alTop
         BevelOuter = bvNone
         Color = 3767324
         ParentBackground = False
         TabOrder = 0
-        ExplicitWidth = 836
         object Label27: TLabel
           Left = 20
           Top = 19
@@ -61183,7 +61167,6 @@ object MainformFrm: TMainformFrm
       ParentBackground = False
       ParentColor = True
       TabOrder = 5
-      ExplicitLeft = 5000
       object Label21: TLabel
         Left = 31
         Top = 75
@@ -61298,14 +61281,13 @@ object MainformFrm: TMainformFrm
       object Panel16: TPanel
         Left = 0
         Top = 0
-        Width = 840
+        Width = 836
         Height = 56
         Align = alTop
         BevelOuter = bvNone
         Color = 3767324
         ParentBackground = False
         TabOrder = 0
-        ExplicitWidth = 836
         object Label25: TLabel
           Left = 20
           Top = 19

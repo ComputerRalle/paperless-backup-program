@@ -42,6 +42,7 @@ type
     ComputerRalleLbl: TLabel;
     InstallLbl: TLabel;
     ProgressBar2: TProgressBar;
+    InstallationCancelBtn: TButton;
     procedure NoticeAcceptedBtnClick(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure InstallPaperlessBtnClick(Sender: TObject);
@@ -58,6 +59,7 @@ type
     procedure ComputerRalleLblClick(Sender: TObject);
     procedure FormClose(Sender: TObject; var Action: TCloseAction);
     procedure WriteImageVersion(const TargetPath: string);
+    procedure InstallationCancelBtnClick(Sender: TObject);
 
   private
     { Private declarations }
@@ -254,6 +256,8 @@ begin
   ProgressBar2.Max := 100;
   ProgressBar2.Position := 0;
   ProgressBar2.Visible := False;
+  InstallationCancelBtn.Visible := False;
+  InstallationCancelBtn.Enabled := False;
   // Make link labels readable in dark mode.
   // Link-Beschriftungen im dunklen Modus lesbar machen.
   with LinkKlickLbl do
@@ -368,6 +372,8 @@ var
   Ini:TiniFile;
 begin
   WantsInstall := True;
+  BorderIcons := [];
+  BorderStyle := bsSingle;
   // Step 1: Check whether Docker is available in the system PATH.
   // Schritt 1: Prüfen, ob Docker im System-PATH verfügbar ist.
   if not IsDockerInPath then
@@ -401,6 +407,10 @@ begin
   end;
   IsPaperlessInstallation := True;
   ShouldOpenPaperless := True;
+  PaperlessInstallierenBtn.Enabled := False;
+  HinweisVerstandenBtn.Enabled := False;
+  //InstallationCancelBtn.Visible := True;
+  //InstallationCancelBtn.Enabled := True;
 
   // Create the desktop consume folder if it does not exist.
   // Den Consume-Ordner auf dem Desktop erstellen, falls er nicht existiert.
@@ -448,7 +458,35 @@ begin
   end;
 
   CreateDockerComposeFile;
+  InstallationCancelBtn.Visible := False;
+  InstallationCancelBtn.Enabled := False;
   IsPaperlessInstallation:= False;
+  BorderIcons := [biSystemMenu, biMinimize, biMaximize];
+  BorderStyle := bsSizeable;
+end;
+// Cancel a running first installation and remove images already pulled by compose.
+// Eine laufende Erstinstallation abbrechen und bereits von Compose geladene Images entfernen.
+procedure TSetupFrm.InstallationCancelBtnClick(Sender: TObject);
+var
+  PaperlessInput: string;
+  AppDataFolder: string;
+begin
+  InstallationCancelBtn.Enabled := False;
+  InstallLbl.Visible := True;
+  InstallLbl.Caption := 'Installation wird abgebrochen. Bitte warten ...';
+  ProgressBar2.Visible := True;
+  MainformFrm.CancelPaperlessInstallation;
+  PaperlessInput := IncludeTrailingPathDelimiter(GetEnvironmentVariable('USERPROFILE')) + 'Desktop\Paperless-Input';
+  if DirectoryExists(PaperlessInput) then
+  begin
+    RemoveDir(PaperlessInput);
+  end;
+  // AppData-Ordner
+  AppDataFolder := IncludeTrailingPathDelimiter(GetEnvironmentVariable('USERPROFILE')) + AppDataFolderName;
+  if DirectoryExists(AppDataFolder) then
+    TDirectory.Delete(AppDataFolder, True);
+
+  HinweisVerstandenBtn.Enabled := False;
 end;
 
 // Check whether Docker can answer "docker info".
@@ -679,7 +717,7 @@ begin
       CmdFile.Add('$ErrorActionPreference = ''Stop''');
       CmdFile.Add('try {');
       CmdFile.Add('  Set-Location -LiteralPath ''' + StringReplace(AppDataFolder, '''', '''''', [rfReplaceAll]) + '''');
-      CmdFile.Add('  docker compose -f docker-compose.yml up -d');
+      CmdFile.Add('  docker compose --progress plain -f docker-compose.yml up -d');
       CmdFile.Add('  if ($LASTEXITCODE -ne 0) { throw "Fehler beim Starten von Docker Compose. (ExitCode $LASTEXITCODE)" }');
       CmdFile.Add('  Write-Host "Systeme starten. Fenster wird gleich geschlossen ..."');
       CmdFile.Add('  for ($i = 10; $i -ge 1; $i--) { Write-Host $i; Start-Sleep -Seconds 1 }');
@@ -722,8 +760,8 @@ begin
         CmdFile.Add('  Wait-Countdown 5');
         // Pull updated images here.
         // Hier aktualisierte Images herunterladen.
-        CmdFile.Add('  Invoke-Step { docker compose -f docker-compose.yml pull } "Fehler beim Herunterladen aktualisierter Images."');
-        CmdFile.Add('  Invoke-Step { docker compose -f docker-compose.yml up -d } "Fehler beim Starten der Container."');
+        CmdFile.Add('  Invoke-Step { docker compose --progress plain -f docker-compose.yml pull } "Fehler beim Herunterladen aktualisierter Images."');
+        CmdFile.Add('  Invoke-Step { docker compose --progress plain -f docker-compose.yml up -d } "Fehler beim Starten der Container."');
         CmdFile.Add('  Write-Host "Aktualisiere Django-Datenbankstruktur..."');
         CmdFile.Add('  docker compose -f docker-compose.yml exec -T paperless python3 manage.py migrate');
         CmdFile.Add('  if ($LASTEXITCODE -ne 0) {');

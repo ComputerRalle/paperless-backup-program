@@ -215,6 +215,8 @@ type
     function BuildPowerShellCommand(const ScriptPath, OutputLogPath: string): string;
     function ReadLastScriptOutputLine(const OutputLogPath, FallbackText: string): string;
     function ShortenScriptStatusText(const StatusText: string): string;
+    function BuildInstallationStatusText(const StatusText: string): string;
+    function EstimateInstallationProgressPercent(const StatusText: string; const CurrentPosition: Integer): Integer;
     function BuildBusyWaitText(const StatusText: string): string;
     procedure PrepareScriptProgress(const StatusText: string);
     procedure UpdateScriptProgress(const StatusText: string);
@@ -229,6 +231,7 @@ type
     procedure EncryptEmailEnvForBackup(const TargetBackupPath: string);
     procedure RestoreEmailEnvFromBackup(const SourceBackupPath, TargetComposePath: string);
   public
+    procedure CancelPaperlessInstallation;
   end;
 
 var
@@ -254,6 +257,7 @@ var
   RestoreEstimateText: string;
   RestoreEstimatedSeconds: Integer;
   RestoreProgressStartTick: UInt64;
+  InstallationProgressLastTick: UInt64;
   WantsInstall: Boolean;
   IsUpdate: Boolean;
   PaperlessUpdate: Boolean;
@@ -263,6 +267,8 @@ var
   ScriptBusy: Boolean;
   ScriptBusyTabIndex: Integer;
   ScriptBusyControlStates: TDictionary<TControl, Boolean>;
+  InstallCancelRequested: Boolean;
+  RunningScriptProcessId: DWORD;
 
 
 implementation
@@ -372,13 +378,11 @@ var
 begin
   if SizeBytes <= 0 then
     Exit(0);
-
   // Restore includes archive extraction, database import, Docker startup, and migrations.
   // Wiederherstellung umfasst Entpacken, Datenbankimport, Docker-Start und Migrationen.
   Minutes := Ceil(SizeBytes / (350.0 * 1024.0 * 1024.0)) + 3;
   if Minutes < 5 then
     Minutes := 5;
-
   Result := Minutes * 60;
 end;
 // Build the visible restore duration estimate.
@@ -568,6 +572,74 @@ begin
     end;
   end;
 end;
+// Cancel the active Paperless installation and remove compose images already pulled.
+// Die aktive Paperless-Installation abbrechen und bereits geladene Compose-Images entfernen.
+procedure TMainformFrm.CancelPaperlessInstallation;
+var
+  ComposeFilePath, CleanupOutput: string;
+  Images: TStringList;
+  Ini: TIniFile;
+  I: Integer;
+  ImageName: string;
+begin
+  if not IsPaperlessInstallation then Exit;
+  InstallCancelRequested := True;
+  LogWarning('Paperless installation cancellation requested by user.');
+  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
+  try
+    Ini.WriteString('Einrichtung', 'Installation abgeschlossen', 'Nein');
+    Ini.UpdateFile;
+  finally
+    Ini.Free;
+  end;
+  if Assigned(SetupFrm) then
+  begin
+    SetupFrm.InstallLbl.Visible := True;
+    SetupFrm.InstallLbl.Caption := 'Installation wird abgebrochen. Bitte warten ...';
+    SetupFrm.InstallationCancelBtn.Enabled := False;
+    Application.ProcessMessages;
+  end;
+  if RunningScriptProcessId <> 0 then
+  begin
+    CleanupOutput := ExecuteShellCommand('taskkill', '/PID ' + IntToStr(RunningScriptProcessId) + ' /T /F');
+    if CleanupOutput.Trim <> '' then
+      LogInfo('Installation process termination output: ' + CleanupOutput);
+  end;
+  ComposeFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + DockerComposeFileName;
+  if FileExists(ComposeFilePath) then
+  begin
+    if Assigned(SetupFrm) then
+    begin
+      SetupFrm.InstallLbl.Caption := 'Docker-Images werden entfernt. Bitte warten ...';
+      Application.ProcessMessages;
+    end;
+    CleanupOutput := ExecuteShellCommand(
+      'docker',
+      'compose -f "' + ComposeFilePath + '" down --rmi all --volumes --remove-orphans');
+    if CleanupOutput.Trim <> '' then
+      LogInfo('Docker compose cleanup output: ' + CleanupOutput);
+    CleanupOutput := ExecuteShellCommand('docker', 'compose -f "' + ComposeFilePath + '" config --images');
+    Images := TStringList.Create;
+    try
+      Images.Text := CleanupOutput;
+      for I := 0 to Images.Count - 1 do
+      begin
+        ImageName := Images[I].Trim;
+        if ImageName <> '' then
+        begin
+          CleanupOutput := ExecuteShellCommand('docker', 'image rm -f "' + ImageName + '"');
+          if CleanupOutput.Trim <> '' then
+            LogInfo('Docker image remove output for ' + ImageName + ': ' + CleanupOutput);
+        end;
+      end;
+    finally
+      Images.Free;
+    end;
+    CleanupOutput := ExecuteShellCommand('docker', 'image prune -f');
+    if CleanupOutput.Trim <> '' then
+      LogInfo('Docker image prune output: ' + CleanupOutput);
+  end;
+end;
 // Store and disable interactive controls while a script is running.
 // Interaktive Steuerelemente waehrend eines laufenden Skripts merken und sperren.
 procedure TMainformFrm.SaveAndDisableInteractiveControls(const ParentControl: TWinControl);
@@ -707,6 +779,65 @@ begin
   if Length(Result) > MaxStatusTextLength then
     Result := Copy(Result, 1, MaxStatusTextLength - 3).TrimRight + '...';
 end;
+// Make Docker Compose installation output understandable in the setup form.
+// Docker-Compose-Installationsausgabe fuer das Setup-Formular verstaendlich machen.
+function TMainformFrm.BuildInstallationStatusText(const StatusText: string): string;
+var
+  Text: string;
+begin
+  Text := StatusText.Trim;
+  if Text = '' then
+    Exit('Installation läuft. Bitte warten ...');
+  if Text.Contains('Pulling') or Text.Contains('Downloading') or Text.Contains('Extracting') or Text.Contains('Download complete') then
+    Result := 'Docker-Images werden geladen: ' + Text
+  else if Text.Contains('Pulled') or Text.Contains('Downloaded newer image') then
+    Result := 'Docker-Image geladen: ' + Text
+  else if Text.Contains('Creating') or Text.Contains('Created') then
+    Result := 'Container werden erstellt: ' + Text
+  else if Text.Contains('Starting') or Text.Contains('Started') or Text.Contains('Running') then
+    Result := 'Container werden gestartet: ' + Text
+  else
+    Result := Text;
+  Result := ShortenScriptStatusText(Result);
+end;
+// Estimate install progress from Docker Compose status lines.
+// Installationsfortschritt aus Docker-Compose-Statuszeilen grob schaetzen.
+function TMainformFrm.EstimateInstallationProgressPercent(const StatusText: string; const CurrentPosition: Integer): Integer;
+var
+  Text: string;
+begin
+  Text := AnsiLowerCase(StatusText).Trim;
+  Result := CurrentPosition;
+  if Result < 5 then
+    Result := 5;
+  if Text = '' then Exit;
+  if Text.Contains('pulling') then
+    Result := Max(Result, 12);
+  if Text.Contains('waiting') then
+    Result := Max(Result, 18);
+  if Text.Contains('downloading') then
+    Result := Max(Result, 30);
+  if Text.Contains('extracting') then
+    Result := Max(Result, 55);
+  if Text.Contains('download complete') then
+    Result := Max(Result, 62);
+  if Text.Contains('pull complete') then
+    Result := Max(Result, 68);
+  if Text.Contains('pulled') then
+    Result := Max(Result, 74);
+  if Text.Contains('creating') then
+    Result := Max(Result, 80);
+  if Text.Contains('created') then
+    Result := Max(Result, 85);
+  if Text.Contains('starting') then
+    Result := Max(Result, 90);
+  if Text.Contains('started') or Text.Contains('running') then
+    Result := Max(Result, 95);
+  if Text.Contains('systeme starten') then
+    Result := Max(Result, 96);
+  if Result > 96 then
+    Result := 96;
+end;
 // Return an approximate restore progress based on the estimated duration.
 // Einen ungefaehren Wiederherstellungsfortschritt anhand der geschaetzten Dauer zurueckgeben.
 function ApproximateRestoreProgressPercent: Integer;
@@ -778,10 +909,11 @@ begin
     SetupFrm.PaperlessInstallierenBtn.Enabled := False;
     SetupFrm.InstallLbl.Visible := True;
     SetupFrm.InstallLbl.AutoSize := False;
-    SetupFrm.InstallLbl.Caption := 'Installation läuft. Bitte warten ...';
+    SetupFrm.InstallLbl.Caption := BuildInstallationStatusText(StatusText);
     SetupFrm.ProgressBar2.Min := 0;
     SetupFrm.ProgressBar2.Max := 100;
-    SetupFrm.ProgressBar2.Position := 0;
+    SetupFrm.ProgressBar2.Position := EstimateInstallationProgressPercent(StatusText, 0);
+    InstallationProgressLastTick := GetTickCount64;
     SetupFrm.ProgressBar2.Visible := True;
     Application.ProcessMessages;
     Exit;
@@ -809,15 +941,25 @@ end;
 // Update the status label and move the progress bar while a script is running.
 // Das Statuslabel aktualisieren und die Fortschrittsanzeige waehrend eines Skripts bewegen.
 procedure TMainformFrm.UpdateScriptProgress(const StatusText: string);
+var
+  NewInstallProgress: Integer;
 begin
   if IsPaperlessInstallation and Assigned(SetupFrm) then
   begin
     SetupFrm.InstallLbl.Visible := True;
-    SetupFrm.InstallLbl.Caption := 'Installation läuft. Bitte warten ...';
-    if SetupFrm.ProgressBar2.Position >= SetupFrm.ProgressBar2.Max then
-      SetupFrm.ProgressBar2.Position := SetupFrm.ProgressBar2.Min
-    else
-      SetupFrm.ProgressBar2.Position := SetupFrm.ProgressBar2.Position + 2;
+    SetupFrm.InstallLbl.Caption := BuildInstallationStatusText(StatusText);
+    NewInstallProgress := EstimateInstallationProgressPercent(StatusText, SetupFrm.ProgressBar2.Position);
+    if NewInstallProgress > SetupFrm.ProgressBar2.Position then
+    begin
+      SetupFrm.ProgressBar2.Position := NewInstallProgress;
+      InstallationProgressLastTick := GetTickCount64;
+    end
+    else if (SetupFrm.ProgressBar2.Position < 96) and
+            (GetTickCount64 - InstallationProgressLastTick >= 2500) then
+    begin
+      SetupFrm.ProgressBar2.Position := SetupFrm.ProgressBar2.Position + 1;
+      InstallationProgressLastTick := GetTickCount64;
+    end;
     Application.ProcessMessages;
     Exit;
   end;
@@ -844,10 +986,12 @@ begin
   if IsPaperlessInstallation and Assigned(SetupFrm) then
   begin
     SetupFrm.PaperlessInstallierenBtn.Enabled := True;
+    SetupFrm.InstallationCancelBtn.Visible := False;
+    SetupFrm.InstallationCancelBtn.Enabled := False;
     SetupFrm.InstallLbl.Visible := True;
     SetupFrm.InstallLbl.Caption := ShortenScriptStatusText(StatusText);
     if Success then
-      SetupFrm.ProgressBar2.Position := SetupFrm.ProgressBar2.Max
+      AnimateProgressBarToComplete(SetupFrm.ProgressBar2)
     else
       SetupFrm.ProgressBar2.Position := SetupFrm.ProgressBar2.Min;
     Application.ProcessMessages;
@@ -1238,10 +1382,13 @@ begin
   PaperlessUpdate := False;
   IsRestoreApplyingSettings := False;
   ClearRestoreProgressState;
+  InstallationProgressLastTick := 0;
   TrashRetentionDays := 365;
   ScriptBusy := False;
   ScriptBusyTabIndex := 0;
   ScriptBusyControlStates := nil;
+  InstallCancelRequested := False;
+  RunningScriptProcessId := 0;
   BusyWaitLbl.Visible := False;
   ProgressBar1.Visible := False;
   ProgressBar1.Position := 0;
@@ -2869,9 +3016,16 @@ begin
     RunningStatus := 'Wiederherstellung wird gestartet. Bitte warten ...'
   else
     RunningStatus := 'Wiederherstellung wird gestartet. Bitte warten ...';
+  if IsPaperlessInstallation then
+  begin
+    InstallCancelRequested := False;
+    RunningScriptProcessId := 0;
+  end;
   PrepareScriptProgress(RunningStatus);
   if CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NO_WINDOW, nil, nil, StartupInfo, ProcessInfo) then
   begin
+    if IsPaperlessInstallation then
+      RunningScriptProcessId := ProcessInfo.dwProcessId;
     ShouldWait := True;
     UpdateScriptProgress(RunningStatus);
     Sleep(1500);
@@ -2911,6 +3065,7 @@ begin
               SetupFrm.PaperlessInstallierenBtn.Enabled := False;
               SetupFrm.BitteBestaetigenLbl.Visible := True;
 
+
               SetupFrm.HinweisMemo.Lines.Clear;
               SetupFrm.HinweisMemo.Lines.Add('Ihr Paperless wurde erfolgreich installiert.');
               SetupFrm.HinweisMemo.Lines.Add(' ');
@@ -2931,6 +3086,8 @@ begin
               SetupFrm.WillkommenLbl.Visible := False;
               SetupFrm.ComputerRalleLbl.Visible := False;
               IsPaperlessInstallation := False;
+              SetupFrm.InstallationCancelBtn.Visible := False;
+              SetupFrm.HinweisVerstandenBtn.Enabled := True;
             end
             else if IsBackup = True then
             begin
@@ -2963,8 +3120,20 @@ begin
           end
           else
           begin
-            FinishScriptProgress('Vorgang fehlgeschlagen.', False);
-            CenteredShowMessage('Vorgang fehlgeschlagen. Fehlercode: ' + IntToStr(ExitCode));
+            if InstallCancelRequested and IsPaperlessInstallation then
+            begin
+              FinishScriptProgress('Installation abgebrochen.', False);
+              if Assigned(SetupFrm) then
+                SetupFrm.HinweisVerstandenBtn.Enabled := True;
+              CenteredShowMessage('Installation wurde abgebrochen. Bereits geladene Docker-Images wurden entfernt.');
+              IsPaperlessInstallation := False;
+              InstallCancelRequested := False;
+            end
+            else
+            begin
+              FinishScriptProgress('Vorgang fehlgeschlagen.', False);
+              CenteredShowMessage('Vorgang fehlgeschlagen. Fehlercode: ' + IntToStr(ExitCode));
+            end;
             ClearRestoreProgressState;
           end;
         end else
@@ -3019,7 +3188,7 @@ begin
     ClearRestoreProgressState;
   end;
   ActiveControl := nil;
-
+  RunningScriptProcessId := 0;
   if IsAutostart = True then
   Application.Terminate;
 
