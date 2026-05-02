@@ -230,6 +230,7 @@ type
     procedure HideWelcomeLabel;
     procedure EncryptEmailEnvForBackup(const TargetBackupPath: string);
     procedure RestoreEmailEnvFromBackup(const SourceBackupPath, TargetComposePath: string);
+    function ValidateRestoreBackupFolder(const BackupFolder: string): Boolean;
   public
     procedure CancelPaperlessInstallation;
   end;
@@ -1130,6 +1131,48 @@ begin
       CenteredShowMessage('Mail-Einstellungen wurden nicht wiederhergestellt.');
     end;
   end;
+end;
+function TMainformFrm.ValidateRestoreBackupFolder(const BackupFolder: string): Boolean;
+var
+  MissingFiles: TStringList;
+  BasePath: string;
+  procedure RequireFile(const FileName: string);
+  begin
+    if not FileExists(BasePath + FileName) then
+      MissingFiles.Add(FileName);
+  end;
+begin
+  Result := False;
+  if not DirectoryExists(BackupFolder) then
+  begin
+    CenteredShowMessage('Der gewählte Backup-Ordner existiert nicht.');
+    LogWarning('Restore precheck failed. Backup folder does not exist: ' + BackupFolder);
+    Exit;
+  end;
+  if (PaperlessDBName.Trim = '') or (Volume_data.Trim = '') or (Volume_media.Trim = '') or (Volume_export.Trim = '') then
+  begin
+    CenteredShowMessage('Die Docker-Container- oder Volume-Namen konnten nicht vollständig ermittelt werden.');
+    LogWarning('Restore precheck failed. Missing container or volume names.');
+    Exit;
+  end;
+  BasePath := IncludeTrailingPathDelimiter(BackupFolder);
+  MissingFiles := TStringList.Create;
+  try
+    RequireFile(PaperlessDBName + '_backup.sql');
+    RequireFile(Volume_data + '.tar.gz');
+    RequireFile(Volume_media + '.tar.gz');
+    RequireFile(Volume_export + '.tar.gz');
+    if MissingFiles.Count > 0 then
+    begin
+      CenteredShowMessage('Der gewählte Backup-Ordner ist unvollständig. Die Wiederherstellung wurde nicht gestartet.' +
+        sLineBreak + sLineBreak + 'Fehlende Dateien:' + sLineBreak + MissingFiles.Text);
+      LogWarning('Restore precheck failed. Missing files in "' + BackupFolder + '": ' + StringReplace(MissingFiles.CommaText, ',', ', ', [rfReplaceAll]));
+      Exit;
+    end;
+  finally
+    MissingFiles.Free;
+  end;
+  Result := True;
 end;
 // Open the support page in the default browser.
 // Die Unterstützungsseite im Standardbrowser öffnen.
@@ -2940,17 +2983,26 @@ begin
       BackupWiederherProgNeuStartLbl.Caption := 'Wiederherstellung wird vorbereitet. Bitte warten ...';
       LogInfo('Restore estimate for "' + BackupFolder + '": ' + RestoreEstimateLogText);
       Application.ProcessMessages;
-      if ApplyPaperlessSecretKeyForRestore(BackupFolder) then
+      if ValidateRestoreBackupFolder(BackupFolder) then
       begin
-        ShouldWriteNewCompose := True;
-        try
-          CreateDockerComposeWithSetupForm;
-        finally
-          ShouldWriteNewCompose := False;
+        if ApplyPaperlessSecretKeyForRestore(BackupFolder) then
+        begin
+          ShouldWriteNewCompose := True;
+          try
+            CreateDockerComposeWithSetupForm;
+          finally
+            ShouldWriteNewCompose := False;
+          end;
         end;
+        RestoreEmailEnvFromBackup(BackupFolder, ComposePath);
+        CreateRestoreScript(ComposePath, BackupFolder);
+      end
+      else
+      begin
+        ClearRestoreProgressState;
+        BackupWiederherProgNeuStartLbl.Visible := True;
+        BackupWiederherProgNeuStartLbl.Caption := 'Wiederherstellung abgebrochen.';
       end;
-      RestoreEmailEnvFromBackup(BackupFolder, ComposePath);
-      CreateRestoreScript(ComposePath, BackupFolder);
     end
     else
     begin

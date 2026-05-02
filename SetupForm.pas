@@ -473,6 +473,7 @@ begin
   InstallLbl.Caption := 'Installation wird abgebrochen. Bitte warten ...';
   ProgressBar2.Visible := True;
   MainformFrm.CancelPaperlessInstallation;
+
   HinweisVerstandenBtn.Enabled := False;
 end;
 
