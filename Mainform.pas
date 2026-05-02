@@ -851,9 +851,12 @@ begin
     Application.ProcessMessages;
     Exit;
   end;
-  EndScriptBusyState;
-  StartPaperlessBackupBtn.Enabled := True;
-  RestorePaperlessBackupBtn.Enabled := True;
+  if not (Success and (RestoreEstimatedSeconds > 0)) then
+  begin
+    EndScriptBusyState;
+    StartPaperlessBackupBtn.Enabled := True;
+    RestorePaperlessBackupBtn.Enabled := True;
+  end;
   BackupWiederherProgNeuStartLbl.Visible := True;
   if Success and (RestoreEstimatedSeconds > 0) then
     BackupWiederherProgNeuStartLbl.Caption := 'Wiederherstellung wird abgeschlossen. Bitte warten ...'
@@ -865,6 +868,9 @@ begin
     begin
       AnimateProgressBarToComplete(ProgressBar1);
       BackupWiederherProgNeuStartLbl.Caption := ShortenScriptStatusText(StatusText);
+      EndScriptBusyState;
+      StartPaperlessBackupBtn.Enabled := True;
+      RestorePaperlessBackupBtn.Enabled := True;
     end
     else
       ProgressBar1.Position := ProgressBar1.Max;
@@ -2890,7 +2896,7 @@ begin
               SuccessStatus := 'Update abgeschlossen.'
             else
               SuccessStatus := 'Wiederherstellung abgeschlossen.';
-            if SuccessStatus <> 'Wiederherstellung abgeschlossen.' then
+            if (SuccessStatus <> 'Wiederherstellung abgeschlossen.') and not IsRestoreApplyingSettings then
               FinishScriptProgress(SuccessStatus, True);
             if IsPaperlessInstallation = True then
             begin

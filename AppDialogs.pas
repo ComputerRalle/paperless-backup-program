@@ -59,6 +59,19 @@ begin
   Result := Application.Handle;
 end;
 
+// Return the form that should act as popup parent for modal dialogs.
+// Das Formular zurueckgeben, das Popup-Parent fuer modale Dialoge sein soll.
+function ActivePopupParent: TCustomForm;
+begin
+  Result := Screen.ActiveCustomForm;
+  if Assigned(Result) and Result.HandleAllocated then Exit;
+
+  if Assigned(Application.MainForm) and Application.MainForm.HandleAllocated then
+    Result := Application.MainForm
+  else
+    Result := nil;
+end;
+
 // Return the rectangle of the form that should own centered dialogs.
 // Das Rechteck des Formulars zurueckgeben, zu dem Dialoge gehoeren sollen.
 function OwnerFormRect(const OwnerHandle: HWND): TRect;
@@ -86,6 +99,24 @@ begin
   SetWindowPos(WindowHandle, 0, NewLeft, NewTop, 0, 0, SWP_NOSIZE or SWP_NOZORDER or SWP_NOACTIVATE);
 end;
 
+// Prepare a modal dialog so it stays in front of the active application form.
+// Einen modalen Dialog so vorbereiten, dass er vor dem aktiven Formular bleibt.
+procedure PrepareModalDialog(const Dialog: TForm; const OwnerHandle: HWND);
+var
+  PopupParent: TCustomForm;
+begin
+  Dialog.Position := poDesigned;
+  PopupParent := ActivePopupParent;
+  if Assigned(PopupParent) then
+  begin
+    Dialog.PopupMode := pmExplicit;
+    Dialog.PopupParent := PopupParent;
+  end;
+  Dialog.FormStyle := fsStayOnTop;
+  CenterWindowOnOwner(Dialog.Handle, OwnerHandle);
+  SetWindowPos(Dialog.Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE);
+end;
+
 // Center native Windows message boxes as soon as they are activated.
 // Native Windows-Messageboxen beim Aktivieren zentrieren.
 function MessageBoxCbtHook(Code: Integer; WParam: WPARAM; LParam: LPARAM): LRESULT; stdcall;
@@ -93,6 +124,8 @@ begin
   if Code = HCBT_ACTIVATE then
   begin
     CenterWindowOnOwner(HWND(WParam), MessageBoxOwnerHandle);
+    SetWindowPos(HWND(WParam), HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE);
+    SetForegroundWindow(HWND(WParam));
     if MessageBoxHook <> 0 then
     begin
       UnhookWindowsHookEx(MessageBoxHook);
@@ -117,8 +150,7 @@ begin
   Dialog := CreateMessageDialog(Msg, DlgType, Buttons);
   try
     Dialog.HelpContext := HelpCtx;
-    Dialog.Position := poDesigned;
-    CenterWindowOnOwner(Dialog.Handle, OwnerHandle);
+    PrepareModalDialog(Dialog, OwnerHandle);
     Result := Dialog.ShowModal;
   finally
     Dialog.Free;
@@ -134,7 +166,7 @@ begin
 
   MessageBoxHook := SetWindowsHookEx(WH_CBT, @MessageBoxCbtHook, 0, GetCurrentThreadId);
   try
-    Result := Winapi.Windows.MessageBox(OwnerHandle, PChar(Text), PChar(Caption), Flags);
+    Result := Winapi.Windows.MessageBox(OwnerHandle, PChar(Text), PChar(Caption), Flags or MB_TOPMOST or MB_SETFOREGROUND);
   finally
     if MessageBoxHook <> 0 then
     begin
@@ -164,7 +196,6 @@ begin
       Dialog.Caption := DialogCaption;
       Dialog.ClientWidth := 520;
       Dialog.ClientHeight := 250;
-      Dialog.Position := poDesigned;
 
       PromptLbl := TLabel.Create(Dialog);
       PromptLbl.Parent := Dialog;
@@ -237,7 +268,7 @@ begin
 
       Dialog.ClientHeight := ButtonTop + 48;
       OwnerHandle := ActiveFormHandle;
-      CenterWindowOnOwner(Dialog.Handle, OwnerHandle);
+      PrepareModalDialog(Dialog, OwnerHandle);
 
       if Dialog.ShowModal <> mrOk then
         Exit(False);
@@ -284,7 +315,6 @@ begin
       Dialog.Caption := DialogCaption;
       Dialog.ClientWidth := 640;
       Dialog.ClientHeight := 250;
-      Dialog.Position := poDesigned;
 
       PromptLbl := TLabel.Create(Dialog);
       PromptLbl.Parent := Dialog;
@@ -339,7 +369,7 @@ begin
 
       Dialog.ClientHeight := ButtonTop + 48;
       OwnerHandle := ActiveFormHandle;
-      CenterWindowOnOwner(Dialog.Handle, OwnerHandle);
+      PrepareModalDialog(Dialog, OwnerHandle);
 
       Result := Dialog.ShowModal;
       if Result <> mrOk then
