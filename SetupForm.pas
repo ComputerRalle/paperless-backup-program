@@ -467,24 +467,12 @@ end;
 // Cancel a running first installation and remove images already pulled by compose.
 // Eine laufende Erstinstallation abbrechen und bereits von Compose geladene Images entfernen.
 procedure TSetupFrm.InstallationCancelBtnClick(Sender: TObject);
-var
-  PaperlessInput: string;
-  AppDataFolder: string;
 begin
   InstallationCancelBtn.Enabled := False;
   InstallLbl.Visible := True;
   InstallLbl.Caption := 'Installation wird abgebrochen. Bitte warten ...';
   ProgressBar2.Visible := True;
   MainformFrm.CancelPaperlessInstallation;
-  PaperlessInput := IncludeTrailingPathDelimiter(GetEnvironmentVariable('USERPROFILE')) + 'Desktop\Paperless-Input';
-  if DirectoryExists(PaperlessInput) then
-  begin
-    RemoveDir(PaperlessInput);
-  end;
-  // AppData-Ordner
-  AppDataFolder := IncludeTrailingPathDelimiter(GetEnvironmentVariable('USERPROFILE')) + AppDataFolderName;
-  if DirectoryExists(AppDataFolder) then
-    TDirectory.Delete(AppDataFolder, True);
 
   HinweisVerstandenBtn.Enabled := False;
 end;
