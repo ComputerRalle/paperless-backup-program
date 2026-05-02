@@ -2738,9 +2738,37 @@ end;
 procedure TMainformFrm.CreateBackupPlanScript(const ComposePath: string);
 var
   BackupFolderList: TArray<string>;
+  ValidBackupFolderList: TList<string>;
   MaxBackupFolders: Integer;
   Ini: TIniFile;
   Volumes: TDockerVolumeNames;
+  BackupFolder: string;
+  function FolderNameToDateTime(const Folder: string): TDateTime;
+  var
+    Name: string;
+    Year, Month, Day, Hour, Minute, Second: Word;
+  begin
+    Result := 0;
+    Name := ExtractFileName(Folder);
+    if (Length(Name) <> 19) or
+       (Name[5] <> '-') or
+       (Name[8] <> '-') or
+       (Name[11] <> '_') or
+       (Name[14] <> '-') or
+       (Name[17] <> '-') then
+      Exit;
+    try
+      Year   := StrToInt(Copy(Name, 1, 4));
+      Month  := StrToInt(Copy(Name, 6, 2));
+      Day    := StrToInt(Copy(Name, 9, 2));
+      Hour := StrToInt(Copy(Name, 12, 2));
+      Minute := StrToInt(Copy(Name, 15, 2));
+      Second:= StrToInt(Copy(Name, 18, 2));
+      Result := EncodeDateTime(Year, Month, Day, Hour, Minute, Second, 0);
+    except
+      Result := 0;
+    end;
+  end;
 begin
   // Stop when no compose path was provided.
   // Abbrechen, wenn kein Compose-Pfad übergeben wurde.
@@ -2782,53 +2810,37 @@ begin
   MaxBackupFolders := KeepBackupsSpE.Value;
   if (MaxBackupFolders > 0) and DirectoryExists(BackupPath) then
   begin
+    ValidBackupFolderList := TList<string>.Create;
     try
-      BackupFolderList := TDirectory.GetDirectories(BackupPath);
-      TArray.Sort<string>(BackupFolderList, TComparer<string>.Construct(
-        function(const L, R: string): Integer
-        var
-          DL, DR: TDateTime;
-          function FolderNameToDateTime(const Folder: string): TDateTime;
-          var
-            Name: string;
-            Year, Month, Day, Hour, Minute, Second: Word;
+      try
+        BackupFolderList := TDirectory.GetDirectories(BackupPath);
+        for BackupFolder in BackupFolderList do
+        begin
+          if FolderNameToDateTime(BackupFolder) > 0 then
+            ValidBackupFolderList.Add(BackupFolder);
+        end;
+        BackupFolderList := ValidBackupFolderList.ToArray;
+        TArray.Sort<string>(BackupFolderList); // Ascending: oldest first.
+        // Aufsteigend: älteste zuerst.
+        if Length(BackupFolderList) > MaxBackupFolders then
+        begin
+          for var i := 0 to Length(BackupFolderList) - MaxBackupFolders - 1 do
           begin
-            Result := 0;
-            Name := ExtractFileName(Folder);
             try
-              Year   := StrToInt(Copy(Name, 1, 4));
-              Month  := StrToInt(Copy(Name, 6, 2));
-              Day    := StrToInt(Copy(Name, 9, 2));
-              Hour := StrToInt(Copy(Name, 12, 2));
-              Minute := StrToInt(Copy(Name, 15, 2));
-              Second:= StrToInt(Copy(Name, 18, 2));
-              Result := EncodeDateTime(Year, Month, Day, Hour, Minute, Second, 0);
+              TDirectory.Delete(BackupFolderList[i], True); // Delete oldest folders.
+              // Die ältesten Ordner löschen.
             except
-              Result := 0;
+              on E: Exception do
+                LogWarning('Could not delete old planned backup folder "' + BackupFolderList[i] + '": ' + E.Message);
             end;
           end;
-        begin
-          DL := FolderNameToDateTime(L);
-          DR := FolderNameToDateTime(R);
-          Result := CompareDateTime(DL, DR); // Ascending: oldest first.
-          // Aufsteigend: älteste zuerst.
-        end));
-      if Length(BackupFolderList) > MaxBackupFolders then
-      begin
-        for var i := 0 to Length(BackupFolderList) - MaxBackupFolders - 1 do
-        begin
-          try
-            TDirectory.Delete(BackupFolderList[i], True); // Delete oldest folders.
-            // Die ältesten Ordner löschen.
-          except
-            on E: Exception do
-              LogWarning('Could not delete old planned backup folder "' + BackupFolderList[i] + '": ' + E.Message);
-          end;
         end;
+      except
+        on E: Exception do
+          LogWarning('Could not clean planned backup folders: ' + E.Message);
       end;
-    except
-      on E: Exception do
-        LogWarning('Could not clean planned backup folders: ' + E.Message);
+    finally
+      ValidBackupFolderList.Free;
     end;
   end;
 end;
