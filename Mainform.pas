@@ -372,13 +372,11 @@ var
 begin
   if SizeBytes <= 0 then
     Exit(0);
-
   // Restore includes archive extraction, database import, Docker startup, and migrations.
   // Wiederherstellung umfasst Entpacken, Datenbankimport, Docker-Start und Migrationen.
   Minutes := Ceil(SizeBytes / (350.0 * 1024.0 * 1024.0)) + 3;
   if Minutes < 5 then
     Minutes := 5;
-
   Result := Minutes * 60;
 end;
 // Build the visible restore duration estimate.
@@ -2719,6 +2717,7 @@ var
   Ini: TIniFile;
   RestoreDefaultFolder: string;
   BackupSizeBytes: Int64;
+  RestoreEstimateLogText: string;
 begin
   HideWelcomeLabel;
   ClearRestoreProgressState;
@@ -2759,10 +2758,11 @@ begin
       Application.ProcessMessages;
       BackupSizeBytes := GetDirectorySizeBytes(BackupFolder);
       RestoreEstimatedSeconds := EstimateRestoreDurationSeconds(BackupSizeBytes);
-      RestoreEstimateText := Format('Backup-Größe: %s. Geschätzte Wiederherstellungsdauer: %s.',
+      RestoreEstimateText := 'Restore estimate available';
+      RestoreEstimateLogText := Format('Backup-Größe: %s. Geschätzte Wiederherstellungsdauer: %s.',
         [FormatByteSize(BackupSizeBytes), EstimateRestoreDurationText(BackupSizeBytes)]);
-      BackupWiederherProgNeuStartLbl.Caption := RestoreEstimateText;
-      LogInfo('Restore estimate for "' + BackupFolder + '": ' + RestoreEstimateText);
+      BackupWiederherProgNeuStartLbl.Caption := 'Wiederherstellung wird vorbereitet. Bitte warten ...';
+      LogInfo('Restore estimate for "' + BackupFolder + '": ' + RestoreEstimateLogText);
       Application.ProcessMessages;
       if ApplyPaperlessSecretKeyForRestore(BackupFolder) then
       begin
@@ -2858,7 +2858,7 @@ begin
   else if IsBackup then
     RunningStatus := 'Backup wird gestartet. Bitte warten ...'
   else if RestoreEstimateText.Trim <> '' then
-    RunningStatus := 'Wiederherstellung wird gestartet. ' + RestoreEstimateText
+    RunningStatus := 'Wiederherstellung wird gestartet. Bitte warten ...'
   else
     RunningStatus := 'Wiederherstellung wird gestartet. Bitte warten ...';
   PrepareScriptProgress(RunningStatus);
