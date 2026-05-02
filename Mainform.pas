@@ -1155,11 +1155,11 @@ begin
   end else
   begin
     redis_version_edit.Enabled := True;
-    postgres_version_edit.Enabled := True;
+    postgres_version_edit.Enabled := False;
     gotenberg_version_edit.Enabled := True;
-    tika_version_edit.Enabled := True;
-    alpine_version_edit.Enabled := True;
-    busybox_version_edit.Enabled := True;
+    tika_version_edit.Enabled := False;
+    alpine_version_edit.Enabled := False;
+    busybox_version_edit.Enabled := False;
     paperless_version_edit.Enabled := True;
   end;
 end;
