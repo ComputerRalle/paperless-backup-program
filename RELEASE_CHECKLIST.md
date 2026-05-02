@@ -10,15 +10,15 @@ Diese Checkliste vor der Veroeffentlichung einer neuen Paperless Backup Programm
 - Pruefen, dass das Repository vor der Release-Arbeit sauber ist.
 - Review `CHANGELOG.md` and move finished entries from `Unreleased` into the new version.
 - `CHANGELOG.md` pruefen und fertige Eintraege aus `Unreleased` in die neue Version verschieben.
-- Check the program version in `PaperlessBackupProgram.dproj`.
-- Programmversion in `PaperlessBackupProgram.dproj` pruefen.
+- Check the program version in `PaperlessBackupProgramm.dproj`.
+- Programmversion in `PaperlessBackupProgramm.dproj` pruefen.
 - Check the update version in `update/update.ini`.
 - Update-Version in `update/update.ini` pruefen.
 
 ## Build / Kompilieren
 
-- Open `PaperlessBackupProgram.dproj` in Delphi.
-- `PaperlessBackupProgram.dproj` in Delphi oeffnen.
+- Open `PaperlessBackupProgramm.dproj` in Delphi.
+- `PaperlessBackupProgramm.dproj` in Delphi oeffnen.
 - Select the Win32 Release target.
 - Win32 Release-Ziel auswaehlen.
 - Build the project without compiler errors.

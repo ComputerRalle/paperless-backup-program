@@ -36,9 +36,9 @@ vorbereiten und ausgewaehlte Docker-Image-Versionen verwalten.
 
 ## Build / Kompilieren
 
-Open `PaperlessBackupProgram.dproj` in Delphi and build the Win32 target.
+Open `PaperlessBackupProgramm.dproj` in Delphi and build the Win32 target.
 
-Oeffne `PaperlessBackupProgram.dproj` in Delphi und kompiliere das Win32-Ziel.
+Oeffne `PaperlessBackupProgramm.dproj` in Delphi und kompiliere das Win32-Ziel.
 
 The application stores runtime settings in the user profile folder:
 
