@@ -372,11 +372,13 @@ var
 begin
   if SizeBytes <= 0 then
     Exit(0);
+
   // Restore includes archive extraction, database import, Docker startup, and migrations.
   // Wiederherstellung umfasst Entpacken, Datenbankimport, Docker-Start und Migrationen.
   Minutes := Ceil(SizeBytes / (350.0 * 1024.0 * 1024.0)) + 3;
   if Minutes < 5 then
     Minutes := 5;
+
   Result := Minutes * 60;
 end;
 // Build the visible restore duration estimate.

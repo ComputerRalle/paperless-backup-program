@@ -114,7 +114,8 @@ begin
   end;
   Dialog.FormStyle := fsStayOnTop;
   CenterWindowOnOwner(Dialog.Handle, OwnerHandle);
-  SetWindowPos(Dialog.Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE);
+  SetWindowPos(Dialog.Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE);
+  SetForegroundWindow(Dialog.Handle);
 end;
 
 // Center native Windows message boxes as soon as they are activated.
@@ -166,7 +167,11 @@ begin
 
   MessageBoxHook := SetWindowsHookEx(WH_CBT, @MessageBoxCbtHook, 0, GetCurrentThreadId);
   try
-    Result := Winapi.Windows.MessageBox(OwnerHandle, PChar(Text), PChar(Caption), Flags or MB_TOPMOST or MB_SETFOREGROUND);
+    Result := Winapi.Windows.MessageBox(
+      OwnerHandle,
+      PChar(Text),
+      PChar(Caption),
+      Flags or MB_TOPMOST or MB_SETFOREGROUND or MB_SYSTEMMODAL);
   finally
     if MessageBoxHook <> 0 then
     begin
