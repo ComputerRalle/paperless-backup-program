@@ -10,15 +10,15 @@ Diese Checkliste vor der Veroeffentlichung einer neuen Paperless Backup Programm
 - Pruefen, dass das Repository vor der Release-Arbeit sauber ist.
 - Review `CHANGELOG.md` and move finished entries from `Unreleased` into the new version.
 - `CHANGELOG.md` pruefen und fertige Eintraege aus `Unreleased` in die neue Version verschieben.
-- Check the program version in `PaperlessBackupProgram.dproj`.
-- Programmversion in `PaperlessBackupProgram.dproj` pruefen.
+- Check the program version in `PaperlessBackupProgramm.dproj`.
+- Programmversion in `PaperlessBackupProgramm.dproj` pruefen.
 - Check the update version in `update/update.ini`.
 - Update-Version in `update/update.ini` pruefen.
 
 ## Build / Kompilieren
 
-- Open `PaperlessBackupProgram.dproj` in Delphi.
-- `PaperlessBackupProgram.dproj` in Delphi oeffnen.
+- Open `PaperlessBackupProgramm.dproj` in Delphi.
+- `PaperlessBackupProgramm.dproj` in Delphi oeffnen.
 - Select the Win32 Release target.
 - Win32 Release-Ziel auswaehlen.
 - Build the project without compiler errors.
@@ -45,6 +45,10 @@ Diese Checkliste vor der Veroeffentlichung einer neuen Paperless Backup Programm
 - Manuelles Backup mit einer Test-Paperless-Installation erstellen.
 - Check that the backup folder contains the expected files.
 - Pruefen, ob der Backup-Ordner die erwarteten Dateien enthaelt.
+- If mail settings exist, check that the backup contains `email-versand.env.enc` and not `email-versand.env`.
+- Wenn Mail-Einstellungen vorhanden sind, pruefen, ob das Backup `email-versand.env.enc` und nicht `email-versand.env` enthaelt.
+- Store the test password in the test notes and verify the password warning is shown.
+- Testpasswort in den Testnotizen speichern und pruefen, ob der Passwort-Hinweis angezeigt wird.
 - Check that `image_versionen.txt` is written when expected.
 - Pruefen, ob `image_versionen.txt` wie erwartet geschrieben wird.
 - Check that Paperless starts again after the backup.
@@ -60,6 +64,12 @@ Diese Checkliste vor der Veroeffentlichung einer neuen Paperless Backup Programm
 - Pruefen, ob Dokumente und Metadaten verfuegbar sind.
 - Check that the database restore has no visible errors.
 - Pruefen, ob die Datenbank-Wiederherstellung keine sichtbaren Fehler zeigt.
+- Restore encrypted mail settings with the correct password and check that `email-versand.env` is recreated.
+- Verschluesselte Mail-Einstellungen mit richtigem Passwort wiederherstellen und pruefen, ob `email-versand.env` neu erzeugt wird.
+- Test a wrong mail settings password and continue with "Ohne Mail wiederherstellen".
+- Falsches Mail-Einstellungs-Passwort testen und mit "Ohne Mail wiederherstellen" fortfahren.
+- Restore an older backup without `email-versand.env.enc` and check that the restore continues without error.
+- Aelteres Backup ohne `email-versand.env.enc` wiederherstellen und pruefen, ob die Wiederherstellung ohne Fehler weiterlaeuft.
 
 ## Scheduled Backup Test / Test Geplantes Backup
 
@@ -71,6 +81,8 @@ Diese Checkliste vor der Veroeffentlichung einer neuen Paperless Backup Programm
 - Geplante Aufgabe einmal manuell ausfuehren.
 - Check that the planned backup folder is created.
 - Pruefen, ob der geplante Backup-Ordner erstellt wird.
+- If encrypted mail settings were prepared, check that scheduled backups copy only `email-versand.env.enc`.
+- Wenn verschluesselte Mail-Einstellungen vorbereitet wurden, pruefen, ob geplante Backups nur `email-versand.env.enc` kopieren.
 - Remove the scheduled task again when it was only used for testing.
 - Geplante Aufgabe wieder entfernen, wenn sie nur fuer den Test angelegt wurde.
 
@@ -97,4 +109,3 @@ Diese Checkliste vor der Veroeffentlichung einer neuen Paperless Backup Programm
 - Pruefen, ob der oeffentliche Downloadlink funktioniert.
 - Check that the download page changelog matches `CHANGELOG.md`.
 - Pruefen, ob der Changelog auf der Downloadseite zu `CHANGELOG.md` passt.
-

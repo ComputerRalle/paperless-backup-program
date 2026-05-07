@@ -1,4 +1,4 @@
-// --------------------------------------------------------------
+﻿// --------------------------------------------------------------
 // Original author: Ralf-Peter Kleinert - 2025
 // Ursprünglicher Autor: Ralf-Peter Kleinert - 2025
 // Alias: #ComputerRalle / DIGITAL-easy
@@ -40,6 +40,9 @@ type
     KeePassXCLbl: TLabel;
     WillkommenLbl: TLabel;
     ComputerRalleLbl: TLabel;
+    InstallLbl: TLabel;
+    ProgressBar2: TProgressBar;
+    InstallationCancelBtn: TButton;
     procedure NoticeAcceptedBtnClick(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure InstallPaperlessBtnClick(Sender: TObject);
@@ -56,6 +59,7 @@ type
     procedure ComputerRalleLblClick(Sender: TObject);
     procedure FormClose(Sender: TObject; var Action: TCloseAction);
     procedure WriteImageVersion(const TargetPath: string);
+    procedure InstallationCancelBtnClick(Sender: TObject);
 
   private
     { Private declarations }
@@ -89,7 +93,6 @@ implementation
 
 uses
   Mainform, DockerComposeGenerator, AppConfig, AppLogger, AppDialogs;
-
 // Generate a per-installation Paperless secret key.
 // Einen Paperless Secret Key pro Installation erzeugen.
 function GeneratePaperlessSecretKey: string;
@@ -105,7 +108,6 @@ begin
   end;
   Result := Copy(Result, 1, 64);
 end;
-
 // Read an existing Paperless secret key from docker-compose.yml.
 // Einen vorhandenen Paperless Secret Key aus docker-compose.yml lesen.
 function ReadPaperlessSecretKeyFromCompose(const ComposePath: string): string;
@@ -118,7 +120,6 @@ var
 begin
   Result := '';
   if not FileExists(ComposePath) then Exit;
-
   Lines := TStringList.Create;
   try
     Lines.LoadFromFile(ComposePath, TEncoding.UTF8);
@@ -137,7 +138,6 @@ begin
     Lines.Free;
   end;
 end;
-
 // Reuse the saved key, import an existing compose key, migrate a legacy key, or create a new key.
 // Gespeicherten Key verwenden, vorhandenen Compose-Key importieren, Legacy-Key migrieren oder neuen Key erzeugen.
 function GetOrCreatePaperlessSecretKey(const Ini: TIniFile; const ComposePath: string): string;
@@ -146,13 +146,11 @@ var
 begin
   StoredKey := Ini.ReadString(IniSectionSecurity, IniKeyPaperlessSecretKey, '').Trim;
   LegacyStoredKey := Ini.ReadString(IniSectionSecurity, IniKeyLegacyPaperlessSecretKey, '').Trim;
-
   if (StoredKey <> '') and (StoredKey <> LegacyPaperlessSecretKey) then
   begin
     Result := StoredKey;
     Exit;
   end;
-
   ComposeKey := ReadPaperlessSecretKeyFromCompose(ComposePath);
   if ComposeKey <> '' then
   begin
@@ -171,14 +169,12 @@ begin
     Ini.UpdateFile;
     Exit;
   end;
-
   if LegacyStoredKey <> '' then
   begin
     Result := LegacyStoredKey;
     LogWarning('Legacy Paperless secret key reused from Einstellungen.ini.');
     Exit;
   end;
-
   if StoredKey = LegacyPaperlessSecretKey then
   begin
     Result := StoredKey;
@@ -188,13 +184,11 @@ begin
     LogWarning('Legacy Paperless secret key migrated to separate INI key.');
     Exit;
   end;
-
   Result := GeneratePaperlessSecretKey;
   Ini.WriteString(IniSectionSecurity, IniKeyPaperlessSecretKey, Result);
   Ini.UpdateFile;
   LogInfo('New Paperless secret key generated and saved.');
 end;
-
 // Write the active Paperless secret key into the backup folder.
 // Den aktiven Paperless Secret Key in den Backup-Ordner schreiben.
 procedure WritePaperlessSecretKeyBackup(const TargetPath: string; const Ini: TIniFile);
@@ -203,22 +197,17 @@ var
   Txt: TStringList;
 begin
   SecretKey := Ini.ReadString(IniSectionSecurity, IniKeyPaperlessSecretKey, '').Trim;
-
   if SecretKey = LegacyPaperlessSecretKey then
     SecretKey := '';
-
   if SecretKey = '' then
   begin
     ComposePath := IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + DockerComposeFileName;
     SecretKey := ReadPaperlessSecretKeyFromCompose(ComposePath);
   end;
-
   if SecretKey = '' then
     SecretKey := Ini.ReadString(IniSectionSecurity, IniKeyLegacyPaperlessSecretKey, '').Trim;
-
   if SecretKey = '' then
     SecretKey := Ini.ReadString(IniSectionSecurity, IniKeyPaperlessSecretKey, '').Trim;
-
   Txt := TStringList.Create;
   try
     Txt.Add('PAPERLESS_SECRET_KEY=' + SecretKey);
@@ -228,7 +217,6 @@ begin
     Txt.Free;
   end;
 end;
-
 // Close the whole program when the notice form was opened as the first form.
 // Das gesamte Programm schließen, wenn das Hinweisfenster als erstes Fenster geöffnet wurde.
 procedure TSetupFrm.FormClose(Sender: TObject; var Action: TCloseAction);
@@ -261,7 +249,15 @@ begin
   StatusBar1.Font.Size:= 10;
   StatusBar1.Font.Style:= [fsBold];
   StatusBar1.Panels.Add.Text := ' ' + AppStatusTitle + MainformFrm.GetFileVersion(Application.ExeName);
-
+  InstallLbl.Visible := False;
+  InstallLbl.AutoSize := False;
+  InstallLbl.Caption := '';
+  ProgressBar2.Min := 0;
+  ProgressBar2.Max := 100;
+  ProgressBar2.Position := 0;
+  ProgressBar2.Visible := False;
+  InstallationCancelBtn.Visible := False;
+  InstallationCancelBtn.Enabled := False;
   // Make link labels readable in dark mode.
   // Link-Beschriftungen im dunklen Modus lesbar machen.
   with LinkKlickLbl do
@@ -290,6 +286,7 @@ begin
   // Check whether Docker and Paperless are already available.
   // Prüfen, ob Docker und Paperless bereits verfügbar sind.
   CheckDockerAvailable;
+  if not DockerAvailable then Exit;
   if DockerAvailable = True then
   begin
     SieBenoetigenDockerLbl.Caption := 'Docker ist Installiert. Sie können Paperless installieren.';
@@ -375,6 +372,8 @@ var
   Ini:TiniFile;
 begin
   WantsInstall := True;
+  BorderIcons := [];
+  BorderStyle := bsSingle;
   // Step 1: Check whether Docker is available in the system PATH.
   // Schritt 1: Prüfen, ob Docker im System-PATH verfügbar ist.
   if not IsDockerInPath then
@@ -400,10 +399,18 @@ begin
   // Step 2: Ask for confirmation before installation.
   // Schritt 2: Vor der Installation nach Bestätigung fragen.
   if CenteredMessageDlg('Möchten Sie Paperless jetzt installieren?', mtConfirmation, [mbYes, mbNo], 0) = mrNo then
+  begin
+    WantsInstall := False;
+    IsPaperlessInstallation := False;
+    ShouldOpenPaperless := False;
     Exit;
-
+  end;
   IsPaperlessInstallation := True;
   ShouldOpenPaperless := True;
+  PaperlessInstallierenBtn.Enabled := False;
+  HinweisVerstandenBtn.Enabled := False;
+  //InstallationCancelBtn.Visible := True;
+  //InstallationCancelBtn.Enabled := True;
 
   // Create the desktop consume folder if it does not exist.
   // Den Consume-Ordner auf dem Desktop erstellen, falls er nicht existiert.
@@ -451,7 +458,23 @@ begin
   end;
 
   CreateDockerComposeFile;
+  InstallationCancelBtn.Visible := False;
+  InstallationCancelBtn.Enabled := False;
   IsPaperlessInstallation:= False;
+  BorderIcons := [biSystemMenu, biMinimize, biMaximize];
+  BorderStyle := bsSizeable;
+end;
+// Cancel a running first installation and remove images already pulled by compose.
+// Eine laufende Erstinstallation abbrechen und bereits von Compose geladene Images entfernen.
+procedure TSetupFrm.InstallationCancelBtnClick(Sender: TObject);
+begin
+  InstallationCancelBtn.Enabled := False;
+  InstallLbl.Visible := True;
+  InstallLbl.Caption := 'Installation wird abgebrochen. Bitte warten ...';
+  ProgressBar2.Visible := True;
+  MainformFrm.CancelPaperlessInstallation;
+
+  HinweisVerstandenBtn.Enabled := False;
 end;
 
 // Check whether Docker can answer "docker info".
@@ -492,9 +515,12 @@ end;
 // Start an external command, wait for it, and return its exit code.
 // Einen externen Befehl starten, darauf warten und den Exit-Code zurückgeben.
 function TSetupFrm.RunCommand(const ExeName, Params: string; out ExitCode: Cardinal): Boolean;
+const
+  CommandTimeoutMs = 120000;
 var
   SEInfo: TShellExecuteInfo;
   ProcHandle: THandle;
+  WaitResult: DWORD;
 begin
   // Clear the ShellExecuteInfo structure before use.
   // Die ShellExecuteInfo-Struktur vor der Verwendung leeren.
@@ -533,7 +559,15 @@ begin
     ProcHandle := SEInfo.hProcess;
     // Wait until the process exits.
     // Warten, bis der Prozess beendet ist.
-    WaitForSingleObject(ProcHandle, INFINITE);
+    WaitResult := WaitForSingleObject(ProcHandle, CommandTimeoutMs);
+    if WaitResult = WAIT_TIMEOUT then
+    begin
+      TerminateProcess(ProcHandle, DWORD(-1));
+      ExitCode := DWORD(-1);
+      CloseHandle(ProcHandle);
+      Result := False;
+      Exit;
+    end;
     // Read the process exit code.
     // Den Exit-Code des Prozesses lesen.
     GetExitCodeProcess(ProcHandle, ExitCode);
@@ -598,7 +632,6 @@ var
   Versions: TDockerImageVersions;
 begin
   ComposePath := IncludeTrailingPathDelimiter(AppDataFolder) + DockerComposeFileName;
-
   // Read image versions from the INI file and apply defaults when empty.
   // Image-Versionen aus der INI-Datei lesen und bei leeren Werten Standardwerte verwenden.
   Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
@@ -639,11 +672,9 @@ begin
     alpine_version := MainformFrm.alpine_version_edit.Text;
     busybox_version := MainformFrm.busybox_version_edit.Text;
     PaperlessSecretKey := GetOrCreatePaperlessSecretKey(Ini, ComposePath);
-
   finally
     Ini.Free;
   end;
-
   Versions.Paperless := paperless_ngx_version;
   Versions.Postgres := postgresql_version;
   Versions.Redis := redis_version;
@@ -666,24 +697,26 @@ begin
   // Hier nicht starten, wenn das Hauptformular nur eine neue Compose-Datei erstellen soll.
   if (ShouldWriteNewCompose = False) and (IsUpdate = False) then
   begin
-    // Create and save the CMD script that starts docker-compose.yml.
-    // Das CMD-Skript erstellen und speichern, das docker-compose.yml startet.
-    CmdTargetPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'starte_paperless.cmd';
-    if not FileExists(CmdTargetPath) then
-    begin
-      CmdFile := TStringList.Create;
-      try
-        CmdFile.Add('@echo off');
-        CmdFile.Add('cd /d "' + AppDataFolder + '"');
-        CmdFile.Add('docker compose -f docker-compose.yml up -d');
-        CmdFile.Add('echo Systeme starten. Fenster wird gleich geschlossen ...');
-        CmdFile.Add('for /L %%i in (10,-1,1) do (echo %%i & timeout /t 1 >nul)');
-        CmdFile.Add('endlocal');
-        CmdFile.Add('exit');
-        CmdFile.SaveToFile(CmdTargetPath, TEncoding.ANSI);
-      finally
-        CmdFile.Free;
-      end;
+    // Create and save the PowerShell script that starts docker-compose.yml.
+    // Das PowerShell-Skript erstellen und speichern, das docker-compose.yml startet.
+    CmdTargetPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'starte_paperless.ps1';
+    CmdFile := TStringList.Create;
+    try
+      CmdFile.Add('$ErrorActionPreference = ''Stop''');
+      CmdFile.Add('try {');
+      CmdFile.Add('  Set-Location -LiteralPath ''' + StringReplace(AppDataFolder, '''', '''''', [rfReplaceAll]) + '''');
+      CmdFile.Add('  docker compose --progress plain -f docker-compose.yml up -d');
+      CmdFile.Add('  if ($LASTEXITCODE -ne 0) { throw "Fehler beim Starten von Docker Compose. (ExitCode $LASTEXITCODE)" }');
+      CmdFile.Add('  Write-Host "Systeme starten. Fenster wird gleich geschlossen ..."');
+      CmdFile.Add('  for ($i = 10; $i -ge 1; $i--) { Write-Host $i; Start-Sleep -Seconds 1 }');
+      CmdFile.Add('} catch {');
+      CmdFile.Add('  Write-Host $_.Exception.Message -ForegroundColor Red');
+      CmdFile.Add('  exit 1');
+      CmdFile.Add('}');
+      CmdFile.Add('exit 0');
+      CmdFile.SaveToFile(CmdTargetPath, TEncoding.UTF8);
+    finally
+      CmdFile.Free;
     end;
     MainformFrm.StartAndMonitorCmdScript;
   end;
@@ -693,34 +726,50 @@ begin
   if IsUpdate = True then
   begin
     MainformFrm.ReadContainerNamesFromFile;
-    // Create and save the CMD script for the Docker restart.
-    // Das CMD-Skript für den Docker-Neustart erstellen und speichern.
-    CmdTargetPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'update_paperless.cmd';
+    // Create and save the PowerShell script for the Docker restart.
+    // Das PowerShell-Skript für den Docker-Neustart erstellen und speichern.
+    CmdTargetPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'update_paperless.ps1';
     if not FileExists(CmdTargetPath) OR IsUpdate = True then
     begin
       CmdFile := TStringList.Create;
       try
-        CmdFile.Add('@echo off');
-        CmdFile.Add('cd /d "' + AppDataFolder + '"');
-        CmdFile.Add('docker compose -f docker-compose.yml down');
-        CmdFile.Add('echo Neustart wird kurz abgewartrt ...');
-        CmdFile.Add('for /L %%i in (5,-1,1) do (echo %%i & timeout /t 1 >nul)');
+        CmdFile.Add('$ErrorActionPreference = ''Stop''');
+        CmdFile.Add('function Invoke-Step([scriptblock]$Command, [string]$ErrorMessage) {');
+        CmdFile.Add('  & $Command');
+        CmdFile.Add('  if ($LASTEXITCODE -ne 0) { throw "$ErrorMessage (ExitCode $LASTEXITCODE)" }');
+        CmdFile.Add('}');
+        CmdFile.Add('function Wait-Countdown([int]$Seconds) {');
+        CmdFile.Add('  for ($i = $Seconds; $i -ge 1; $i--) { Write-Host $i; Start-Sleep -Seconds 1 }');
+        CmdFile.Add('}');
+        CmdFile.Add('try {');
+        CmdFile.Add('  Set-Location -LiteralPath ''' + StringReplace(AppDataFolder, '''', '''''', [rfReplaceAll]) + '''');
+        CmdFile.Add('  Invoke-Step { docker compose -f docker-compose.yml down } "Fehler beim Stoppen der Container."');
+        CmdFile.Add('  Write-Host "Neustart wird kurz abgewartet ..."');
+        CmdFile.Add('  Wait-Countdown 5');
         // Pull updated images here.
         // Hier aktualisierte Images herunterladen.
-        CmdFile.Add('docker compose -f docker-compose.yml pull && docker compose -f docker-compose.yml up -d');
-        CmdFile.Add('echo Repariere Django ContentType-Struktur...');
-        CmdFile.Add('docker exec -i paperless-ngx-paperless-1 python3 manage.py migrate contenttypes');
-        CmdFile.Add('echo Aktualisiere PostgreSQL Collation Version...');
-        CmdFile.Add(Format('docker exec -i %s psql -U paperless -d paperless -c "ALTER DATABASE paperless REFRESH COLLATION VERSION;"', [PaperlessDBName]));
-        CmdFile.Add('echo Nicht mehr verwendete Volumes werden geloescht');
-        CmdFile.Add('for /L %%i in (3,-1,1) do (echo %%i & timeout /t 1 >nul)');
-        CmdFile.Add('docker volume prune -f');
-        CmdFile.Add('for /L %%i in (3,-1,1) do (echo %%i & timeout /t 1 >nul)');
-        CmdFile.Add('echo Systeme starten. Fenster wird gleich geschlossen ...');
-        CmdFile.Add('for /L %%i in (10,-1,1) do (echo %%i & timeout /t 1 >nul)');
-        CmdFile.Add('endlocal');
-        CmdFile.Add('exit');
-        CmdFile.SaveToFile(CmdTargetPath, TEncoding.ANSI);
+        CmdFile.Add('  Invoke-Step { docker compose --progress plain -f docker-compose.yml pull } "Fehler beim Herunterladen aktualisierter Images."');
+        CmdFile.Add('  Invoke-Step { docker compose --progress plain -f docker-compose.yml up -d } "Fehler beim Starten der Container."');
+        CmdFile.Add('  Write-Host "Aktualisiere Django-Datenbankstruktur..."');
+        CmdFile.Add('  docker compose -f docker-compose.yml exec -T paperless python3 manage.py migrate');
+        CmdFile.Add('  if ($LASTEXITCODE -ne 0) {');
+        CmdFile.Add('    Write-Host "Hinweis: Django-Datenbankmigration konnte jetzt nicht abgeschlossen werden. Das Skript laeuft weiter." -ForegroundColor Yellow');
+        CmdFile.Add('    $global:LASTEXITCODE = 0');
+        CmdFile.Add('  }');
+        CmdFile.Add('  Write-Host "Aktualisiere PostgreSQL Collation Version..."');
+        CmdFile.Add(Format('  Invoke-Step { docker exec -i %s psql -U paperless -d paperless -c "ALTER DATABASE paperless REFRESH COLLATION VERSION;" } "Fehler beim Aktualisieren der PostgreSQL Collation Version."', [PaperlessDBName]));
+        CmdFile.Add('  Write-Host "Nicht mehr verwendete Volumes werden geloescht"');
+        CmdFile.Add('  Wait-Countdown 3');
+        CmdFile.Add('  Invoke-Step { docker volume prune -f } "Fehler beim Bereinigen nicht verwendeter Volumes."');
+        CmdFile.Add('  Wait-Countdown 3');
+        CmdFile.Add('  Write-Host "Systeme starten. Fenster wird gleich geschlossen ..."');
+        CmdFile.Add('  Wait-Countdown 10');
+        CmdFile.Add('} catch {');
+        CmdFile.Add('  Write-Host $_.Exception.Message -ForegroundColor Red');
+        CmdFile.Add('  exit 1');
+        CmdFile.Add('}');
+        CmdFile.Add('exit 0');
+        CmdFile.SaveToFile(CmdTargetPath, TEncoding.UTF8);
       finally
         CmdFile.Free;
       end;
@@ -800,6 +849,8 @@ end;
 // Start a command hidden and capture its console output.
 // Einen Befehl versteckt starten und seine Konsolenausgabe erfassen.
 function TSetupFrm.RunCommandAndCapture(const ExeName: string; const Params: array of string; Output: TStrings): Boolean;
+const
+  CommandTimeoutMs = 120000;
 var
   CmdLine: string;
   I: Integer;
@@ -808,8 +859,11 @@ var
   StartupInfo: TStartupInfo;
   ProcessInfo: TProcessInformation;
   Buffer: array[0..2047] of AnsiChar;
-  BytesRead: DWORD;
+  BytesRead, BytesAvailable, ReadSize: DWORD;
+  WaitResult: DWORD;
+  StartTick: UInt64;
   TotalOutput: string;
+  Chunk: AnsiString;
 begin
   Result := False;
   Output.Clear;
@@ -844,25 +898,57 @@ begin
     begin
       CloseHandle(WritePipe); // Stop writing so the reader can finish.
       // Schreiben beenden, damit der Leser fertig werden kann.
-
+      WritePipe := 0;
       TotalOutput := '';
+      StartTick := GetTickCount64;
+      repeat
+        WaitResult := WaitForSingleObject(ProcessInfo.hProcess, 50);
+        repeat
+          BytesAvailable := 0;
+          if not PeekNamedPipe(ReadPipe, nil, 0, nil, @BytesAvailable, nil) then
+            Break;
+          if BytesAvailable = 0 then
+            Break;
+          BytesRead := 0;
+          if BytesAvailable > SizeOf(Buffer) then
+            ReadSize := SizeOf(Buffer)
+          else
+            ReadSize := BytesAvailable;
+          if ReadFile(ReadPipe, Buffer, ReadSize, BytesRead, nil) and (BytesRead > 0) then
+          begin
+            SetString(Chunk, PAnsiChar(@Buffer[0]), BytesRead);
+            TotalOutput := TotalOutput + string(Chunk);
+          end
+          else
+            Break;
+        until False;
+        if (WaitResult = WAIT_TIMEOUT) and (GetTickCount64 - StartTick > CommandTimeoutMs) then
+          Break;
+      until WaitResult <> WAIT_TIMEOUT;
+      if WaitResult <> WAIT_OBJECT_0 then
+      begin
+        TerminateProcess(ProcessInfo.hProcess, DWORD(-1));
+        CloseHandle(ProcessInfo.hProcess);
+        CloseHandle(ProcessInfo.hThread);
+        Exit;
+      end;
       repeat
         BytesRead := 0;
         if ReadFile(ReadPipe, Buffer, SizeOf(Buffer) - 1, BytesRead, nil) and (BytesRead > 0) then
         begin
-          Buffer[BytesRead] := #0;
-          TotalOutput := TotalOutput + string(Buffer);
+          SetString(Chunk, PAnsiChar(@Buffer[0]), BytesRead);
+          TotalOutput := TotalOutput + string(Chunk);
         end;
       until BytesRead = 0;
 
       Output.Text := Trim(TotalOutput);
-
-      WaitForSingleObject(ProcessInfo.hProcess, INFINITE);
       CloseHandle(ProcessInfo.hProcess);
       CloseHandle(ProcessInfo.hThread);
       Result := True;
     end;
   finally
+    if WritePipe <> 0 then
+      CloseHandle(WritePipe);
     CloseHandle(ReadPipe);
   end;
 end;
@@ -913,7 +999,6 @@ begin
     // Write the version file into the backup subfolder.
     // Die Versionsdatei in den Backup-Unterordner schreiben.
     Txt.SaveToFile(IncludeTrailingPathDelimiter(FinalPath) + ImageVersionsFileName, TEncoding.UTF8);
-
     WritePaperlessSecretKeyBackup(FinalPath, Ini);
   finally
     Ini.Free;

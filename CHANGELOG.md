@@ -6,6 +6,66 @@ Alle wichtigen Aenderungen an diesem Projekt werden hier dokumentiert.
 
 ## Unreleased / Noch nicht veroeffentlicht
 
+- Added password-based encryption for Paperless mail settings in backups as `email-versand.env.enc`.
+- Passwortbasierte Verschluesselung fuer Paperless-Mail-Einstellungen in Backups als `email-versand.env.enc` ergaenzt.
+- Added a masked password dialog with password confirmation for encrypted mail settings backups.
+- Maskierten Passwortdialog mit Passwortwiederholung fuer verschluesselte Mail-Einstellungs-Backups ergaenzt.
+- Clarified the backup mail encryption dialog cancel button so users can intentionally continue without mail settings.
+- Abbrechen-Schaltflaeche im Backup-Mail-Verschluesselungsdialog verdeutlicht, damit Benutzer bewusst ohne Mail-Einstellungen fortfahren koennen.
+- Added a restore option to continue without mail settings when the encrypted mail settings password is missing or wrong.
+- Wiederherstellungsoption ergaenzt, um bei fehlendem oder falschem Mail-Passwort ohne Mail-Einstellungen fortzufahren.
+- Scheduled backups now copy a prepared encrypted mail settings file when one is available.
+- Geplante Backups kopieren eine vorbereitete verschluesselte Mail-Einstellungsdatei, wenn sie vorhanden ist.
+- Restores now decrypt `email-versand.env.enc` back to `email-versand.env` when the encrypted file exists and the user provides the correct password.
+- Wiederherstellungen entschluesseln `email-versand.env.enc` wieder zu `email-versand.env`, wenn die verschluesselte Datei vorhanden ist und das richtige Passwort eingegeben wird.
+- Kept mail settings restore optional so older backups without `email-versand.env.enc` continue without error.
+- Wiederherstellung der Mail-Einstellungen optional gehalten, damit aeltere Backups ohne `email-versand.env.enc` ohne Fehler weiterlaufen.
+- Preserved existing configured `email-versand.env` files so automatic setup/update steps no longer overwrite filled mail settings.
+- Vorhandene befuellte `email-versand.env`-Dateien werden erhalten, damit automatische Setup-/Update-Schritte Mail-Einstellungen nicht mehr ueberschreiben.
+- Added a Paperless browser button on the backup tab and hid old path/script information labels from the main UI.
+- Paperless-Browser-Button im Backup-Tab ergaenzt und alte Pfad-/Skriptinformationslabels aus der Hauptoberflaeche ausgeblendet.
+- Added a welcome headline that is hidden after user interaction.
+- Willkommensueberschrift ergaenzt, die nach Benutzerinteraktion ausgeblendet wird.
+- Added a busy state that disables controls and locks tab changes while backup, restore, update, restart, or mail settings scripts are running.
+- Beschaeftigt-Zustand ergaenzt, der Bedienelemente sperrt und Tabwechsel verhindert, waehrend Backup-, Wiederherstellungs-, Update-, Neustart- oder Mail-Einstellungs-Skripte laufen.
+- Added operation-specific wait text, including mail settings status while applying `email-versand.env`.
+- Vorgangsspezifische Wartetexte ergaenzt, inklusive Mail-Einstellungsstatus beim Anwenden von `email-versand.env`.
+- Added setup form progress output for Paperless installation commands.
+- Statusausgabe und Fortschrittsanzeige fuer Paperless-Installationsbefehle im Setup-Formular ergaenzt.
+- Moved forms to screen center and centered dialogs over the active form.
+- Formulare auf Bildschirmmitte gesetzt und Dialoge ueber dem aktiven Formular zentriert.
+- Switched settings and mail-settings save flows back to the backup/restore tab so users can see script status.
+- Einstellungen- und Mail-Einstellungen-Speichern wechseln nun zum Backup-/Wiederherstellen-Tab, damit Benutzer den Skriptstatus sehen.
+- Fixed first-run setup cancellation so declining Paperless installation stops the setup flow instead of continuing invisibly.
+- Abbruch der Ersteinrichtung korrigiert, damit eine abgelehnte Paperless-Installation den Ablauf stoppt statt unsichtbar weiterzulaufen.
+- Kept Django database migration warnings non-fatal so update and restore scripts can continue when Paperless is not ready yet.
+- Django-Datenbankmigrationswarnungen nicht-fatal gehalten, damit Update- und Wiederherstellungsskripte weiterlaufen koennen, wenn Paperless noch nicht bereit ist.
+- Added timeout and live pipe reading for hidden command output to avoid hangs when Docker or PowerShell writes more output.
+- Timeout und laufendes Pipe-Lesen fuer versteckte Befehlsausgaben ergaenzt, um Haenger bei groesserer Docker- oder PowerShell-Ausgabe zu vermeiden.
+- Fixed setup-form lifetime handling when compose files and image version metadata are written from the main form.
+- Lebensdauerbehandlung des Setup-Formulars korrigiert, wenn Compose-Dateien und Image-Versionen aus dem Hauptformular geschrieben werden.
+- Updated project version metadata to `5.26.4.103`.
+- Projekt-Versionsmetadaten auf `5.26.4.103` aktualisiert.
+- Documented the Windows CNG based encryption approach and password-loss limitation.
+- Windows-CNG-basierte Verschluesselung und die Einschraenkung bei verlorenem Passwort dokumentiert.
+- Switched generated backup, restore, restart, update, and scheduler scripts from CMD to PowerShell.
+- Generierte Backup-, Wiederherstellungs-, Neustart-, Update- und Zeitplan-Skripte von CMD auf PowerShell umgestellt.
+- Switched generated PowerShell scripts from the isolated Django ContentType migration to the full Django database migration.
+- Generierte PowerShell-Skripte von der einzelnen Django-ContentType-Migration auf die vollstaendige Django-Datenbankmigration umgestellt.
+- Added an in-application status label and progress bar while visible PowerShell scripts are running.
+- Statuslabel und Fortschrittsanzeige in der Anwendung ergaenzt, waehrend sichtbare PowerShell-Skripte laufen.
+- Hid the old backup and restore readiness labels while scripts are running.
+- Alte Backup- und Wiederherstellungs-Hinweise waehrend laufender Skripte ausgeblendet.
+- Mirrored visible PowerShell output into the main form status label while scripts are running.
+- Sichtbare PowerShell-Ausgabe waehrend laufender Skripte in das Statuslabel des Hauptformulars gespiegelt.
+- Replaced generic PowerShell startup text with operation-specific status messages and shortened long label text.
+- Allgemeine PowerShell-Startmeldung durch vorgangsspezifische Statusmeldungen ersetzt und lange Labeltexte gekuerzt.
+- Removed the old backup and restore readiness texts from the main form.
+- Alte Backup- und Wiederherstellungs-Bereitschaftstexte aus dem Hauptformular entfernt.
+- Set operation-specific final status texts and moved the status label and progress bar upward.
+- Vorgangsspezifische Abschlussmeldungen gesetzt und Statuslabel sowie Fortschrittsanzeige nach oben verschoben.
+- Ran monitored PowerShell scripts without showing a console window.
+- Ueberwachte PowerShell-Skripte ohne sichtbares Konsolenfenster ausgefuehrt.
 - Centered application messages, folder picker dialogs, and setup windows over the main form.
 - Anwendungsmitteilungen, Ordnerauswahldialoge und Einrichtungsfenster ueber dem Hauptformular zentriert.
 - Reapplied settings automatically after restore so the database collation maintenance runs.

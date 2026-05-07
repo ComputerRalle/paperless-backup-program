@@ -20,36 +20,29 @@ unit Mainform;
 interface
 
 uses
-  Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes,
+  Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, System.Math,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, ShellAPI, Vcl.ComCtrls, Vcl.ExtCtrls, Vcl.Buttons,
   System.IOUtils, Vcl.Samples.Spin, System.IniFiles, DateUtils, SetupForm, System.Generics.Collections, System.Generics.Defaults, Vcl.Menus,
-  System.Net.URLClient, System.Net.HttpClient, System.Net.HttpClientComponent, ScriptGenerator, AppConfig, AppLogger, AppDialogs;
+  System.Net.URLClient, System.Net.HttpClient, System.Net.HttpClientComponent, ScriptGenerator, AppConfig, AppLogger, AppDialogs, Crypto;
 
 type
   TMainformFrm = class(TForm)
     StatusBar1: TStatusBar;
     Panel2: TPanel;
     BackupRestorePan: TPanel;
-    StaticText2: TStaticText;
-    StaticText3: TStaticText;
     Panel3: TPanel;
-    ScriptSavedLbl: TLabel;
     StartPaperlessBackupBtn: TButton;
     RestorePaperlessBackupBtn: TButton;
-    CanStartBackupSTxt: TStaticText;
     Panel4: TPanel;
     Panel5: TPanel;
     Panel1: TPanel;
     BuyMeACoffeBtn: TButton;
     StaticText4: TStaticText;
-    RestoreCanStartSTxt: TStaticText;
     Panel7: TPanel;
     Label1: TLabel;
     Image1: TImage;
-    StaticText5: TStaticText;
     BackupWiederherProgNeuStartLbl: TLabel;
     Label3: TLabel;
-    AutostartLbl: TLabel;
     TabControl1: TTabControl;
     BackupPlanPan: TPanel;
     Panel9: TPanel;
@@ -139,12 +132,6 @@ type
     Web2Lbl: TLabel;
     Label31: TLabel;
     NewsletterLbl: TLabel;
-    Label32: TLabel;
-    Label33: TLabel;
-    Label34: TLabel;
-    Label35: TLabel;
-    Label36: TLabel;
-    Label37: TLabel;
     redis_version_edit: TEdit;
     postgres_version_edit: TEdit;
     Label38: TLabel;
@@ -163,6 +150,10 @@ type
     CheckBox1: TCheckBox;
     NetHTTPClient1: TNetHTTPClient;
     ProgramUpdateLbl: TLabel;
+    ProgressBar1: TProgressBar;
+    BusyWaitLbl: TLabel;
+    Button1: TButton;
+    Label32: TLabel;
     procedure StartPaperlessBackupBtnClick(Sender: TObject);
     procedure BuyMeACoffeeBtnClick(Sender: TObject);
     procedure StartCmdScript;
@@ -197,6 +188,7 @@ type
     procedure StartAndMonitorRestart;
     procedure SaveBlankEmailSettings();
     procedure UpdateDoneCbClick(Sender: TObject);
+    procedure OpenPaperlessBrowserLblClick(Sender: TObject);
     procedure TrashRetentionEditChange(Sender: TObject);
     procedure SaveSettingsBtnClick(Sender: TObject);
     procedure ImprintLblClick(Sender: TObject);
@@ -218,19 +210,42 @@ type
 
   private
     procedure CreateBackupScript(const ComposePath: string);
+    function PowerShellQuote(const Value: string): string;
+    function PrepareScriptOutputLog: string;
+    function BuildPowerShellCommand(const ScriptPath, OutputLogPath: string): string;
+    function ReadLastScriptOutputLine(const OutputLogPath, FallbackText: string): string;
+    function ShortenScriptStatusText(const StatusText: string): string;
+    function BuildInstallationStatusText(const StatusText: string): string;
+    function EstimateInstallationProgressPercent(const StatusText: string; const CurrentPosition: Integer): Integer;
+    function BuildBusyWaitText(const StatusText: string): string;
+    procedure PrepareScriptProgress(const StatusText: string);
+    procedure UpdateScriptProgress(const StatusText: string);
+    procedure FinishScriptProgress(const StatusText: string; const Success: Boolean);
+    procedure WaitForScriptWithProgress(const ProcessHandle: THandle; const StatusText, OutputLogPath: string);
+    procedure CreateDockerComposeWithSetupForm;
+    procedure WriteImageVersionWithSetupForm(const TargetPath: string);
+    procedure BeginScriptBusyState;
+    procedure EndScriptBusyState;
+    procedure SaveAndDisableInteractiveControls(const ParentControl: TWinControl);
+    procedure HideWelcomeLabel;
+    procedure EncryptEmailEnvForBackup(const TargetBackupPath: string);
+    procedure RestoreEmailEnvFromBackup(const SourceBackupPath, TargetComposePath: string);
+    function ValidateRestoreBackupFolder(const BackupFolder: string): Boolean;
   public
+    procedure CancelPaperlessInstallation;
   end;
 
 var
   MainformFrm: TMainformFrm;
-  // Main paths used by backup, restore, and generated CMD scripts.
-  // Hauptpfade für Backup, Wiederherstellung und generierte CMD-Skripte.
+  // Main paths used by backup, restore, and generated PowerShell scripts.
+  // Hauptpfade für Backup, Wiederherstellung und generierte PowerShell-Skripte.
   BackupPath, ComposePath, ComposeName, CmdTargetPath, LastBackupFolder: String;
   AppDataFolder, BackupTargetFilePath, DefaultFolder, PaperlessInput, NoticeFilePath : String;
   // Runtime mode flags. They decide which script is created and what happens after it finishes.
   // Laufzeitmodus-Flags. Sie entscheiden, welches Skript erstellt wird und was nach dessen Ende passiert.
   IsBackup: Boolean;
   IsPaperlessInstallation, ShouldOpenPaperless: Boolean;
+  IsApplyingEmailSettings: Boolean;
   InternalName, FileVersion: string;
   // Docker container and volume names detected from the current compose project.
   // Docker-Container- und Volume-Namen, die aus dem aktuellen Compose-Projekt erkannt wurden.
@@ -240,11 +255,21 @@ var
   ShouldWriteNewCompose: Boolean;
   IsAutostart: Boolean;
   InstallationCompletedFilePath: String;
+  RestoreEstimateText: string;
+  RestoreEstimatedSeconds: Integer;
+  RestoreProgressStartTick: UInt64;
+  InstallationProgressLastTick: UInt64;
   WantsInstall: Boolean;
   IsUpdate: Boolean;
   PaperlessUpdate: Boolean;
+  IsRestoreApplyingSettings: Boolean;
   TrashRetentionDays: Integer;
   CurrentTestedPaperlessVersion: String;
+  ScriptBusy: Boolean;
+  ScriptBusyTabIndex: Integer;
+  ScriptBusyControlStates: TDictionary<TControl, Boolean>;
+  InstallCancelRequested: Boolean;
+  RunningScriptProcessId: DWORD;
 
 
 implementation
@@ -276,6 +301,104 @@ begin
   finally
     Lines.Free;
   end;
+end;
+// Return true when email-versand.env already contains user mail settings.
+// True zurueckgeben, wenn email-versand.env bereits Maildaten des Benutzers enthaelt.
+function EmailEnvHasConfiguredValues(const EnvList: TStrings): Boolean;
+begin
+  Result :=
+    (Trim(EnvList.Values['PAPERLESS_EMAIL_HOST']) <> '') or
+    (Trim(EnvList.Values['PAPERLESS_EMAIL_PORT']) <> '') or
+    (Trim(EnvList.Values['PAPERLESS_EMAIL_HOST_USER']) <> '') or
+    (Trim(EnvList.Values['PAPERLESS_EMAIL_HOST_PASSWORD']) <> '') or
+    (Trim(EnvList.Values['PAPERLESS_EMAIL_FROM']) <> '') or
+    (Trim(EnvList.Values['PAPERLESS_EMAIL_USE_TLS']) <> '') or
+    (Trim(EnvList.Values['PAPERLESS_EMAIL_USE_SSL']) <> '');
+end;
+// Return true when the existing email env file must be preserved.
+// True zurueckgeben, wenn die vorhandene E-Mail-Env-Datei erhalten bleiben muss.
+function ExistingEmailEnvIsConfigured(const EnvFilePath: string): Boolean;
+var
+  EnvList: TStringList;
+begin
+  Result := False;
+  if not FileExists(EnvFilePath) then Exit;
+  EnvList := TStringList.Create;
+  try
+    EnvList.LoadFromFile(EnvFilePath);
+    Result := EmailEnvHasConfiguredValues(EnvList);
+  finally
+    EnvList.Free;
+  end;
+end;
+// Return the total size of a folder tree. Files that cannot be read are skipped.
+// Die Gesamtgroesse eines Ordnerbaums zurueckgeben. Nicht lesbare Dateien werden uebersprungen.
+function GetDirectorySizeBytes(const FolderPath: string): Int64;
+var
+  FilePath, ChildFolder: string;
+  FileInfo: TSearchRec;
+begin
+  Result := 0;
+  if not DirectoryExists(FolderPath) then Exit;
+  for FilePath in TDirectory.GetFiles(FolderPath) do
+  begin
+    if FindFirst(FilePath, faAnyFile, FileInfo) = 0 then
+    begin
+      try
+        Result := Result + FileInfo.Size;
+      finally
+        FindClose(FileInfo);
+      end;
+    end;
+  end;
+  for ChildFolder in TDirectory.GetDirectories(FolderPath) do
+    Result := Result + GetDirectorySizeBytes(ChildFolder);
+end;
+// Format a byte count for user-facing restore estimates.
+// Eine Byte-Anzahl fuer sichtbare Wiederherstellungs-Schaetzungen formatieren.
+function FormatByteSize(const SizeBytes: Int64): string;
+const
+  KB = 1024.0;
+  MB = KB * 1024.0;
+  GB = MB * 1024.0;
+begin
+  if SizeBytes >= Trunc(GB) then
+    Result := FormatFloat('0.0 GB', SizeBytes / GB)
+  else if SizeBytes >= Trunc(MB) then
+    Result := FormatFloat('0.0 MB', SizeBytes / MB)
+  else if SizeBytes >= Trunc(KB) then
+    Result := FormatFloat('0.0 KB', SizeBytes / KB)
+  else
+    Result := IntToStr(SizeBytes) + ' Bytes';
+end;
+// Build a conservative restore duration estimate from backup size.
+// Eine vorsichtige Schaetzung der Wiederherstellungsdauer aus der Backupgroesse bauen.
+function EstimateRestoreDurationSeconds(const SizeBytes: Int64): Integer;
+var
+  Minutes: Integer;
+begin
+  if SizeBytes <= 0 then
+    Exit(0);
+  // Restore includes archive extraction, database import, Docker startup, and migrations.
+  // Wiederherstellung umfasst Entpacken, Datenbankimport, Docker-Start und Migrationen.
+  Minutes := Ceil(SizeBytes / (350.0 * 1024.0 * 1024.0)) + 3;
+  if Minutes < 5 then
+    Minutes := 5;
+  Result := Minutes * 60;
+end;
+// Build the visible restore duration estimate.
+// Die sichtbare Schaetzung der Wiederherstellungsdauer bauen.
+function EstimateRestoreDurationText(const SizeBytes: Int64): string;
+var
+  Minutes: Integer;
+begin
+  Result := 'unbekannt';
+  if SizeBytes <= 0 then Exit;
+  Minutes := Ceil(EstimateRestoreDurationSeconds(SizeBytes) / 60.0);
+  if Minutes < 60 then
+    Result := 'ca. ' + IntToStr(Minutes) + ' Minuten'
+  else
+    Result := Format('ca. %d Std. %d Min.', [Minutes div 60, Minutes mod 60]);
 end;
 // Apply the restore key from the backup file or use the legacy key for older backups.
 // Den Wiederherstellungs-Key aus der Backup-Datei anwenden oder bei alten Backups den Legacy-Key nutzen.
@@ -404,18 +527,659 @@ begin
   end;
 end;
 
-// Open the generated CMD script in a visible console window.
-// Das generierte CMD-Skript in einem sichtbaren Konsolenfenster öffnen.
+// Open the generated PowerShell script in a visible console window.
+// Das generierte PowerShell-Skript in einem sichtbaren Konsolenfenster öffnen.
 procedure TMainformFrm.StartCmdScript;
 begin
-  ShellExecute(0, 'open', PChar(CmdTargetPath), nil, nil, SW_SHOWNORMAL);
+  ShellExecute(0, 'open', 'powershell.exe',
+    PChar('-NoProfile -ExecutionPolicy Bypass -File "' + CmdTargetPath + '"'),
+    nil, SW_SHOWNORMAL);
 end;
-
+// Run setup-form compose generation even when the notice form is not open.
+// Compose-Erzeugung ueber das Setup-Formular ausfuehren, auch wenn der Hinweisdialog nicht geoeffnet ist.
+procedure TMainformFrm.CreateDockerComposeWithSetupForm;
+var
+  CreatedSetupForm: Boolean;
+begin
+  CreatedSetupForm := not Assigned(SetupFrm);
+  if CreatedSetupForm then
+    SetupFrm := TSetupFrm.Create(Self);
+  try
+    SetupFrm.CreateDockerComposeFile;
+  finally
+    if CreatedSetupForm then
+    begin
+      SetupFrm.Free;
+      SetupFrm := nil;
+    end;
+  end;
+end;
+// Write image-version metadata even when the setup form is not currently open.
+// Image-Versionen schreiben, auch wenn das Setup-Formular gerade nicht geoeffnet ist.
+procedure TMainformFrm.WriteImageVersionWithSetupForm(const TargetPath: string);
+var
+  CreatedSetupForm: Boolean;
+begin
+  CreatedSetupForm := not Assigned(SetupFrm);
+  if CreatedSetupForm then
+    SetupFrm := TSetupFrm.Create(Self);
+  try
+    SetupFrm.WriteImageVersion(TargetPath);
+  finally
+    if CreatedSetupForm then
+    begin
+      SetupFrm.Free;
+      SetupFrm := nil;
+    end;
+  end;
+end;
+// Cancel the active Paperless installation and remove compose images already pulled.
+// Die aktive Paperless-Installation abbrechen und bereits geladene Compose-Images entfernen.
+procedure TMainformFrm.CancelPaperlessInstallation;
+var
+  ComposeFilePath, CleanupOutput: string;
+  Images: TStringList;
+  Ini: TIniFile;
+  I: Integer;
+  ImageName: string;
+begin
+  if not IsPaperlessInstallation then Exit;
+  InstallCancelRequested := True;
+  LogWarning('Paperless installation cancellation requested by user.');
+  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
+  try
+    Ini.WriteString('Einrichtung', 'Installation abgeschlossen', 'Nein');
+    Ini.UpdateFile;
+  finally
+    Ini.Free;
+  end;
+  if Assigned(SetupFrm) then
+  begin
+    SetupFrm.InstallLbl.Visible := True;
+    SetupFrm.InstallLbl.Caption := 'Installation wird abgebrochen. Bitte warten ...';
+    SetupFrm.InstallationCancelBtn.Enabled := False;
+    Application.ProcessMessages;
+  end;
+  if RunningScriptProcessId <> 0 then
+  begin
+    CleanupOutput := ExecuteShellCommand('taskkill', '/PID ' + IntToStr(RunningScriptProcessId) + ' /T /F');
+    if CleanupOutput.Trim <> '' then
+      LogInfo('Installation process termination output: ' + CleanupOutput);
+  end;
+  ComposeFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + DockerComposeFileName;
+  if FileExists(ComposeFilePath) then
+  begin
+    if Assigned(SetupFrm) then
+    begin
+      SetupFrm.InstallLbl.Caption := 'Docker-Images werden entfernt. Bitte warten ...';
+      Application.ProcessMessages;
+    end;
+    CleanupOutput := ExecuteShellCommand(
+      'docker',
+      'compose -f "' + ComposeFilePath + '" down --rmi all --volumes --remove-orphans');
+    if CleanupOutput.Trim <> '' then
+      LogInfo('Docker compose cleanup output: ' + CleanupOutput);
+    CleanupOutput := ExecuteShellCommand('docker', 'compose -f "' + ComposeFilePath + '" config --images');
+    Images := TStringList.Create;
+    try
+      Images.Text := CleanupOutput;
+      for I := 0 to Images.Count - 1 do
+      begin
+        ImageName := Images[I].Trim;
+        if ImageName <> '' then
+        begin
+          CleanupOutput := ExecuteShellCommand('docker', 'image rm -f "' + ImageName + '"');
+          if CleanupOutput.Trim <> '' then
+            LogInfo('Docker image remove output for ' + ImageName + ': ' + CleanupOutput);
+        end;
+      end;
+    finally
+      Images.Free;
+    end;
+    CleanupOutput := ExecuteShellCommand('docker', 'image prune -f');
+    if CleanupOutput.Trim <> '' then
+      LogInfo('Docker image prune output: ' + CleanupOutput);
+  end;
+end;
+// Store and disable interactive controls while a script is running.
+// Interaktive Steuerelemente waehrend eines laufenden Skripts merken und sperren.
+procedure TMainformFrm.SaveAndDisableInteractiveControls(const ParentControl: TWinControl);
+var
+  I: Integer;
+  ChildControl: TControl;
+  ChildWinControl: TWinControl;
+  ShouldDisable: Boolean;
+begin
+  for I := 0 to ParentControl.ControlCount - 1 do
+  begin
+    ChildControl := ParentControl.Controls[I];
+    ChildWinControl := nil;
+    if ChildControl is TWinControl then
+      ChildWinControl := TWinControl(ChildControl);
+    ShouldDisable :=
+      (ChildControl is TButton) or
+      (ChildControl is TCheckBox) or
+      (ChildControl is TEdit) or
+      (ChildControl is TSpinEdit) or
+      (ChildControl is TRadioGroup);
+    if ShouldDisable and (ChildControl <> BuyMeACoffeBtn) then
+    begin
+      if not ScriptBusyControlStates.ContainsKey(ChildControl) then
+        ScriptBusyControlStates.Add(ChildControl, ChildControl.Enabled);
+      ChildControl.Enabled := False;
+    end;
+    if Assigned(ChildWinControl) then
+      SaveAndDisableInteractiveControls(ChildWinControl);
+  end;
+end;
+// Put the main form into a non-interactive script-running state.
+// Hauptformular in einen nicht interaktiven Skriptmodus versetzen.
+procedure TMainformFrm.BeginScriptBusyState;
+begin
+  if ScriptBusy then Exit;
+  ScriptBusy := True;
+  ScriptBusyTabIndex := TabControl1.TabIndex;
+  if not Assigned(ScriptBusyControlStates) then
+    ScriptBusyControlStates := TDictionary<TControl, Boolean>.Create
+  else
+    ScriptBusyControlStates.Clear;
+  SaveAndDisableInteractiveControls(Self);
+  BuyMeACoffeBtn.Enabled := True;
+  BusyWaitLbl.Visible := True;
+end;
+// Restore the main form after a script has finished.
+// Hauptformular nach einem Skriptlauf wiederherstellen.
+procedure TMainformFrm.EndScriptBusyState;
+var
+  ControlState: TPair<TControl, Boolean>;
+begin
+  if not ScriptBusy then Exit;
+  if Assigned(ScriptBusyControlStates) then
+  begin
+    for ControlState in ScriptBusyControlStates do
+      if Assigned(ControlState.Key) then
+        ControlState.Key.Enabled := ControlState.Value;
+    ScriptBusyControlStates.Clear;
+  end;
+  BuyMeACoffeBtn.Enabled := True;
+  BusyWaitLbl.Visible := False;
+  ScriptBusy := False;
+end;
+// Quote a value for use inside a PowerShell command string.
+// Einen Wert fuer die Verwendung in einer PowerShell-Befehlszeile quoten.
+function TMainformFrm.PowerShellQuote(const Value: string): string;
+begin
+  Result := '''' + StringReplace(Value, '''', '''''', [rfReplaceAll]) + '''';
+end;
+// Prepare the temporary file that mirrors the visible PowerShell output.
+// Die temporaere Datei vorbereiten, die die sichtbare PowerShell-Ausgabe spiegelt.
+function TMainformFrm.PrepareScriptOutputLog: string;
+begin
+  Result := IncludeTrailingPathDelimiter(AppDataFolder) + 'PowerShellStatus.log';
+  try
+    TFile.WriteAllText(Result, '', TEncoding.Unicode);
+  except
+    on E: Exception do
+      LogError('Could not prepare PowerShell status log: ' + E.Message);
+  end;
+end;
+// Build a visible PowerShell command that also writes its output to a log file.
+// Eine sichtbare PowerShell-Befehlszeile bauen, die ihre Ausgabe zusaetzlich in eine Logdatei schreibt.
+function TMainformFrm.BuildPowerShellCommand(const ScriptPath, OutputLogPath: string): string;
+begin
+  Result :=
+    'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& powershell.exe -NoProfile -ExecutionPolicy Bypass -File ' +
+    PowerShellQuote(ScriptPath) +
+    ' 2>&1 | ForEach-Object { $_; Set-Content -LiteralPath ' +
+    PowerShellQuote(OutputLogPath) +
+    ' -Value ([string]$_) -Encoding Unicode }; exit $LASTEXITCODE"';
+end;
+// Read the last non-empty line from the mirrored PowerShell output.
+// Die letzte nicht leere Zeile aus der gespiegelten PowerShell-Ausgabe lesen.
+function TMainformFrm.ReadLastScriptOutputLine(const OutputLogPath, FallbackText: string): string;
+var
+  Stream: TFileStream;
+  Lines: TStringList;
+  I: Integer;
+begin
+  Result := FallbackText;
+  if OutputLogPath.Trim = '' then Exit;
+  if not FileExists(OutputLogPath) then Exit;
+  Lines := TStringList.Create;
+  try
+    try
+      Stream := TFileStream.Create(OutputLogPath, fmOpenRead or fmShareDenyNone);
+      try
+        Lines.LoadFromStream(Stream, TEncoding.Unicode);
+      finally
+        Stream.Free;
+      end;
+      for I := Lines.Count - 1 downto 0 do
+      begin
+        if Lines[I].Trim <> '' then
+          Exit(Lines[I].Trim);
+      end;
+    except
+      on E: Exception do
+      begin
+        // The status file can be touched by PowerShell at the same moment. Keep the last known status.
+        // Die Statusdatei kann im gleichen Moment von PowerShell geschrieben werden. Den letzten bekannten Status behalten.
+      end;
+    end;
+  finally
+    Lines.Free;
+  end;
+end;
+// Shorten long script status texts for the label.
+// Lange Skriptstatus-Texte fuer das Label kuerzen.
+function TMainformFrm.ShortenScriptStatusText(const StatusText: string): string;
+const
+  MaxStatusTextLength = 95;
+begin
+  Result := StatusText.Trim;
+  if Length(Result) > MaxStatusTextLength then
+    Result := Copy(Result, 1, MaxStatusTextLength - 3).TrimRight + '...';
+end;
+// Make Docker Compose installation output understandable in the setup form.
+// Docker-Compose-Installationsausgabe fuer das Setup-Formular verstaendlich machen.
+function TMainformFrm.BuildInstallationStatusText(const StatusText: string): string;
+var
+  Text: string;
+begin
+  Text := StatusText.Trim;
+  if Text = '' then
+    Exit('Installation läuft. Bitte warten ...');
+  if Text.Contains('Pulling') or Text.Contains('Downloading') or Text.Contains('Extracting') or Text.Contains('Download complete') then
+    Result := 'Docker-Images werden geladen: ' + Text
+  else if Text.Contains('Pulled') or Text.Contains('Downloaded newer image') then
+    Result := 'Docker-Image geladen: ' + Text
+  else if Text.Contains('Creating') or Text.Contains('Created') then
+    Result := 'Container werden erstellt: ' + Text
+  else if Text.Contains('Starting') or Text.Contains('Started') or Text.Contains('Running') then
+    Result := 'Container werden gestartet: ' + Text
+  else
+    Result := Text;
+  Result := ShortenScriptStatusText(Result);
+end;
+// Estimate install progress from Docker Compose status lines.
+// Installationsfortschritt aus Docker-Compose-Statuszeilen grob schaetzen.
+function TMainformFrm.EstimateInstallationProgressPercent(const StatusText: string; const CurrentPosition: Integer): Integer;
+var
+  Text: string;
+begin
+  Text := AnsiLowerCase(StatusText).Trim;
+  Result := CurrentPosition;
+  if Result < 5 then
+    Result := 5;
+  if Text = '' then Exit;
+  if Text.Contains('pulling') then
+    Result := Max(Result, 12);
+  if Text.Contains('waiting') then
+    Result := Max(Result, 18);
+  if Text.Contains('downloading') then
+    Result := Max(Result, 30);
+  if Text.Contains('extracting') then
+    Result := Max(Result, 55);
+  if Text.Contains('download complete') then
+    Result := Max(Result, 62);
+  if Text.Contains('pull complete') then
+    Result := Max(Result, 68);
+  if Text.Contains('pulled') then
+    Result := Max(Result, 74);
+  if Text.Contains('creating') then
+    Result := Max(Result, 80);
+  if Text.Contains('created') then
+    Result := Max(Result, 85);
+  if Text.Contains('starting') then
+    Result := Max(Result, 90);
+  if Text.Contains('started') or Text.Contains('running') then
+    Result := Max(Result, 95);
+  if Text.Contains('systeme starten') then
+    Result := Max(Result, 96);
+  if Result > 96 then
+    Result := 96;
+end;
+// Return an approximate restore progress based on the estimated duration.
+// Einen ungefaehren Wiederherstellungsfortschritt anhand der geschaetzten Dauer zurueckgeben.
+function ApproximateRestoreProgressPercent: Integer;
+var
+  ElapsedSeconds: Double;
+begin
+  Result := 0;
+  if (RestoreEstimatedSeconds <= 0) or (RestoreProgressStartTick = 0) then Exit;
+  ElapsedSeconds := (GetTickCount64 - RestoreProgressStartTick) / 1000.0;
+  Result := Floor((ElapsedSeconds / RestoreEstimatedSeconds) * 100.0);
+  if Result < 0 then
+    Result := 0
+  else if Result > 95 then
+    Result := 95;
+end;
+// Clear restore estimate state after a restore is done or failed.
+// Restore-Schaetzzustand nach Abschluss oder Fehler zuruecksetzen.
+procedure ClearRestoreProgressState;
+begin
+  RestoreEstimateText := '';
+  RestoreEstimatedSeconds := 0;
+  RestoreProgressStartTick := 0;
+end;
+// Fill the restore progress bar visibly before showing the final message.
+// Den Restore-Fortschrittsbalken vor der Abschlussmeldung sichtbar auffuellen.
+procedure AnimateProgressBarToComplete(const ProgressBar: TProgressBar);
+var
+  TargetPosition: Integer;
+begin
+  if not Assigned(ProgressBar) then Exit;
+  if ProgressBar.Position < 0 then
+    ProgressBar.Position := 0;
+  TargetPosition := ProgressBar.Position;
+  while TargetPosition < ProgressBar.Max do
+  begin
+    Inc(TargetPosition);
+    if TargetPosition > ProgressBar.Max then
+      TargetPosition := ProgressBar.Max;
+    ProgressBar.Position := TargetPosition;
+    Application.ProcessMessages;
+    Sleep(125);
+  end;
+end;
+// Build the headline shown above the live script output.
+// Die Ueberschrift oberhalb der laufenden Skriptausgabe erzeugen.
+function TMainformFrm.BuildBusyWaitText(const StatusText: string): string;
+begin
+  if StatusText.Contains('Mail-Einstellungen') then
+    Result := 'Mail-Einstellungen werden angewendet. Bitte warten ...'
+  else if IsBackup then
+    Result := 'Backup läuft. Bitte warten ...'
+  else if IsRestoreApplyingSettings then
+    Result := 'Wiederherstellung läuft. Bitte warten ...'
+  else if IsUpdate or PaperlessUpdate or StatusText.Contains('Update') then
+    Result := 'Update läuft. Bitte warten ...'
+  else if IsPaperlessInstallation then
+    Result := 'Installation läuft. Bitte warten ...'
+  else if StatusText.Contains('Neustart') then
+    Result := 'Neustart läuft. Bitte warten ...'
+  else
+    Result := 'Wiederherstellung läuft. Bitte warten ...';
+end;
+// Prepare the in-application script status display.
+// Die Statusanzeige fuer laufende Skripte in der Anwendung vorbereiten.
+procedure TMainformFrm.PrepareScriptProgress(const StatusText: string);
+begin
+  if IsPaperlessInstallation and Assigned(SetupFrm) then
+  begin
+    SetupFrm.PaperlessInstallierenBtn.Enabled := False;
+    SetupFrm.InstallLbl.Visible := True;
+    SetupFrm.InstallLbl.AutoSize := False;
+    SetupFrm.InstallLbl.Caption := BuildInstallationStatusText(StatusText);
+    SetupFrm.ProgressBar2.Min := 0;
+    SetupFrm.ProgressBar2.Max := 100;
+    SetupFrm.ProgressBar2.Position := EstimateInstallationProgressPercent(StatusText, 0);
+    InstallationProgressLastTick := GetTickCount64;
+    SetupFrm.ProgressBar2.Visible := True;
+    Application.ProcessMessages;
+    Exit;
+  end;
+  BeginScriptBusyState;
+  StartPaperlessBackupBtn.Enabled := False;
+  RestorePaperlessBackupBtn.Enabled := False;
+  BusyWaitLbl.Visible := True;
+  BusyWaitLbl.Caption := BuildBusyWaitText(StatusText);
+  BackupWiederherProgNeuStartLbl.Visible := True;
+  BackupWiederherProgNeuStartLbl.Caption := ShortenScriptStatusText(StatusText);
+  ProgressBar1.Min := 0;
+  ProgressBar1.Max := 100;
+  if (RestoreEstimatedSeconds > 0) and ((RestoreEstimateText.Trim <> '') or IsRestoreApplyingSettings) then
+  begin
+    if RestoreProgressStartTick = 0 then
+      RestoreProgressStartTick := GetTickCount64;
+    ProgressBar1.Position := ApproximateRestoreProgressPercent;
+  end
+  else
+    ProgressBar1.Position := 0;
+  ProgressBar1.Visible := True;
+  Application.ProcessMessages;
+end;
+// Update the status label and move the progress bar while a script is running.
+// Das Statuslabel aktualisieren und die Fortschrittsanzeige waehrend eines Skripts bewegen.
+procedure TMainformFrm.UpdateScriptProgress(const StatusText: string);
+var
+  NewInstallProgress: Integer;
+begin
+  if IsPaperlessInstallation and Assigned(SetupFrm) then
+  begin
+    SetupFrm.InstallLbl.Visible := True;
+    SetupFrm.InstallLbl.Caption := BuildInstallationStatusText(StatusText);
+    NewInstallProgress := EstimateInstallationProgressPercent(StatusText, SetupFrm.ProgressBar2.Position);
+    if NewInstallProgress > SetupFrm.ProgressBar2.Position then
+    begin
+      SetupFrm.ProgressBar2.Position := NewInstallProgress;
+      InstallationProgressLastTick := GetTickCount64;
+    end
+    else if (SetupFrm.ProgressBar2.Position < 96) and
+            (GetTickCount64 - InstallationProgressLastTick >= 2500) then
+    begin
+      SetupFrm.ProgressBar2.Position := SetupFrm.ProgressBar2.Position + 1;
+      InstallationProgressLastTick := GetTickCount64;
+    end;
+    Application.ProcessMessages;
+    Exit;
+  end;
+  BackupWiederherProgNeuStartLbl.Visible := True;
+  if (RestoreEstimatedSeconds > 0) and ((RestoreEstimateText.Trim <> '') or IsRestoreApplyingSettings) then
+  begin
+    ProgressBar1.Position := ApproximateRestoreProgressPercent;
+    BackupWiederherProgNeuStartLbl.Caption := ShortenScriptStatusText(StatusText);
+  end
+  else
+  begin
+    BackupWiederherProgNeuStartLbl.Caption := ShortenScriptStatusText(StatusText);
+    if ProgressBar1.Position >= ProgressBar1.Max then
+      ProgressBar1.Position := ProgressBar1.Min
+    else
+      ProgressBar1.Position := ProgressBar1.Position + 2;
+  end;
+  Application.ProcessMessages;
+end;
+// Finish the in-application script status display.
+// Die Statusanzeige fuer laufende Skripte abschliessen.
+procedure TMainformFrm.FinishScriptProgress(const StatusText: string; const Success: Boolean);
+begin
+  if IsPaperlessInstallation and Assigned(SetupFrm) then
+  begin
+    SetupFrm.PaperlessInstallierenBtn.Enabled := True;
+    SetupFrm.InstallationCancelBtn.Visible := False;
+    SetupFrm.InstallationCancelBtn.Enabled := False;
+    SetupFrm.InstallLbl.Visible := True;
+    SetupFrm.InstallLbl.Caption := ShortenScriptStatusText(StatusText);
+    if Success then
+      AnimateProgressBarToComplete(SetupFrm.ProgressBar2)
+    else
+      SetupFrm.ProgressBar2.Position := SetupFrm.ProgressBar2.Min;
+    Application.ProcessMessages;
+    Exit;
+  end;
+  if not (Success and (RestoreEstimatedSeconds > 0)) then
+  begin
+    EndScriptBusyState;
+    StartPaperlessBackupBtn.Enabled := True;
+    RestorePaperlessBackupBtn.Enabled := True;
+  end;
+  BackupWiederherProgNeuStartLbl.Visible := True;
+  if Success and (RestoreEstimatedSeconds > 0) then
+    BackupWiederherProgNeuStartLbl.Caption := 'Wiederherstellung wird abgeschlossen. Bitte warten ...'
+  else
+    BackupWiederherProgNeuStartLbl.Caption := ShortenScriptStatusText(StatusText);
+  if Success then
+  begin
+    if RestoreEstimatedSeconds > 0 then
+    begin
+      AnimateProgressBarToComplete(ProgressBar1);
+      BackupWiederherProgNeuStartLbl.Caption := ShortenScriptStatusText(StatusText);
+      EndScriptBusyState;
+      StartPaperlessBackupBtn.Enabled := True;
+      RestorePaperlessBackupBtn.Enabled := True;
+    end
+    else
+      ProgressBar1.Position := ProgressBar1.Max;
+  end
+  else
+    ProgressBar1.Position := ProgressBar1.Min;
+  Application.ProcessMessages;
+end;
+// Wait for a visible PowerShell process while keeping the form status alive.
+// Auf einen sichtbaren PowerShell-Prozess warten und die Formularanzeige aktuell halten.
+procedure TMainformFrm.WaitForScriptWithProgress(const ProcessHandle: THandle; const StatusText, OutputLogPath: string);
+var
+  LastStatusText: string;
+  CurrentStatusText: string;
+begin
+  LastStatusText := StatusText;
+  CurrentStatusText := StatusText;
+  while WaitForSingleObject(ProcessHandle, 200) = WAIT_TIMEOUT do
+  begin
+    LastStatusText := ReadLastScriptOutputLine(OutputLogPath, LastStatusText);
+    if LastStatusText <> CurrentStatusText then
+    begin
+      CurrentStatusText := LastStatusText;
+      UpdateScriptProgress(CurrentStatusText);
+    end
+    else
+      UpdateScriptProgress(CurrentStatusText);
+  end;
+end;
+// Hide the intro headline after the user starts interacting with the program.
+// Die Willkommensueberschrift nach der ersten Benutzeraktion ausblenden.
+procedure TMainformFrm.HideWelcomeLabel;
+begin
+  if Assigned(Label32) then
+    Label32.Visible := False;
+end;
+procedure TMainformFrm.EncryptEmailEnvForBackup(const TargetBackupPath: string);
+var
+  SourceEnvPath, TargetEncryptedPath, LocalEncryptedPath, Password: string;
+begin
+  SourceEnvPath := IncludeTrailingPathDelimiter(AppDataFolder) + EmailEnvFileName;
+  if not FileExists(SourceEnvPath) then
+    Exit;
+  if not RequestPasswordDialog(
+    'Mail-Einstellungen verschlüsseln',
+    'Die Datei email-versand.env enthält Mailkontodaten und wird für das Backup verschlüsselt.' + sLineBreak + sLineBreak +
+    'Bitte bewahren Sie Ihr Passwort sicher auf, z.B. in KeePass. Wenn Sie das Passwort verlieren, kann die Mail-Einstellungsdatei nicht wiederhergestellt werden.',
+    True,
+    Password,
+    'Backup ohne Mail-Einstellungen durchführen') then
+  begin
+    LogInfo('Encrypted email env backup skipped by user.');
+    Exit;
+  end;
+  TargetEncryptedPath := IncludeTrailingPathDelimiter(TargetBackupPath) + EmailEnvEncryptedFileName;
+  LocalEncryptedPath := IncludeTrailingPathDelimiter(AppDataFolder) + EmailEnvEncryptedFileName;
+  try
+    EncryptFileWithPassword(SourceEnvPath, TargetEncryptedPath, Password);
+    EncryptFileWithPassword(SourceEnvPath, LocalEncryptedPath, Password);
+    LogInfo('Encrypted email env file written to backup.');
+  except
+    on E: Exception do
+    CenteredShowMessage('Mail-Einstellungen konnten nicht verschlüsselt werden: ' + E.Message);
+  end;
+end;
+procedure TMainformFrm.RestoreEmailEnvFromBackup(const SourceBackupPath, TargetComposePath: string);
+var
+  SourceEncryptedPath, TargetEnvPath, Password: string;
+  PasswordResult: Integer;
+begin
+  SourceEncryptedPath := IncludeTrailingPathDelimiter(SourceBackupPath) + EmailEnvEncryptedFileName;
+  if not FileExists(SourceEncryptedPath) then
+  begin
+    LogInfo('No encrypted email env file found in backup. Restore step skipped.');
+    Exit;
+  end;
+  PasswordResult := RequestPasswordOrSkipDialog(
+    'Mail-Einstellungen wiederherstellen',
+    'Im Backup wurde eine verschlüsselte Mail-Einstellungsdatei gefunden.' + sLineBreak + sLineBreak +
+    'Bitte geben Sie das Passwort ein. Wenn Sie das Passwort verlieren, kann die Mail-Einstellungsdatei nicht wiederhergestellt werden.',
+    'Ohne Mail wiederherstellen',
+    Password);
+  if PasswordResult = mrIgnore then
+  begin
+    CenteredShowMessage('Wiederherstellung wird ohne Mail-Einstellungen fortgesetzt.');
+    LogInfo('Encrypted email env restore skipped by user.');
+    Exit;
+  end;
+  if PasswordResult <> mrOk then
+  begin
+    CenteredShowMessage('Mail-Einstellungen wurden nicht wiederhergestellt.');
+    Exit;
+  end;
+  TargetEnvPath := IncludeTrailingPathDelimiter(ExtractFilePath(TargetComposePath)) + EmailEnvFileName;
+  try
+    DecryptFileWithPassword(SourceEncryptedPath, TargetEnvPath, Password);
+    LogInfo('Encrypted email env file restored.');
+  except
+    on E: Exception do
+    begin
+      LogWarning('Encrypted email env restore failed: ' + E.Message);
+      if CenteredMessageDlg(
+        'Passwort falsch. Paperless ohne Maileinstellungen wiederherstellen?',
+        mtConfirmation,
+        [mbYes, mbNo],
+        0) = mrYes then
+      begin
+        CenteredShowMessage('Wiederherstellung wird ohne Mail-Einstellungen fortgesetzt.');
+        Exit;
+      end;
+      CenteredShowMessage('Mail-Einstellungen wurden nicht wiederhergestellt.');
+    end;
+  end;
+end;
+function TMainformFrm.ValidateRestoreBackupFolder(const BackupFolder: string): Boolean;
+var
+  MissingFiles: TStringList;
+  BasePath: string;
+  procedure RequireFile(const FileName: string);
+  begin
+    if not FileExists(BasePath + FileName) then
+      MissingFiles.Add(FileName);
+  end;
+begin
+  Result := False;
+  if not DirectoryExists(BackupFolder) then
+  begin
+    CenteredShowMessage('Der gewählte Backup-Ordner existiert nicht.');
+    LogWarning('Restore precheck failed. Backup folder does not exist: ' + BackupFolder);
+    Exit;
+  end;
+  if (PaperlessDBName.Trim = '') or (Volume_data.Trim = '') or (Volume_media.Trim = '') or (Volume_export.Trim = '') then
+  begin
+    CenteredShowMessage('Die Docker-Container- oder Volume-Namen konnten nicht vollständig ermittelt werden.');
+    LogWarning('Restore precheck failed. Missing container or volume names.');
+    Exit;
+  end;
+  BasePath := IncludeTrailingPathDelimiter(BackupFolder);
+  MissingFiles := TStringList.Create;
+  try
+    RequireFile(PaperlessDBName + '_backup.sql');
+    RequireFile(Volume_data + '.tar.gz');
+    RequireFile(Volume_media + '.tar.gz');
+    RequireFile(Volume_export + '.tar.gz');
+    if MissingFiles.Count > 0 then
+    begin
+      CenteredShowMessage('Der gewählte Backup-Ordner ist unvollständig. Die Wiederherstellung wurde nicht gestartet.' +
+        sLineBreak + sLineBreak + 'Fehlende Dateien:' + sLineBreak + MissingFiles.Text);
+      LogWarning('Restore precheck failed. Missing files in "' + BackupFolder + '": ' + StringReplace(MissingFiles.CommaText, ',', ', ', [rfReplaceAll]));
+      Exit;
+    end;
+  finally
+    MissingFiles.Free;
+  end;
+  Result := True;
+end;
 // Open the support page in the default browser.
 // Die Unterstützungsseite im Standardbrowser öffnen.
 procedure TMainformFrm.BuyMeACoffeeBtnClick(Sender: TObject);
 begin
- ShellExecute(0, 'open', BuyMeACoffeeUrl, nil, nil, SW_SHOWNORMAL);
+  HideWelcomeLabel;
+  ShellExecute(0, 'open', BuyMeACoffeeUrl, nil, nil, SW_SHOWNORMAL);
 end;
 
 // Enable or disable manual Docker image version editing.
@@ -434,11 +1198,11 @@ begin
   end else
   begin
     redis_version_edit.Enabled := True;
-    postgres_version_edit.Enabled := True;
+    postgres_version_edit.Enabled := False;
     gotenberg_version_edit.Enabled := True;
-    tika_version_edit.Enabled := True;
-    alpine_version_edit.Enabled := True;
-    busybox_version_edit.Enabled := True;
+    tika_version_edit.Enabled := False;
+    alpine_version_edit.Enabled := False;
+    busybox_version_edit.Enabled := False;
     paperless_version_edit.Enabled := True;
   end;
 end;
@@ -452,10 +1216,15 @@ var
   StoredPath: string;
   TextFilePath: string;
 begin
+  HideWelcomeLabel;
+  if ComposePath.Trim = '' then
+  begin
+    CenteredShowMessage('Bitte zuerst den Paperless-Ordner auswählen.');
+    Exit;
+  end;
   WriteComposeContainerAndVolumeInfo(ComposePath);
   StartPaperlessBackupBtn.Enabled := False;
   RestorePaperlessBackupBtn.Enabled := False;
-  AutostartLbl.Visible := False;
   ReadContainerNamesFromFile;
   IsPaperlessInstallation := False;
 
@@ -539,6 +1308,8 @@ begin
         else
         begin
           CenteredShowMessage('Es wurde kein Ordner gewählt. Backupvorgang abgebrochen.');
+          StartPaperlessBackupBtn.Enabled := True;
+          RestorePaperlessBackupBtn.Enabled := True;
           Exit;
         end;
       finally
@@ -586,20 +1357,15 @@ begin
 
   CreateBackupScript(ExtractFilePath(ComposePath));
   CreateBackupPlanScript(ExtractFilePath(ComposePath));
-
   StartPaperlessBackupBtn.Enabled := True;
   RestorePaperlessBackupBtn.Enabled := True;
-  CanStartBackupSTxt.Visible := True;
-  StaticText5.Visible := True;
-  RestoreCanStartSTxt.Visible := False;
-
   // Delete the old marker file if it still exists.
   // Die alte Markerdatei löschen, falls sie noch existiert.
   TextFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + ComposePathFileName;
   if FileExists(TextFilePath) then DeleteFile(TextFilePath);
 end;
-// Create paperless-backup.cmd for a manual backup.
-// paperless-backup.cmd für ein manuelles Backup erstellen.
+// Create paperless-backup.ps1 for a manual backup.
+// paperless-backup.ps1 für ein manuelles Backup erstellen.
 // The script dumps PostgreSQL first, then archives the Docker volumes.
 // Das Skript erstellt zuerst einen PostgreSQL-Dump und archiviert danach die Docker-Volumes.
 procedure TMainformFrm.CreateBackupScript(const ComposePath: string);
@@ -613,13 +1379,13 @@ begin
   end;
 
   if not DirectoryExists(BackupPath) then ForceDirectories(BackupPath);
-  CmdTargetPath := IncludeTrailingPathDelimiter(ComposePath) + 'paperless-backup.cmd';
+  EncryptEmailEnvForBackup(BackupPath);
+  CmdTargetPath := IncludeTrailingPathDelimiter(ComposePath) + 'paperless-backup.ps1';
   Volumes.Data := Volume_data;
   Volumes.DbData := Volume_db_data;
   Volumes.ExportData := Volume_export;
   Volumes.Media := Volume_media;
   CreateManualBackupCmdScript(CmdTargetPath, ComposePath, BackupPath, AppDataFolder, PaperlessDBName, Volumes);
-  ScriptSavedLbl.Caption := 'Backup-Skript wurde erstellt: ' + CmdTargetPath;
   StartAndMonitorCmdScript;
 end;
 
@@ -628,6 +1394,7 @@ end;
 procedure TMainformFrm.FormClose(Sender: TObject; var Action: TCloseAction);
 begin
   LogInfo('Application closing.');
+  FreeAndNil(ScriptBusyControlStates);
   Action := caNone;         // Stop default close handling.
   // Die Standard-Schließbehandlung stoppen.
   PostQuitMessage(0);       // End the message loop.
@@ -653,9 +1420,21 @@ begin
   IsBackup := False;
   IsPaperlessInstallation := False;
   ShouldOpenPaperless := False;
+  IsApplyingEmailSettings := False;
   IsUpdate := False;
   PaperlessUpdate := False;
+  IsRestoreApplyingSettings := False;
+  ClearRestoreProgressState;
+  InstallationProgressLastTick := 0;
   TrashRetentionDays := 365;
+  ScriptBusy := False;
+  ScriptBusyTabIndex := 0;
+  ScriptBusyControlStates := nil;
+  InstallCancelRequested := False;
+  RunningScriptProcessId := 0;
+  BusyWaitLbl.Visible := False;
+  ProgressBar1.Visible := False;
+  ProgressBar1.Position := 0;
 end;
 
 // Load saved settings, migrate old text files, and prepare the visible form state.
@@ -711,7 +1490,9 @@ begin
         SetupFrm.ShowModal;
       finally
         SetupFrm.Free;
+        SetupFrm := nil;
       end;
+      if Application.Terminated then Exit;
     end;
   end else
     begin
@@ -720,7 +1501,9 @@ begin
         SetupFrm.ShowModal;
       finally
         SetupFrm.Free;
+        SetupFrm := nil;
       end;
+      if Application.Terminated then Exit;
   end;
 
 
@@ -934,10 +1717,25 @@ begin
       );
 
       ShouldWriteNewCompose := True;
-      SetupFrm.CreateDockerComposeFile;
-      SetupFrm.InstallPaperlessBtnClick(Self);
+      try
+        CreateDockerComposeWithSetupForm;
+      finally
+        ShouldWriteNewCompose := False;
+      end;
+      SetupFrm := TSetupFrm.Create(Self);
+      try
+        SetupFrm.InstallPaperlessBtnClick(Self);
+      finally
+        SetupFrm.Free;
+        SetupFrm := nil;
+      end;
+      if not WantsInstall then
+      begin
+        CenteredShowMessage('Paperless-Installation wurde abgebrochen. Das Programm wird beendet.');
+        Application.Terminate;
+        Exit;
+      end;
     end;
-
     ComposePath := NewComposePath;
   end else
     begin
@@ -968,10 +1766,6 @@ begin
   Panel16.StyleElements := Panel16.StyleElements - [seClient];
   Panel16.Color := $00234D11;
 
-  StaticText3.Caption := '';
-  ScriptSavedLbl.Caption := '';
-  StaticText3.Caption := '';
-
   // Load the backup path if it exists.
   // Den Backup-Pfad laden, falls er existiert.
   if FileExists(BackupTargetFilePath) then BackupPath := TFile.ReadAllText(BackupTargetFilePath).Trim;
@@ -989,13 +1783,8 @@ begin
   begin
     ComposePath := StoredPath;
     ComposeName := ExtractFileName(ExcludeTrailingPathDelimiter(ComposePath));
-    StaticText2.Caption := 'Aktuell ist folgender Pfad ausgewählt, in dem die docker-compose.yml Datei liegt: ';
-    StaticText3.Caption := ComposePath;
     StartPaperlessBackupBtn.Enabled := True;
     RestorePaperlessBackupBtn.Enabled := True;
-    CanStartBackupSTxt.Visible := True;
-    RestoreCanStartSTxt.Visible := True;
-    StaticText5.Visible := True;
     BackupWiederherProgNeuStartLbl.Visible := False;
   end;
 
@@ -1005,13 +1794,7 @@ begin
   begin
     RestorePaperlessBackupBtn.Visible:=False;
     StartPaperlessBackupBtn.Visible:=False;
-    StaticText2.Visible:=False;
-    StaticText3.Visible:=False;
-    CanStartBackupSTxt.Visible:=False;
     BackupWiederherProgNeuStartLbl.Visible:=False;
-    StaticText5.Visible:=False;
-    RestoreCanStartSTxt.Visible:=False;
-    AutostartLbl.Visible:=True;
     TabControl1.Enabled:=False;
     IsAutostart := True;
     RunAutostartBackup();
@@ -1105,6 +1888,12 @@ procedure TMainformFrm.TabControl1Change(Sender: TObject);
 var
   Ini: TIniFile;
 begin
+  HideWelcomeLabel;
+  if ScriptBusy then
+  begin
+    TabControl1.TabIndex := ScriptBusyTabIndex;
+    Exit;
+  end;
   Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
     try
       Ini.WriteString('Pfade', 'DockerComposePfad', IncludeTrailingPathDelimiter(ExtractFilePath(ComposePath)) + DockerComposeFileName);
@@ -1225,7 +2014,6 @@ begin
 
    end;
 
-   AutostartLbl.Visible:=False;
    CheckScheduleAllowed;
 end;
 
@@ -1271,8 +2059,8 @@ end;
 procedure TMainformFrm.SaveRetentionBtnClick(Sender: TObject);
 var
   Ini: TIniFile;
-  MaxBackupFolders: Integer;
 begin
+  HideWelcomeLabel;
   Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
     // Save the retention setting.
@@ -1281,13 +2069,6 @@ begin
     // Write immediately.
     // Sofort schreiben.
     Ini.UpdateFile;
-    // Read the value back safely.
-    // Den Wert sicher zurücklesen.
-    try
-      MaxBackupFolders := Ini.ReadInteger('Zeitplan', 'BackupsBehalten', 0);
-    except
-      MaxBackupFolders := 0;
-    end;
   finally
     Ini.Free;
   end;
@@ -1374,9 +2155,8 @@ var
 begin
   // Create a script that removes the scheduled task.
   // Ein Skript erstellen, das die geplante Aufgabe entfernt.
-  CmdTargetPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'Backup-Zeitplan-Entfernen.cmd';
+  CmdTargetPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'Backup-Zeitplan-Entfernen.ps1';
   CreateDeleteBackupScheduleCmdScript(CmdTargetPath);
-  ScriptSavedLbl.Caption := 'Skript gespeichert: ' + CmdTargetPath;
 
   // Run the script silently in the background.
   // Das Skript still im Hintergrund ausführen.
@@ -1384,10 +2164,16 @@ begin
   ShellExecuteInfo.cbSize := SizeOf(ShellExecuteInfo);
   ShellExecuteInfo.fMask := SEE_MASK_NOCLOSEPROCESS;
   ShellExecuteInfo.Wnd := 0;
-  ShellExecuteInfo.lpFile := PChar('cmd.exe');
-  ShellExecuteInfo.lpParameters := PChar('/c "' + CmdTargetPath + '"');
-  ShellExecuteInfo.nShow := SW_HIDE;
-  ShellExecuteEx(@ShellExecuteInfo);
+  ShellExecuteInfo.lpFile := PChar('powershell.exe');
+  ShellExecuteInfo.lpParameters := PChar('-NoProfile -ExecutionPolicy Bypass -File "' + CmdTargetPath + '"');
+  ShellExecuteInfo.nShow := SW_SHOWNORMAL;
+  if ShellExecuteEx(@ShellExecuteInfo) then
+  begin
+    if ShellExecuteInfo.hProcess <> 0 then
+      CloseHandle(ShellExecuteInfo.hProcess);
+  end
+  else
+    CenteredShowMessage('Zeitplan-Entfernen-Skript konnte nicht gestartet werden.');
 
   // Reset the checkbox.
   // Die Checkbox zurücksetzen.
@@ -1514,8 +2300,8 @@ begin
     Exit;
   end;
   Delete(Weekdays, Length(Weekdays), 1);
-  // Build the path to the planned backup CMD file.
-  // Den Pfad zur geplanten Backup-CMD-Datei erstellen.
+  // Build the path to the planned backup PowerShell file.
+  // Den Pfad zur geplanten Backup-PowerShell-Datei erstellen.
   try
     Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
     try
@@ -1535,14 +2321,14 @@ begin
     ComposePathTextFile := IncludeTrailingPathDelimiter(AppDataFolder) + ComposePathFileName;
     if FileExists(ComposePathTextFile) then DeleteFile(ComposePathTextFile);
 
-    TargetCmdPath := IncludeTrailingPathDelimiter(ExtractFilePath(ComposePath)) + 'paperless-backup-geplant.cmd';
+    TargetCmdPath := IncludeTrailingPathDelimiter(ExtractFilePath(ComposePath)) + 'paperless-backup-geplant.ps1';
   except
     CenteredShowMessage('Fehler beim Lesen des Compose-Pfads.');
     Exit;
   end;
 
 
-  TargetCmdPath := IncludeTrailingPathDelimiter(ExtractFilePath(ComposePath)) + 'paperless-backup-geplant.cmd';
+  TargetCmdPath := IncludeTrailingPathDelimiter(ExtractFilePath(ComposePath)) + 'paperless-backup-geplant.ps1';
   if not FileExists(TargetCmdPath) then
   begin
     CenteredShowMessage('Das geplante Backup-Skript wurde nicht gefunden:' + sLineBreak + TargetCmdPath + sLineBreak + 'Bitte erzeugen Sie es zuerst.');
@@ -1550,7 +2336,7 @@ begin
   end;
   // Write the scheduler setup script.
   // Das Skript zum Einrichten der Aufgabenplanung schreiben.
-  ScriptPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'Backup-Zeitplan-Anlegen.cmd';
+  ScriptPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'Backup-Zeitplan-Anlegen.ps1';
   // The scheduled task starts this program with the /geplant parameter.
   // Die geplante Aufgabe startet dieses Programm mit dem Parameter /geplant.
   CreateBackupScheduleCmdScript(ScriptPath, ProgramPath, Weekdays, Hour, Minute);
@@ -1562,10 +2348,16 @@ begin
   ShellExecuteInfo.cbSize := SizeOf(ShellExecuteInfo);
   ShellExecuteInfo.fMask := SEE_MASK_NOCLOSEPROCESS;
   ShellExecuteInfo.Wnd := 0;
-  ShellExecuteInfo.lpFile := PChar('cmd.exe');
-  ShellExecuteInfo.lpParameters := PChar('/c "' + ScriptPath + '"');
-  ShellExecuteInfo.nShow := SW_HIDE;
-  ShellExecuteEx(@ShellExecuteInfo);
+  ShellExecuteInfo.lpFile := PChar('powershell.exe');
+  ShellExecuteInfo.lpParameters := PChar('-NoProfile -ExecutionPolicy Bypass -File "' + ScriptPath + '"');
+  ShellExecuteInfo.nShow := SW_SHOWNORMAL;
+  if ShellExecuteEx(@ShellExecuteInfo) then
+  begin
+    if ShellExecuteInfo.hProcess <> 0 then
+      CloseHandle(ShellExecuteInfo.hProcess);
+  end
+  else
+    CenteredShowMessage('Zeitplan-Anlegen-Skript konnte nicht gestartet werden.');
 end;
 
 // Load saved Paperless email settings from email-versand.env.
@@ -1587,56 +2379,56 @@ begin
     // Eine Stringliste zum Lesen der .env-Datei verwenden.
     EnvList := TStringList.Create;
     try
-      // Read the .env file.
-      // Die .env-Datei lesen.
-      EnvList.LoadFromFile(EnvFilePath);
-
-      // Check whether setup is still pending.
-      // Prüfen, ob die Einrichtung noch aussteht.
-      if EnvList.Values['Eingerichtet'] = 'Nein' then
-      begin
-        RequireCompletedSettings;
-      end
-      else
-      begin
-        // Copy saved values into the edit fields.
-        // Gespeicherte Werte in die Eingabefelder übernehmen.
-        SMTPServerEdit.Text := EnvList.Values['PAPERLESS_EMAIL_HOST'];
-        SMTPPortEdit.Text := EnvList.Values['PAPERLESS_EMAIL_PORT'];
-        UserNameEdit.Text := EnvList.Values['PAPERLESS_EMAIL_HOST_USER'];
-        MailAccountPasswordEdit.Text := EnvList.Values['PAPERLESS_EMAIL_HOST_PASSWORD'];
-        EMailSentFromEdit.Text := EnvList.Values['PAPERLESS_EMAIL_FROM'];
-
-        // Restore the SSL/TLS selection.
-        // Die SSL/TLS-Auswahl wiederherstellen.
-        if EnvList.Values['PAPERLESS_EMAIL_USE_SSL'] = 'true' then
+      try
+        // Read the .env file.
+        // Die .env-Datei lesen.
+        EnvList.LoadFromFile(EnvFilePath);
+        // Check whether setup is still pending.
+        // Prüfen, ob die Einrichtung noch aussteht.
+        if (EnvList.Values['Eingerichtet'] = 'Nein') and not EmailEnvHasConfiguredValues(EnvList) then
         begin
-          SSLoTLSRg.ItemIndex := 0;  // SSL
-          // SSL
-        end
-        else if EnvList.Values['PAPERLESS_EMAIL_USE_TLS'] = 'true' then
-        begin
-          SSLoTLSRg.ItemIndex := 1;  // TLS
-          // TLS
+          RequireCompletedSettings;
         end
         else
         begin
-          // No SSL/TLS option is selected.
-          // Keine SSL/TLS-Option ist ausgewählt.
-          SSLoTLSRg.ItemIndex := -1;
+          // Copy saved values into the edit fields.
+          // Gespeicherte Werte in die Eingabefelder übernehmen.
+          SMTPServerEdit.Text := EnvList.Values['PAPERLESS_EMAIL_HOST'];
+          SMTPPortEdit.Text := EnvList.Values['PAPERLESS_EMAIL_PORT'];
+          UserNameEdit.Text := EnvList.Values['PAPERLESS_EMAIL_HOST_USER'];
+          MailAccountPasswordEdit.Text := EnvList.Values['PAPERLESS_EMAIL_HOST_PASSWORD'];
+          EMailSentFromEdit.Text := EnvList.Values['PAPERLESS_EMAIL_FROM'];
+          // Restore the SSL/TLS selection.
+          // Die SSL/TLS-Auswahl wiederherstellen.
+          if EnvList.Values['PAPERLESS_EMAIL_USE_SSL'] = 'true' then
+          begin
+            SSLoTLSRg.ItemIndex := 0;  // SSL
+            // SSL
+          end
+          else if EnvList.Values['PAPERLESS_EMAIL_USE_TLS'] = 'true' then
+          begin
+            SSLoTLSRg.ItemIndex := 1;  // TLS
+            // TLS
+          end
+          else
+          begin
+            // No SSL/TLS option is selected.
+            // Keine SSL/TLS-Option ist ausgewählt.
+            SSLoTLSRg.ItemIndex := -1;
+          end;
+          // Empty values also mean no selection.
+          // Leere Werte bedeuten ebenfalls keine Auswahl.
+          if (EnvList.Values['PAPERLESS_EMAIL_USE_SSL'] = '') and (EnvList.Values['PAPERLESS_EMAIL_USE_TLS'] = '') then
+          begin
+            SSLoTLSRg.ItemIndex := -1;
+          end;
         end;
-
-        // Empty values also mean no selection.
-        // Leere Werte bedeuten ebenfalls keine Auswahl.
-        if (EnvList.Values['PAPERLESS_EMAIL_USE_SSL'] = '') and (EnvList.Values['PAPERLESS_EMAIL_USE_TLS'] = '') then
-        begin
-          SSLoTLSRg.ItemIndex := -1;
-        end;
+      except
+        on E: Exception do
+          CenteredShowMessage('Fehler beim Laden der Konfiguration: ' + E.Message);
       end;
-
-    except
-      on E: Exception do
-        CenteredShowMessage('Fehler beim Laden der Konfiguration: ' + E.Message);
+    finally
+      EnvList.Free;
     end;
   end
   else
@@ -1651,8 +2443,6 @@ procedure TMainformFrm.RequireCompletedSettings;
 var
   Response: Integer;
 begin
-  IsUpdate:= True;
-
   // Ask before changing the compose file and restarting Paperless.
   // Vor dem Ändern der Compose-Datei und dem Neustart von Paperless nachfragen.
   Response := CenteredMessageDlg('E-Mail-Einstellungen stehen aus. Dazu muss Paperless gestoppt werden.' + sLineBreak +
@@ -1666,15 +2456,18 @@ begin
   // Fortfahren, wenn der Benutzer bestätigt.
   if Response = mrOk then
   begin
+    IsUpdate:= True;
     // Write a new docker-compose.yml file.
     // Eine neue docker-compose.yml-Datei schreiben.
-     SetupFrm.CreateDockerComposeFile;
+     CreateDockerComposeWithSetupForm;
   end
   else
   begin
     // Stop when the user cancels.
     // Abbrechen, wenn der Benutzer abbricht.
+    IsUpdate := False;
     CenteredShowMessage('Der Vorgang wurde abgebrochen.');
+    Exit;
   end;
 end;
 
@@ -1750,14 +2543,18 @@ begin
        mtConfirmation, [mbYes, mbNo], 0) = mrYes) then
   begin
     IsUpdate := True;
-    CenteredMessageBox(
-      'Paperless wird heruntergefahren und es wird nach Updates gesucht. ' + #13#10 +
-      'Sollten Updates vorliegen, werden diese installiert.' + #13#10 +
-      'Geben Sie Paperless nach dem Neustart Zeit.',
-      'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
+    if not IsRestoreApplyingSettings then
+      CenteredMessageBox(
+        'Paperless wird heruntergefahren und es wird nach Updates gesucht. ' + #13#10 +
+        'Sollten Updates vorliegen, werden diese installiert.' + #13#10 +
+        'Geben Sie Paperless nach dem Neustart Zeit.',
+        'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
+    TabControl1.TabIndex := 0;
+    TabControl1Change(TabControl1);
+    Application.ProcessMessages;
     PaperlessUpdate := True;
     IsUpdate := True;
-    SetupFrm.CreateDockerComposeFile;
+    CreateDockerComposeWithSetupForm;
   end;
 end;
 
@@ -1780,7 +2577,12 @@ begin
     CenteredShowMessage('Der angegebene AppData-Ordner existiert nicht.');
     Exit;
   end;
-
+  if ExistingEmailEnvIsConfigured(EnvFilePath) then
+  begin
+    LoadEmailSettings;
+    LogInfo('Existing configured email-versand.env preserved.');
+    Exit;
+  end;
   // Build the .env file content.
   // Den Inhalt der .env-Datei zusammenbauen.
   EnvList := TStringList.Create;
@@ -1831,7 +2633,10 @@ procedure TMainformFrm.SaveEmailSettingsBtnClick(Sender: TObject);
 var
   EnvList: TStringList;
   EnvFilePath: string;
+  SettingsSaved: Boolean;
 begin
+  HideWelcomeLabel;
+  SettingsSaved := False;
   // Build the full path to the file.
   // Den vollständigen Pfad zur Datei erstellen.
   EnvFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + EmailEnvFileName;
@@ -1843,7 +2648,28 @@ begin
     CenteredShowMessage('Der angegebene AppData-Ordner existiert nicht.');
     Exit;
   end;
-
+  if ExistingEmailEnvIsConfigured(EnvFilePath) and
+     (Trim(SMTPServerEdit.Text) = '') and
+     (Trim(SMTPPortEdit.Text) = '') and
+     (Trim(UserNameEdit.Text) = '') and
+     (Trim(MailAccountPasswordEdit.Text) = '') and
+     (Trim(EMailSentFromEdit.Text) = '') and
+     (SSLoTLSRg.ItemIndex = -1) then
+  begin
+    LoadEmailSettings;
+    CenteredShowMessage('Vorhandene Mail-Einstellungen wurden geladen und nicht überschrieben.');
+    Exit;
+  end;
+  if CenteredMessageDlg(
+    'Paperless muss neu gestartet werden, um die Einstellungen zu übernehmen. ' +
+    'Möchten Sie die E-Mail-Einstellungen speichern und Paperless neu starten?',
+    mtConfirmation,
+    [mbOk, mbCancel],
+    0) <> mrOk then
+  begin
+    CenteredShowMessage('Der Vorgang wurde abgebrochen.');
+    Exit;
+  end;
   // Build the .env file content.
   // Den Inhalt der .env-Datei zusammenbauen.
   EnvList := TStringList.Create;
@@ -1877,10 +2703,7 @@ begin
     // Save the file.
     // Die Datei speichern.
     EnvList.SaveToFile(EnvFilePath, TEncoding.ANSI);
-
-    // Show confirmation when no restart is pending.
-    // Bestätigung anzeigen, wenn kein Neustart aussteht.
-    if IsUpdate = False then
+    SettingsSaved := True;
   except
     on E: Exception do
       CenteredShowMessage('Fehler beim Speichern der Datei: ' + E.Message);
@@ -1889,13 +2712,16 @@ begin
   // Clean up.
   // Aufräumen.
   EnvList.Free;
-
+  if not SettingsSaved then Exit;
     // Restart after changing email settings.
     // Nach Änderung der E-Mail-Einstellungen neu starten.
-     CenteredMessageBox('Paperless muss neu gestartet werden, um die Einstellungen zu übernehmen.', 'Information',
-     MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
+    TabControl1.TabIndex := 0;
+    TabControl1Change(TabControl1);
+    Application.ProcessMessages;
     SaveEmailSettingsBtn.Enabled:=False;
+    IsApplyingEmailSettings := True;
     CreateRestartScript(ExtractFilePath(ComposePath));
+    IsApplyingEmailSettings := False;
 end;
 
 // Create the default email-versand.env file when it is missing.
@@ -1950,14 +2776,42 @@ begin
   end;
 end;
 
-// Create the CMD file that is called by the Windows scheduled task.
-// Die CMD-Datei erstellen, die von der Windows-Aufgabe aufgerufen wird.
+// Create the PowerShell file that is called by the Windows scheduled task.
+// Die PowerShell-Datei erstellen, die von der Windows-Aufgabe aufgerufen wird.
 procedure TMainformFrm.CreateBackupPlanScript(const ComposePath: string);
 var
   BackupFolderList: TArray<string>;
+  ValidBackupFolderList: TList<string>;
   MaxBackupFolders: Integer;
   Ini: TIniFile;
   Volumes: TDockerVolumeNames;
+  BackupFolder: string;
+  function FolderNameToDateTime(const Folder: string): TDateTime;
+  var
+    Name: string;
+    Year, Month, Day, Hour, Minute, Second: Word;
+  begin
+    Result := 0;
+    Name := ExtractFileName(Folder);
+    if (Length(Name) <> 19) or
+       (Name[5] <> '-') or
+       (Name[8] <> '-') or
+       (Name[11] <> '_') or
+       (Name[14] <> '-') or
+       (Name[17] <> '-') then
+      Exit;
+    try
+      Year   := StrToInt(Copy(Name, 1, 4));
+      Month  := StrToInt(Copy(Name, 6, 2));
+      Day    := StrToInt(Copy(Name, 9, 2));
+      Hour := StrToInt(Copy(Name, 12, 2));
+      Minute := StrToInt(Copy(Name, 15, 2));
+      Second:= StrToInt(Copy(Name, 18, 2));
+      Result := EncodeDateTime(Year, Month, Day, Hour, Minute, Second, 0);
+    except
+      Result := 0;
+    end;
+  end;
 begin
   // Stop when no compose path was provided.
   // Abbrechen, wenn kein Compose-Pfad übergeben wurde.
@@ -1973,10 +2827,10 @@ begin
                    ExtractFileName(ExcludeTrailingPathDelimiter(ComposePath)),
                    ' ', '-', [rfReplaceAll]);
 
-  // Build the path for the planned backup CMD file.
-  // Den Pfad zur geplanten Backup-CMD-Datei erstellen.
+  // Build the path for the planned backup PowerShell file.
+  // Den Pfad zur geplanten Backup-PowerShell-Datei erstellen.
   CmdTargetPath := IncludeTrailingPathDelimiter(ComposePath) +
-                 'paperless-backup-geplant.cmd';
+                 'paperless-backup-geplant.ps1';
   // Use the saved backup folder, or fall back to Desktop\FallbackBackup.
   // Den gespeicherten Backup-Ordner verwenden oder auf Desktop\FallbackBackup zurückfallen.
   Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
@@ -1994,49 +2848,42 @@ begin
   Volumes.ExportData := Volume_export;
   Volumes.Media := Volume_media;
   CreatePlannedBackupCmdScript(CmdTargetPath, ComposePath, BackupPath, AppDataFolder, PaperlessDBName, Volumes);
-  ScriptSavedLbl.Caption := 'Plan gespeichert: ' + CmdTargetPath;
   // Delete old backup folders when a retention limit is set.
   // Alte Backup-Ordner löschen, wenn eine Aufbewahrungsgrenze gesetzt ist.
   MaxBackupFolders := KeepBackupsSpE.Value;
   if (MaxBackupFolders > 0) and DirectoryExists(BackupPath) then
   begin
-    BackupFolderList := TDirectory.GetDirectories(BackupPath);
-    TArray.Sort<string>(BackupFolderList, TComparer<string>.Construct(
-      function(const L, R: string): Integer
-      var
-        DL, DR: TDateTime;
-        function FolderNameToDateTime(const Folder: string): TDateTime;
-        var
-          Name: string;
-          Year, Month, Day, Hour, Minute, Second: Word;
+    ValidBackupFolderList := TList<string>.Create;
+    try
+      try
+        BackupFolderList := TDirectory.GetDirectories(BackupPath);
+        for BackupFolder in BackupFolderList do
         begin
-          Result := 0;
-          Name := ExtractFileName(Folder);
-          try
-            Year   := StrToInt(Copy(Name, 1, 4));
-            Month  := StrToInt(Copy(Name, 6, 2));
-            Day    := StrToInt(Copy(Name, 9, 2));
-            Hour := StrToInt(Copy(Name, 12, 2));
-            Minute := StrToInt(Copy(Name, 15, 2));
-            Second:= StrToInt(Copy(Name, 18, 2));
-            Result := EncodeDateTime(Year, Month, Day, Hour, Minute, Second, 0);
-          except
-            Result := 0;
+          if FolderNameToDateTime(BackupFolder) > 0 then
+            ValidBackupFolderList.Add(BackupFolder);
+        end;
+        BackupFolderList := ValidBackupFolderList.ToArray;
+        TArray.Sort<string>(BackupFolderList); // Ascending: oldest first.
+        // Aufsteigend: älteste zuerst.
+        if Length(BackupFolderList) > MaxBackupFolders then
+        begin
+          for var i := 0 to Length(BackupFolderList) - MaxBackupFolders - 1 do
+          begin
+            try
+              TDirectory.Delete(BackupFolderList[i], True); // Delete oldest folders.
+              // Die ältesten Ordner löschen.
+            except
+              on E: Exception do
+                LogWarning('Could not delete old planned backup folder "' + BackupFolderList[i] + '": ' + E.Message);
+            end;
           end;
         end;
-      begin
-        DL := FolderNameToDateTime(L);
-        DR := FolderNameToDateTime(R);
-        Result := CompareDateTime(DL, DR); // Ascending: oldest first.
-        // Aufsteigend: älteste zuerst.
-      end));
-    if Length(BackupFolderList) > MaxBackupFolders then
-    begin
-      for var i := 0 to Length(BackupFolderList) - MaxBackupFolders - 1 do
-      begin
-        TDirectory.Delete(BackupFolderList[i], True); // Delete oldest folders.
-        // Die ältesten Ordner löschen.
+      except
+        on E: Exception do
+          LogWarning('Could not clean planned backup folders: ' + E.Message);
       end;
+    finally
+      ValidBackupFolderList.Free;
     end;
   end;
 end;
@@ -2049,7 +2896,7 @@ var
   PI: TProcessInformation;
   CmdPath: string;
 begin
-  CmdPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'GeplanterBackupTaskSkript.cmd';
+  CmdPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'GeplanterBackupTaskSkript.ps1';
   if not FileExists(CmdPath) then
   begin
     CenteredShowMessage('Das geplante Backup-Skript wurde nicht gefunden: ' + CmdPath);
@@ -2059,7 +2906,7 @@ begin
   SI.cb := SizeOf(SI);
   SI.dwFlags := STARTF_USESHOWWINDOW;
   SI.wShowWindow := SW_HIDE;
-  if CreateProcess(nil, PChar('"' + CmdPath + '"'), nil, nil, False,
+  if CreateProcess(nil, PChar('powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' + CmdPath + '"'), nil, nil, False,
      CREATE_NO_WINDOW, nil, nil, SI, PI) then
   begin
     CloseHandle(PI.hThread);
@@ -2088,17 +2935,22 @@ var
   FolderDialog: TFileOpenDialog;
   Ini: TIniFile;
   RestoreDefaultFolder: string;
+  BackupSizeBytes: Int64;
+  RestoreEstimateLogText: string;
 begin
+  HideWelcomeLabel;
+  ClearRestoreProgressState;
   WriteComposeContainerAndVolumeInfo(ExtractFilePath(ComposePath));
   StartPaperlessBackupBtn.Enabled := False;
   RestorePaperlessBackupBtn.Enabled := False;
-  AutostartLbl.Visible:=False;
   ReadContainerNamesFromFile;
   IsBackup := False;
   IsPaperlessInstallation := False;
   if ComposePath = '' then
   begin
     CenteredShowMessage('Bitte zuerst den Paperless-Ordner auswählen.');
+    StartPaperlessBackupBtn.Enabled := True;
+    RestorePaperlessBackupBtn.Enabled := True;
     Exit;
   end;
   // Start the restore folder picker in the last known backup target folder.
@@ -2120,16 +2972,37 @@ begin
     if FolderDialog.Execute(Handle) then
     begin
       BackupFolder := FolderDialog.FileName;
-      if ApplyPaperlessSecretKeyForRestore(BackupFolder) then
+      BackupWiederherProgNeuStartLbl.Visible := True;
+      BackupWiederherProgNeuStartLbl.Caption := 'Backup wird geprüft. Bitte warten ...';
+      Application.ProcessMessages;
+      BackupSizeBytes := GetDirectorySizeBytes(BackupFolder);
+      RestoreEstimatedSeconds := EstimateRestoreDurationSeconds(BackupSizeBytes);
+      RestoreEstimateText := 'Restore estimate available';
+      RestoreEstimateLogText := Format('Backup-Größe: %s. Geschätzte Wiederherstellungsdauer: %s.',
+        [FormatByteSize(BackupSizeBytes), EstimateRestoreDurationText(BackupSizeBytes)]);
+      BackupWiederherProgNeuStartLbl.Caption := 'Wiederherstellung wird vorbereitet. Bitte warten ...';
+      LogInfo('Restore estimate for "' + BackupFolder + '": ' + RestoreEstimateLogText);
+      Application.ProcessMessages;
+      if ValidateRestoreBackupFolder(BackupFolder) then
       begin
-        ShouldWriteNewCompose := True;
-        try
-          SetupFrm.CreateDockerComposeFile;
-        finally
-          ShouldWriteNewCompose := False;
+        if ApplyPaperlessSecretKeyForRestore(BackupFolder) then
+        begin
+          ShouldWriteNewCompose := True;
+          try
+            CreateDockerComposeWithSetupForm;
+          finally
+            ShouldWriteNewCompose := False;
+          end;
         end;
+        RestoreEmailEnvFromBackup(BackupFolder, ComposePath);
+        CreateRestoreScript(ComposePath, BackupFolder);
+      end
+      else
+      begin
+        ClearRestoreProgressState;
+        BackupWiederherProgNeuStartLbl.Visible := True;
+        BackupWiederherProgNeuStartLbl.Caption := 'Wiederherstellung abgebrochen.';
       end;
-      CreateRestoreScript(ComposePath, BackupFolder);
     end
     else
     begin
@@ -2142,9 +3015,6 @@ begin
   // Den Formularzustand aktualisieren.
   StartPaperlessBackupBtn.Enabled := True;
   RestorePaperlessBackupBtn.Enabled := True;
-  CanStartBackupSTxt.Visible := False;
-  StaticText5.Visible := False;
-  RestoreCanStartSTxt.Visible := True;
 end;
 
 // Enable the email save button after the user confirms that the update step is done.
@@ -2155,9 +3025,15 @@ begin
   PaperlessUpdateBtn.Enabled := False else
   PaperlessUpdateBtn.Enabled := True;
 end;
-
-// Create paperless-restore.cmd for the selected backup folder.
-// paperless-restore.cmd für den ausgewählten Backup-Ordner erstellen.
+// Open the local Paperless installation in the default browser.
+// Die lokale Paperless-Installation im Standardbrowser oeffnen.
+procedure TMainformFrm.OpenPaperlessBrowserLblClick(Sender: TObject);
+begin
+  HideWelcomeLabel;
+  ShellExecute(0, 'open', PaperlessLocalUrlWithSlash, nil, nil, SW_SHOWNORMAL);
+end;
+// Create paperless-restore.ps1 for the selected backup folder.
+// paperless-restore.ps1 für den ausgewählten Backup-Ordner erstellen.
 // The script restores the database dump and all Paperless Docker volumes.
 // Das Skript stellt den Datenbank-Dump und alle Paperless-Docker-Volumes wieder her.
 procedure TMainformFrm.CreateRestoreScript(const ComposePath, BackupFolder: string);
@@ -2171,23 +3047,25 @@ begin
     CenteredShowMessage('Fehler: Es wurde kein gültiger Compose-Pfad gewählt.');
     Exit;
   end;
-  CmdTargetPath := IncludeTrailingPathDelimiter(ExtractFilePath(ComposePath)) + 'paperless-restore.cmd';
+  CmdTargetPath := IncludeTrailingPathDelimiter(ExtractFilePath(ComposePath)) + 'paperless-restore.ps1';
   Volumes.Data := Volume_data;
   Volumes.DbData := Volume_db_data;
   Volumes.ExportData := Volume_export;
   Volumes.Media := Volume_media;
   CreateRestoreCmdScript(CmdTargetPath, ComposePath, BackupFolder, PaperlessDBName, Volumes);
-  ScriptSavedLbl.Caption := 'Restore-Skript wurde erstellt: ' + CmdTargetPath;
   StartAndMonitorCmdScript;
 end;
 
-// Run the current CMD script, wait for it, and show success or failure.
-// Das aktuelle CMD-Skript ausführen, darauf warten und Erfolg oder Fehler anzeigen.
+// Run the current PowerShell script, wait for it, and show success or failure.
+// Das aktuelle PowerShell-Skript ausführen, darauf warten und Erfolg oder Fehler anzeigen.
 procedure TMainformFrm.StartAndMonitorCmdScript;
 var
   StartupInfo: TStartupInfo;
   ProcessInfo: TProcessInformation;
   Cmd: string;
+  RunningStatus: string;
+  OutputLogPath: string;
+  SuccessStatus: string;
   ExitCode: DWORD;
   ShouldWait: Boolean;
 begin
@@ -2195,28 +3073,42 @@ begin
   FillChar(StartupInfo, SizeOf(TStartupInfo), 0);
   StartupInfo.cb := SizeOf(TStartupInfo);
   StartupInfo.dwFlags := STARTF_USESHOWWINDOW;
-  StartupInfo.wShowWindow := SW_SHOWNORMAL;
-
-  Cmd := 'cmd.exe /C "' + CmdTargetPath + '"'; // Script path.
+  StartupInfo.wShowWindow := SW_HIDE;
+  OutputLogPath := PrepareScriptOutputLog;
+  Cmd := BuildPowerShellCommand(CmdTargetPath, OutputLogPath); // Script path.
   // Skriptpfad.
-
-  if CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NEW_CONSOLE, nil, nil, StartupInfo, ProcessInfo) then
+  if IsRestoreApplyingSettings then
+    RunningStatus := 'Wiederherstellung wird abgeschlossen. Bitte warten ...'
+  else if IsUpdate then
+    RunningStatus := 'Update wird gestartet. Bitte warten ...'
+  else if IsPaperlessInstallation then
+    RunningStatus := 'Paperless-Installation wird gestartet. Bitte warten ...'
+  else if IsBackup then
+    RunningStatus := 'Backup wird gestartet. Bitte warten ...'
+  else if RestoreEstimateText.Trim <> '' then
+    RunningStatus := 'Wiederherstellung wird gestartet. Bitte warten ...'
+  else
+    RunningStatus := 'Wiederherstellung wird gestartet. Bitte warten ...';
+  if IsPaperlessInstallation then
   begin
+    InstallCancelRequested := False;
+    RunningScriptProcessId := 0;
+  end;
+  PrepareScriptProgress(RunningStatus);
+  if CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NO_WINDOW, nil, nil, StartupInfo, ProcessInfo) then
+  begin
+    if IsPaperlessInstallation then
+      RunningScriptProcessId := ProcessInfo.dwProcessId;
     ShouldWait := True;
+    UpdateScriptProgress(RunningStatus);
     Sleep(1500);
-
     if IsUpdate = False then
     begin
         if ShouldWait then
         begin
-          // Bring the CMD window to the front.
-          // Das CMD-Fenster in den Vordergrund bringen.
-          ConsoleToFront(ProcessInfo.dwProcessId);
-
           // Wait for the process to finish.
           // Warten, bis der Prozess beendet ist.
-          WaitForSingleObject(ProcessInfo.hProcess, INFINITE);
-
+          WaitForScriptWithProgress(ProcessInfo.hProcess, RunningStatus, OutputLogPath);
           // Check the exit code.
           // Den Exit-Code prüfen.
           GetExitCodeProcess(ProcessInfo.hProcess, ExitCode);
@@ -2225,6 +3117,16 @@ begin
           Sleep(1000);
           if ExitCode = 0 then
           begin
+            if IsPaperlessInstallation = True then
+              SuccessStatus := 'Paperless-Installation abgeschlossen.'
+            else if IsBackup = True then
+              SuccessStatus := 'Backupvorgang abgeschlossen.'
+            else if IsUpdate = True then
+              SuccessStatus := 'Update abgeschlossen.'
+            else
+              SuccessStatus := 'Wiederherstellung abgeschlossen.';
+            if (SuccessStatus <> 'Wiederherstellung abgeschlossen.') and not IsRestoreApplyingSettings then
+              FinishScriptProgress(SuccessStatus, True);
             if IsPaperlessInstallation = True then
             begin
               WriteStandardVersionAfterInstallation;
@@ -2235,6 +3137,7 @@ begin
               SetupFrm.DockerGefundenLbl.Caption := 'Paperless erfolgreich installiert.';
               SetupFrm.PaperlessInstallierenBtn.Enabled := False;
               SetupFrm.BitteBestaetigenLbl.Visible := True;
+
 
               SetupFrm.HinweisMemo.Lines.Clear;
               SetupFrm.HinweisMemo.Lines.Add('Ihr Paperless wurde erfolgreich installiert.');
@@ -2256,6 +3159,8 @@ begin
               SetupFrm.WillkommenLbl.Visible := False;
               SetupFrm.ComputerRalleLbl.Visible := False;
               IsPaperlessInstallation := False;
+              SetupFrm.InstallationCancelBtn.Visible := False;
+              SetupFrm.HinweisVerstandenBtn.Enabled := True;
             end
             else if IsBackup = True then
             begin
@@ -2266,7 +3171,7 @@ begin
                 'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
               end;
 
-              SetupFrm.WriteImageVersion(BackupPath);
+              WriteImageVersionWithSetupForm(BackupPath);
 
             end
             else
@@ -2280,9 +3185,7 @@ begin
                   'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
                 end else
                 begin
-                  CenteredMessageBox('Wiederherstellung abgeschlossen.' + #13#10 +
-                  'Die Einstellungen werden jetzt neu angewendet, damit die Datenbank-Collation geprüft wird.',
-                  'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
+                  IsRestoreApplyingSettings := True;
                   SaveSettingsBtnClick(nil);
                 end;
               end;
@@ -2290,18 +3193,33 @@ begin
           end
           else
           begin
-            CenteredShowMessage('Vorgang fehlgeschlagen. Fehlercode: ' + IntToStr(ExitCode));
+            if InstallCancelRequested and IsPaperlessInstallation then
+            begin
+              FinishScriptProgress('Installation abgebrochen.', False);
+              if Assigned(SetupFrm) then
+                SetupFrm.HinweisVerstandenBtn.Enabled := True;
+              CenteredShowMessage('Installation wurde abgebrochen. Bereits geladene Docker-Images wurden entfernt.');
+              IsPaperlessInstallation := False;
+              InstallCancelRequested := False;
+            end
+            else
+            begin
+              FinishScriptProgress('Vorgang fehlgeschlagen.', False);
+              CenteredShowMessage('Vorgang fehlgeschlagen. Fehlercode: ' + IntToStr(ExitCode));
+            end;
+            ClearRestoreProgressState;
           end;
         end else
-        CenteredShowMessage('Fehler beim Starten des Skripts.');
+        begin
+          FinishScriptProgress('Skript konnte nicht gestartet werden.', False);
+          CenteredShowMessage('Fehler beim Starten des Skripts.');
+          ClearRestoreProgressState;
+        end;
     end else
         begin
-          // Bring the CMD window to the front.
-          // Das CMD-Fenster in den Vordergrund bringen.
-          ConsoleToFront(ProcessInfo.dwProcessId);
           // Wait for the process to finish.
           // Warten, bis der Prozess beendet ist.
-          WaitForSingleObject(ProcessInfo.hProcess, INFINITE);
+          WaitForScriptWithProgress(ProcessInfo.hProcess, RunningStatus, OutputLogPath);
           // Check the exit code.
           // Den Exit-Code prüfen.
           GetExitCodeProcess(ProcessInfo.hProcess, ExitCode);
@@ -2309,16 +3227,41 @@ begin
           CloseHandle(ProcessInfo.hThread);
           if ExitCode = 0 then
           begin
+            if IsRestoreApplyingSettings then
+              FinishScriptProgress('Wiederherstellung abgeschlossen.', True)
+            else
+              FinishScriptProgress('Update abgeschlossen.', True);
             SaveBlankEmailSettings();
-            CenteredMessageBox('Paperless wurde erfolgreich aktualisiert' + #13#10 +
-            'Sie können Paperless nun im Browser öffnen (http://localhost:8000). Geben Sie Paperless ein wenig Zeit zum starten.',
-            'Installation abgeschlossen', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
+            if IsRestoreApplyingSettings then
+            begin
+              CenteredMessageBox('Wiederherstellung abgeschlossen.', 'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
+              IsRestoreApplyingSettings := False;
+              ClearRestoreProgressState;
+            end
+            else
+              CenteredMessageBox('Paperless wurde erfolgreich aktualisiert' + #13#10 +
+              'Sie können Paperless nun im Browser öffnen (http://localhost:8000). Geben Sie Paperless ein wenig Zeit zum starten.',
+              'Installation abgeschlossen', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
             IsUpdate := False;
+          end
+          else
+          begin
+            FinishScriptProgress('Paperless-Update fehlgeschlagen.', False);
+            CenteredShowMessage('Vorgang fehlgeschlagen. Fehlercode: ' + IntToStr(ExitCode));
+            IsRestoreApplyingSettings := False;
+            ClearRestoreProgressState;
           end;
         end;
+  end
+  else
+  begin
+    FinishScriptProgress('Skript konnte nicht gestartet werden.', False);
+    CenteredShowMessage('Fehler beim Starten des Skripts.');
+    IsRestoreApplyingSettings := False;
+    ClearRestoreProgressState;
   end;
   ActiveControl := nil;
-
+  RunningScriptProcessId := 0;
   if IsAutostart = True then
   Application.Terminate;
 
@@ -2331,28 +3274,37 @@ var
   StartupInfo: TStartupInfo;
   ProcessInfo: TProcessInformation;
   Cmd: string;
+  RunningStatus: string;
+  OutputLogPath: string;
   ExitCode: DWORD;
+  WasApplyingEmailSettings: Boolean;
 begin
+  WasApplyingEmailSettings := IsApplyingEmailSettings;
   FillChar(StartupInfo, SizeOf(TStartupInfo), 0);
   StartupInfo.cb := SizeOf(TStartupInfo);
   StartupInfo.dwFlags := STARTF_USESHOWWINDOW;
-  StartupInfo.wShowWindow := SW_SHOWNORMAL;
-  Cmd := 'cmd.exe /C "' + CmdTargetPath + '"'; // Script path.
+  StartupInfo.wShowWindow := SW_HIDE;
+  OutputLogPath := PrepareScriptOutputLog;
+  Cmd := BuildPowerShellCommand(CmdTargetPath, OutputLogPath); // Script path.
   // Skriptpfad.
-
+  if WasApplyingEmailSettings then
+    RunningStatus := 'Mail-Einstellungen werden angewendet. Bitte warten ...'
+  else if PaperlessUpdate then
+    RunningStatus := 'Update wird gestartet. Bitte warten ...'
+  else
+    RunningStatus := 'Neustart wird gestartet. Bitte warten ...';
+  PrepareScriptProgress(RunningStatus);
   if PaperlessUpdate = False then
   begin
     // Start the process.
     // Den Prozess starten.
-    if CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NEW_CONSOLE, nil, nil, StartupInfo, ProcessInfo) then
+    if CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NO_WINDOW, nil, nil, StartupInfo, ProcessInfo) then
     begin
+      UpdateScriptProgress(RunningStatus);
       Sleep(1000);
-      // Bring the CMD window to the front.
-      // Das CMD-Fenster in den Vordergrund bringen.
-      ConsoleToFront(ProcessInfo.dwProcessId);
       // Wait for the process to finish.
       // Warten, bis der Prozess beendet ist.
-      WaitForSingleObject(ProcessInfo.hProcess, INFINITE);
+      WaitForScriptWithProgress(ProcessInfo.hProcess, RunningStatus, OutputLogPath);
       // Check the exit code.
       // Den Exit-Code prüfen.
       GetExitCodeProcess(ProcessInfo.hProcess, ExitCode);
@@ -2363,12 +3315,24 @@ begin
       // Exit-Code 0 bedeutet Erfolg.
       if ExitCode = 0 then
       begin
-        CenteredMessageBox('Neustart abgeschlossen. Sie können das Programm jetzt schließen.' + #13#10 +
-          'Bitte geben Sie den Paperless Komponenten Zeit zum starten.',
-          'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
+        if WasApplyingEmailSettings then
+        begin
+          FinishScriptProgress('Mail-Einstellungen angewendet.', True);
+          CenteredMessageBox('Mail-Einstellungen wurden angewendet. Sie können das Programm jetzt schließen.' + #13#10 +
+            'Bitte geben Sie den Paperless Komponenten Zeit zum starten.',
+            'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
+        end
+        else
+        begin
+          FinishScriptProgress('Neustart abgeschlossen.', True);
+          CenteredMessageBox('Neustart abgeschlossen. Sie können das Programm jetzt schließen.' + #13#10 +
+            'Bitte geben Sie den Paperless Komponenten Zeit zum starten.',
+            'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
+        end;
       end
       else
       begin
+        FinishScriptProgress('Neustart fehlgeschlagen.', False);
         // Show a failure message when the process returns an error.
         // Eine Fehlermeldung anzeigen, wenn der Prozess einen Fehler zurückgibt.
         CenteredShowMessage('Der Vorgang ist fehlgeschlagen. Fehlercode: ' + IntToStr(ExitCode));
@@ -2376,25 +3340,26 @@ begin
     end
     else
     begin
+      FinishScriptProgress('Skript konnte nicht gestartet werden.', False);
       CenteredShowMessage('Fehler beim Starten des Prozesses.');
     end;
     ActiveControl := nil; // Remove focus from the current control.
     // Den Fokus vom aktuellen Steuerelement entfernen.
+    if WasApplyingEmailSettings then
+      IsApplyingEmailSettings := False;
   end;
 
   if PaperlessUpdate = true then
   begin
     // Start the process.
     // Den Prozess starten.
-    if CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NEW_CONSOLE, nil, nil, StartupInfo, ProcessInfo) then
+    if CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NO_WINDOW, nil, nil, StartupInfo, ProcessInfo) then
     begin
+      UpdateScriptProgress(RunningStatus);
       Sleep(1000);
-      // Bring the CMD window to the front.
-      // Das CMD-Fenster in den Vordergrund bringen.
-      ConsoleToFront(ProcessInfo.dwProcessId);
       // Wait for the process to finish.
       // Warten, bis der Prozess beendet ist.
-      WaitForSingleObject(ProcessInfo.hProcess, INFINITE);
+      WaitForScriptWithProgress(ProcessInfo.hProcess, RunningStatus, OutputLogPath);
       // Check the exit code.
       // Den Exit-Code prüfen.
       GetExitCodeProcess(ProcessInfo.hProcess, ExitCode);
@@ -2405,6 +3370,7 @@ begin
       // Exit-Code 0 bedeutet Erfolg.
       if ExitCode = 0 then
       begin
+        FinishScriptProgress('Update abgeschlossen.', True);
         CenteredMessageBox('Neustart und Updatesuche abgeschlossen. Sie können das Programm jetzt schließen.' + #13#10 +
           'Bitte geben Sie den Paperless Komponenten Zeit zum starten.' + #13#10 +
           'Lagen Updates vor, wurden diese installiert.',
@@ -2412,6 +3378,7 @@ begin
       end
       else
       begin
+        FinishScriptProgress('Neustart und Updatesuche fehlgeschlagen.', False);
         // Show a failure message when the process returns an error.
         // Eine Fehlermeldung anzeigen, wenn der Prozess einen Fehler zurückgibt.
         CenteredShowMessage('Der Vorgang ist fehlgeschlagen. Fehlercode: ' + IntToStr(ExitCode));
@@ -2419,6 +3386,7 @@ begin
     end
     else
     begin
+      FinishScriptProgress('Skript konnte nicht gestartet werden.', False);
       CenteredShowMessage('Fehler beim Starten des Prozesses.');
     end;
     ActiveControl := nil; // Remove focus from the current control.
@@ -2426,8 +3394,8 @@ begin
   end;
 end;
 
-// Create paperless-neustart.cmd to stop and start Paperless again.
-// paperless-neustart.cmd erstellen, um Paperless zu stoppen und neu zu starten.
+// Create paperless-neustart.ps1 to stop and start Paperless again.
+// paperless-neustart.ps1 erstellen, um Paperless zu stoppen und neu zu starten.
 procedure TMainformFrm.CreateRestartScript(const ComposePath: string);
 begin
   // Stop when no compose path was provided.
@@ -2438,9 +3406,8 @@ begin
     Exit;
   end;
   ComposeName := StringReplace(ExtractFileName(ExcludeTrailingPathDelimiter(ComposePath)), ' ', '-', [rfReplaceAll]);
-  CmdTargetPath := IncludeTrailingPathDelimiter(ComposePath) + 'paperless-neustart.cmd';
+  CmdTargetPath := IncludeTrailingPathDelimiter(ComposePath) + 'paperless-neustart.ps1';
   CreateRestartCmdScript(CmdTargetPath, ComposePath);
-  ScriptSavedLbl.Caption := 'Backup-Skript wurde erstellt: ' + CmdTargetPath;
   StartAndMonitorRestart;
 end;
 
@@ -2450,8 +3417,8 @@ procedure TMainformFrm.ConsoleToFront(PID: DWORD);
 var
   hConsoleWnd: HWND;
 begin
-  // Bring the CMD window to the front.
-  // Das CMD-Fenster in den Vordergrund bringen.
+  // Bring the PowerShell window to the front.
+  // Das PowerShell-Fenster in den Vordergrund bringen.
   AttachConsole(PID);
   hConsoleWnd := GetConsoleWindow;
   if hConsoleWnd <> 0 then
@@ -2466,6 +3433,7 @@ end;
 // Die Einstellungsseite anzeigen, auf der Image-Versionen und Update-Einstellungen bearbeitet werden.
 procedure TMainformFrm.PaperlessUpdateBtnClick(Sender: TObject);
 begin
+  HideWelcomeLabel;
   TabControl1.TabIndex := 4;
   BackupRestorePan.Visible := False;
   BackupPlanPan.Visible := False;
@@ -2574,14 +3542,18 @@ end;
 // Run a shell command hidden and return its text output.
 // Einen Shell-Befehl versteckt ausführen und seine Textausgabe zurückgeben.
 function TMainformFrm.ExecuteShellCommand(const Command, Params: string): string;
+const
+  CommandTimeoutMs = 120000;
 var
   SA: TSecurityAttributes;
   SI: TStartupInfo;
   PI: TProcessInformation;
   StdOutRead, StdOutWrite: THandle;
   Buffer: array[0..4095] of AnsiChar;
-  BytesRead: DWORD;
-  Output: AnsiString;
+  BytesRead, BytesAvailable, ReadSize: DWORD;
+  WaitResult: DWORD;
+  StartTick: UInt64;
+  Output, Chunk: AnsiString;
 begin
   ZeroMemory(@SA, SizeOf(SA));
   SA.nLength := SizeOf(SA);
@@ -2606,13 +3578,49 @@ begin
   end;
 
   CloseHandle(StdOutWrite);
-
+  StdOutWrite := 0;
   Output := '';
+  StartTick := GetTickCount64;
+  repeat
+    WaitResult := WaitForSingleObject(PI.hProcess, 50);
+    repeat
+      BytesAvailable := 0;
+      if not PeekNamedPipe(StdOutRead, nil, 0, nil, @BytesAvailable, nil) then
+        Break;
+      if BytesAvailable = 0 then
+        Break;
+      BytesRead := 0;
+      if BytesAvailable > SizeOf(Buffer) then
+        ReadSize := SizeOf(Buffer)
+      else
+        ReadSize := BytesAvailable;
+      if ReadFile(StdOutRead, Buffer, ReadSize, BytesRead, nil) and (BytesRead > 0) then
+      begin
+        SetString(Chunk, PAnsiChar(@Buffer[0]), BytesRead);
+        Output := Output + Chunk;
+      end
+      else
+        Break;
+    until False;
+    if (WaitResult = WAIT_TIMEOUT) and (GetTickCount64 - StartTick > CommandTimeoutMs) then
+      Break;
+  until WaitResult <> WAIT_TIMEOUT;
+  if WaitResult <> WAIT_OBJECT_0 then
+  begin
+    TerminateProcess(PI.hProcess, DWORD(-1));
+    CloseHandle(PI.hProcess);
+    CloseHandle(PI.hThread);
+    CloseHandle(StdOutRead);
+    Exit('');
+  end;
   repeat
     BytesRead := 0;
     ReadFile(StdOutRead, Buffer, SizeOf(Buffer), BytesRead, nil);
     if BytesRead > 0 then
-      Output := Output + Copy(Buffer, 1, BytesRead);
+    begin
+      SetString(Chunk, PAnsiChar(@Buffer[0]), BytesRead);
+      Output := Output + Chunk;
+    end;
   until BytesRead = 0;
 
   CloseHandle(StdOutRead);
