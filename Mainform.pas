@@ -2259,7 +2259,12 @@ var
   Ini: TIniFile;
   ComposePathFromIni: string;
   ComposePathTextFile: string;
+  OriginalButtonText: string;
 begin
+  OriginalButtonText := CreateBackupPlanBtn.Caption;
+  CreateBackupPlanBtn.Caption := 'Bitte warten ...';
+  CreateBackupPlanBtn.Enabled := False;
+  try
   SaveScheduleSettings;
   // Check prerequisites.
   // Voraussetzungen prüfen.
@@ -2373,6 +2378,10 @@ begin
   end
   else
     CenteredShowMessage('Zeitplan-Anlegen-Skript konnte nicht gestartet werden.');
+  finally
+    CreateBackupPlanBtn.Caption := OriginalButtonText;
+    CreateBackupPlanBtn.Enabled := True;
+  end;
 end;
 
 // Load saved Paperless email settings from email-versand.env.
