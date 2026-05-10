@@ -44,7 +44,7 @@ procedure CreateRestoreCmdScript(
 procedure CreateRestartCmdScript(const TargetPath, ComposePath: string);
 procedure CreateDeleteBackupScheduleCmdScript(const TargetPath: string);
 procedure CreateBackupScheduleCmdScript(
-  const TargetPath, ProgramPath, Weekdays, Hour, Minute: string);
+  const TargetPath, BackupScriptPath, Weekdays, Hour, Minute: string);
 
 implementation
 
@@ -315,7 +315,7 @@ begin
 end;
 
 procedure CreateBackupScheduleCmdScript(
-  const TargetPath, ProgramPath, Weekdays, Hour, Minute: string);
+  const TargetPath, BackupScriptPath, Weekdays, Hour, Minute: string);
 var
   Lines: TStringList;
 begin
@@ -324,7 +324,7 @@ begin
     AddPsHeader(Lines);
     Lines.Add('try {');
     Lines.Add('  Write-Host "=== Backup-Aufgabe wird in die Aufgabenplanung eingetragen ==="');
-    Lines.Add(Format('  $TaskCommand = ''"%s" /geplant''', [StringReplace(ProgramPath, '''', '''''', [rfReplaceAll])]));
+    Lines.Add(Format('  $TaskCommand = ''powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%s"''', [StringReplace(BackupScriptPath, '''', '''''', [rfReplaceAll])]));
     Lines.Add(Format('  Invoke-DockerStep { schtasks /create /tn "PaperlessBackup" /tr $TaskCommand /sc weekly /d %s /st %s:%s /f } "Fehler beim Eintragen der Backup-Aufgabe."', [Weekdays, Hour, Minute]));
     Lines.Add('  Write-Host "=== Fertig ==="');
     AddPsFooter(Lines);

@@ -1132,15 +1132,18 @@ begin
     end;
   end;
 end;
+
 function TMainformFrm.ValidateRestoreBackupFolder(const BackupFolder: string): Boolean;
 var
   MissingFiles: TStringList;
   BasePath: string;
+
   procedure RequireFile(const FileName: string);
   begin
     if not FileExists(BasePath + FileName) then
       MissingFiles.Add(FileName);
   end;
+
 begin
   Result := False;
   if not DirectoryExists(BackupFolder) then
@@ -1174,6 +1177,7 @@ begin
   end;
   Result := True;
 end;
+
 // Open the support page in the default browser.
 // Die Unterstützungsseite im Standardbrowser öffnen.
 procedure TMainformFrm.BuyMeACoffeeBtnClick(Sender: TObject);
@@ -2251,14 +2255,10 @@ var
   Hour, Minute: string;
   ScriptPath, ComposePath, TargetCmdPath: string;
   ShellExecuteInfo: TShellExecuteInfo;
-  ProgramPath: String;
   Ini: TIniFile;
   ComposePathFromIni: string;
   ComposePathTextFile: string;
 begin
-  // Get the executable path.
-  // Den Pfad zur ausführbaren Datei ermitteln.
-  ProgramPath := ParamStr(0);
   SaveScheduleSettings;
   // Check prerequisites.
   // Voraussetzungen prüfen.
@@ -2270,6 +2270,8 @@ begin
   finally
     Ini.Free;
   end;
+  if (ComposePathFromIni <> '') and DirectoryExists(ComposePathFromIni) then
+    ComposePathFromIni := IncludeTrailingPathDelimiter(ComposePathFromIni) + DockerComposeFileName;
   // Stop when the compose path is missing.
   // Abbrechen, wenn der Compose-Pfad fehlt.
   if (ComposePathFromIni = '') or
@@ -2309,6 +2311,8 @@ begin
     finally
       Ini.Free;
     end;
+    if (ComposePath <> '') and DirectoryExists(ComposePath) then
+      ComposePath := IncludeTrailingPathDelimiter(ComposePath) + DockerComposeFileName;
 
     if ComposePath = '' then
     begin
@@ -2337,9 +2341,9 @@ begin
   // Write the scheduler setup script.
   // Das Skript zum Einrichten der Aufgabenplanung schreiben.
   ScriptPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'Backup-Zeitplan-Anlegen.ps1';
-  // The scheduled task starts this program with the /geplant parameter.
-  // Die geplante Aufgabe startet dieses Programm mit dem Parameter /geplant.
-  CreateBackupScheduleCmdScript(ScriptPath, ProgramPath, Weekdays, Hour, Minute);
+  // The scheduled task starts the planned backup PowerShell script.
+  // Die geplante Aufgabe startet das geplante Backup-PowerShell-Skript.
+  CreateBackupScheduleCmdScript(ScriptPath, TargetCmdPath, Weekdays, Hour, Minute);
 
   CenteredShowMessage('Die geplante Backup-Aufgabe wurde als Aufgabe eingetragen und als Skript gespeichert:' + sLineBreak + ScriptPath);
   // Run the script silently in the background.
