@@ -2255,6 +2255,7 @@ var
   Hour, Minute: string;
   ScriptPath, ComposePath, TargetCmdPath: string;
   ShellExecuteInfo: TShellExecuteInfo;
+  ExitCode: DWORD;
   Ini: TIniFile;
   ComposePathFromIni: string;
   ComposePathTextFile: string;
@@ -2345,7 +2346,6 @@ begin
   // Die geplante Aufgabe startet das geplante Backup-PowerShell-Skript.
   CreateBackupScheduleCmdScript(ScriptPath, TargetCmdPath, Weekdays, Hour, Minute);
 
-  CenteredShowMessage('Die geplante Backup-Aufgabe wurde als Aufgabe eingetragen und als Skript gespeichert:' + sLineBreak + ScriptPath);
   // Run the script silently in the background.
   // Das Skript still im Hintergrund ausführen.
   FillChar(ShellExecuteInfo, SizeOf(ShellExecuteInfo), 0);
@@ -2353,12 +2353,23 @@ begin
   ShellExecuteInfo.fMask := SEE_MASK_NOCLOSEPROCESS;
   ShellExecuteInfo.Wnd := 0;
   ShellExecuteInfo.lpFile := PChar('powershell.exe');
-  ShellExecuteInfo.lpParameters := PChar('-NoProfile -ExecutionPolicy Bypass -File "' + ScriptPath + '"');
-  ShellExecuteInfo.nShow := SW_SHOWNORMAL;
+  ShellExecuteInfo.lpParameters := PChar('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + ScriptPath + '"');
+  ShellExecuteInfo.nShow := SW_HIDE;
   if ShellExecuteEx(@ShellExecuteInfo) then
   begin
     if ShellExecuteInfo.hProcess <> 0 then
+    begin
+      WaitForSingleObject(ShellExecuteInfo.hProcess, INFINITE);
+      ExitCode := 1;
+      GetExitCodeProcess(ShellExecuteInfo.hProcess, ExitCode);
       CloseHandle(ShellExecuteInfo.hProcess);
+      if ExitCode = 0 then
+        CenteredShowMessage('Geplantes Backup wurde erfolgreich angelegt.')
+      else
+        CenteredShowMessage('Geplantes Backup konnte nicht angelegt werden.');
+    end
+    else
+      CenteredShowMessage('Geplantes Backup konnte nicht angelegt werden.');
   end
   else
     CenteredShowMessage('Zeitplan-Anlegen-Skript konnte nicht gestartet werden.');
