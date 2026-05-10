@@ -60996,14 +60996,13 @@ object MainformFrm: TMainformFrm
       object Panel15: TPanel
         Left = 0
         Top = 0
-        Width = 840
+        Width = 836
         Height = 56
         Align = alTop
         BevelOuter = bvNone
         Color = 3767324
         ParentBackground = False
         TabOrder = 0
-        ExplicitWidth = 836
         object Label27: TLabel
           Left = 20
           Top = 19
