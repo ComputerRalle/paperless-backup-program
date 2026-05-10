@@ -1132,18 +1132,15 @@ begin
     end;
   end;
 end;
-
 function TMainformFrm.ValidateRestoreBackupFolder(const BackupFolder: string): Boolean;
 var
   MissingFiles: TStringList;
   BasePath: string;
-
   procedure RequireFile(const FileName: string);
   begin
     if not FileExists(BasePath + FileName) then
       MissingFiles.Add(FileName);
   end;
-
 begin
   Result := False;
   if not DirectoryExists(BackupFolder) then
@@ -1177,7 +1174,6 @@ begin
   end;
   Result := True;
 end;
-
 // Open the support page in the default browser.
 // Die Unterstützungsseite im Standardbrowser öffnen.
 procedure TMainformFrm.BuyMeACoffeeBtnClick(Sender: TObject);
@@ -2319,7 +2315,6 @@ begin
     end;
     if (ComposePath <> '') and DirectoryExists(ComposePath) then
       ComposePath := IncludeTrailingPathDelimiter(ComposePath) + DockerComposeFileName;
-
     if ComposePath = '' then
     begin
       CenteredShowMessage('Fehler: Kein Docker-Compose-Pfad in der INI gespeichert.');
@@ -2350,7 +2345,6 @@ begin
   // The scheduled task starts the planned backup PowerShell script.
   // Die geplante Aufgabe startet das geplante Backup-PowerShell-Skript.
   CreateBackupScheduleCmdScript(ScriptPath, TargetCmdPath, Weekdays, Hour, Minute);
-
   // Run the script silently in the background.
   // Das Skript still im Hintergrund ausführen.
   FillChar(ShellExecuteInfo, SizeOf(ShellExecuteInfo), 0);
