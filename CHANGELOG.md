@@ -8,6 +8,10 @@ Alle wichtigen Aenderungen an diesem Projekt werden hier dokumentiert.
 
 - Added Docker dangling image cleanup after generated backup, restore, restart, setup, and update scripts run.
 - Bereinigung herrenloser Docker-Images nach erzeugten Backup-, Wiederherstellungs-, Neustart-, Setup- und Update-Skripten ergaenzt.
+- Fixed regeneration of hidden PowerShell scripts so existing hidden files are cleared before writing new script content.
+- Neuerzeugung versteckter PowerShell-Skripte korrigiert, damit vorhandene versteckte Dateien vor dem Schreiben freigegeben werden.
+- Moved one-time PowerShell script cleanup into operation-finally blocks so scripts are removed when the program finishes the active task.
+- Bereinigung einmaliger PowerShell-Skripte in Abschlussbloecke verschoben, damit Skripte entfernt werden, wenn das Programm die aktive Aufgabe beendet.
 
 ## 5.26.4.105 - 2026-05-11
 

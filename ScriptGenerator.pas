@@ -97,6 +97,13 @@ procedure SavePsScript(const Lines: TStringList; const TargetPath: string);
 var
   Attributes: Integer;
 begin
+  if FileExists(TargetPath) then
+  begin
+    Attributes := FileGetAttr(TargetPath);
+    if Attributes <> -1 then
+      FileSetAttr(TargetPath, Attributes and not faHidden and not faReadOnly);
+    DeleteFile(TargetPath);
+  end;
   Lines.SaveToFile(TargetPath, TEncoding.UTF8);
   Attributes := FileGetAttr(TargetPath);
   if Attributes <> -1 then
@@ -147,7 +154,7 @@ begin
   Lines.Add('  docker compose exec -T paperless python3 manage.py migrate');
   Lines.Add('  if ($LASTEXITCODE -ne 0) {');
   Lines.Add('    Write-Host "Hinweis: Django-Datenbankmigration konnte jetzt nicht abgeschlossen werden. Das Skript laeuft weiter." -ForegroundColor Yellow');
-    Lines.Add('    $global:LASTEXITCODE = 0');
+  Lines.Add('    $global:LASTEXITCODE = 0');
   Lines.Add('  }');
 end;
 

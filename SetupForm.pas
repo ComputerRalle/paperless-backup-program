@@ -106,6 +106,19 @@ begin
     FileSetAttr(ScriptPath, Attributes or faHidden);
 end;
 
+// Delete an existing generated setup script before writing it again.
+// Ein vorhandenes erzeugtes Setup-Skript loeschen, bevor es neu geschrieben wird.
+procedure PrepareSetupScriptWrite(const ScriptPath: string);
+var
+  Attributes: Integer;
+begin
+  if (ScriptPath.Trim = '') or not FileExists(ScriptPath) then Exit;
+  Attributes := FileGetAttr(ScriptPath);
+  if Attributes <> -1 then
+    FileSetAttr(ScriptPath, Attributes and not faHidden and not faReadOnly);
+  DeleteFile(ScriptPath);
+end;
+
 // Generate a per-installation Paperless secret key.
 // Einen Paperless Secret Key pro Installation erzeugen.
 function GeneratePaperlessSecretKey: string;
@@ -715,6 +728,7 @@ begin
     // Create and save the PowerShell script that starts docker-compose.yml.
     // Das PowerShell-Skript erstellen und speichern, das docker-compose.yml startet.
     CmdTargetPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'starte_paperless.ps1';
+    PrepareSetupScriptWrite(CmdTargetPath);
     CmdFile := TStringList.Create;
     try
       CmdFile.Add('$ErrorActionPreference = ''Stop''');
@@ -750,6 +764,7 @@ begin
     CmdTargetPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'update_paperless.ps1';
     if not FileExists(CmdTargetPath) OR IsUpdate = True then
     begin
+      PrepareSetupScriptWrite(CmdTargetPath);
       CmdFile := TStringList.Create;
       try
         CmdFile.Add('$ErrorActionPreference = ''Stop''');

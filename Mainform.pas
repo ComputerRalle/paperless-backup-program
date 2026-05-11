@@ -274,7 +274,6 @@ var
 
 implementation
 {$R *.dfm}
-
 // Mark a generated script file as hidden in the Windows file system.
 // Eine erzeugte Skriptdatei im Windows-Dateisystem als versteckt markieren.
 procedure MarkGeneratedScriptHidden(const ScriptPath: string);
@@ -286,7 +285,6 @@ begin
   if Attributes <> -1 then
     FileSetAttr(ScriptPath, Attributes or faHidden);
 end;
-
 // Delete a generated one-time script after it has finished running.
 // Ein erzeugtes Einmal-Skript nach seinem Lauf loeschen.
 procedure DeleteGeneratedScriptFile(const ScriptPath: string);
@@ -305,7 +303,6 @@ begin
       LogWarning('Generated script cleanup failed for "' + ScriptPath + '": ' + E.Message);
   end;
 end;
-
 // Read PAPERLESS_SECRET_KEY from a backup metadata file.
 // PAPERLESS_SECRET_KEY aus einer Backup-Metadatendatei lesen.
 function ReadPaperlessSecretKeyFromBackupFile(const SecretKeyFilePath: string): string;
@@ -1086,7 +1083,6 @@ begin
   if Assigned(Label32) then
     Label32.Visible := False;
 end;
-
 // Encrypt email-versand.env for the current backup and keep a prepared local copy.
 // email-versand.env fuer das aktuelle Backup verschluesseln und eine vorbereitete lokale Kopie behalten.
 procedure TMainformFrm.EncryptEmailEnvForBackup(const TargetBackupPath: string);
@@ -1118,7 +1114,6 @@ begin
     CenteredShowMessage('Mail-Einstellungen konnten nicht verschlüsselt werden: ' + E.Message);
   end;
 end;
-
 // Restore encrypted mail settings from the backup when the user provides the password.
 // Verschluesselte Mail-Einstellungen aus dem Backup wiederherstellen, wenn der Benutzer das Passwort eingibt.
 procedure TMainformFrm.RestoreEmailEnvFromBackup(const SourceBackupPath, TargetComposePath: string);
@@ -1170,14 +1165,12 @@ begin
     end;
   end;
 end;
-
 // Validate that the selected backup folder contains all files needed for restore.
 // Pruefen, ob der gewaehlte Backup-Ordner alle Dateien fuer die Wiederherstellung enthaelt.
 function TMainformFrm.ValidateRestoreBackupFolder(const BackupFolder: string): Boolean;
 var
   MissingFiles: TStringList;
   BasePath: string;
-
   // Require one file inside the selected backup folder.
   // Eine Datei innerhalb des gewaehlten Backup-Ordners verlangen.
   procedure RequireFile(const FileName: string);
@@ -1185,7 +1178,6 @@ var
     if not FileExists(BasePath + FileName) then
       MissingFiles.Add(FileName);
   end;
-
 begin
   Result := False;
   if not DirectoryExists(BackupFolder) then
@@ -1219,7 +1211,6 @@ begin
   end;
   Result := True;
 end;
-
 // Open the support page in the default browser.
 // Die Unterstützungsseite im Standardbrowser öffnen.
 procedure TMainformFrm.BuyMeACoffeeBtnClick(Sender: TObject);
@@ -2204,31 +2195,33 @@ begin
   // Ein Skript erstellen, das die geplante Aufgabe entfernt.
   CmdTargetPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'Backup-Zeitplan-Entfernen.ps1';
   CreateDeleteBackupScheduleCmdScript(CmdTargetPath);
-
-  // Run the script silently in the background.
-  // Das Skript still im Hintergrund ausführen.
-  FillChar(ShellExecuteInfo, SizeOf(ShellExecuteInfo), 0);
-  ShellExecuteInfo.cbSize := SizeOf(ShellExecuteInfo);
-  ShellExecuteInfo.fMask := SEE_MASK_NOCLOSEPROCESS;
-  ShellExecuteInfo.Wnd := 0;
-  ShellExecuteInfo.lpFile := PChar('powershell.exe');
-  ShellExecuteInfo.lpParameters := PChar('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + CmdTargetPath + '"');
-  ShellExecuteInfo.nShow := SW_HIDE;
-  if ShellExecuteEx(@ShellExecuteInfo) then
-  begin
-    if ShellExecuteInfo.hProcess <> 0 then
+  try
+    // Run the script silently in the background.
+    // Das Skript still im Hintergrund ausführen.
+    FillChar(ShellExecuteInfo, SizeOf(ShellExecuteInfo), 0);
+    ShellExecuteInfo.cbSize := SizeOf(ShellExecuteInfo);
+    ShellExecuteInfo.fMask := SEE_MASK_NOCLOSEPROCESS;
+    ShellExecuteInfo.Wnd := 0;
+    ShellExecuteInfo.lpFile := PChar('powershell.exe');
+    ShellExecuteInfo.lpParameters := PChar('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + CmdTargetPath + '"');
+    ShellExecuteInfo.nShow := SW_HIDE;
+    if ShellExecuteEx(@ShellExecuteInfo) then
     begin
-      WaitForSingleObject(ShellExecuteInfo.hProcess, INFINITE);
-      ExitCode := 1;
-      GetExitCodeProcess(ShellExecuteInfo.hProcess, ExitCode);
-      CloseHandle(ShellExecuteInfo.hProcess);
-      if ExitCode <> 0 then
-        CenteredShowMessage('Der geplante Backup-Zeitplan konnte nicht vollständig entfernt werden.');
-    end;
-  end
-  else
-    CenteredShowMessage('Zeitplan-Entfernen-Skript konnte nicht gestartet werden.');
-  DeleteGeneratedScriptFile(CmdTargetPath);
+      if ShellExecuteInfo.hProcess <> 0 then
+      begin
+        WaitForSingleObject(ShellExecuteInfo.hProcess, INFINITE);
+        ExitCode := 1;
+        GetExitCodeProcess(ShellExecuteInfo.hProcess, ExitCode);
+        CloseHandle(ShellExecuteInfo.hProcess);
+        if ExitCode <> 0 then
+          CenteredShowMessage('Der geplante Backup-Zeitplan konnte nicht vollständig entfernt werden.');
+      end;
+    end
+    else
+      CenteredShowMessage('Zeitplan-Entfernen-Skript konnte nicht gestartet werden.');
+  finally
+    DeleteGeneratedScriptFile(CmdTargetPath);
+  end;
 
   // Reset the checkbox.
   // Die Checkbox zurücksetzen.
@@ -2371,7 +2364,6 @@ begin
     end;
     if (ComposePath <> '') and DirectoryExists(ComposePath) then
       ComposePath := IncludeTrailingPathDelimiter(ComposePath) + DockerComposeFileName;
-
     if ComposePath = '' then
     begin
       CenteredShowMessage('Fehler: Kein Docker-Compose-Pfad in der INI gespeichert.');
@@ -2402,7 +2394,6 @@ begin
   // The scheduled task starts the planned backup PowerShell script.
   // Die geplante Aufgabe startet das geplante Backup-PowerShell-Skript.
   CreateBackupScheduleCmdScript(ScriptPath, TargetCmdPath, Weekdays, Hour, Minute);
-
   // Run the script silently in the background.
   // Das Skript still im Hintergrund ausführen.
   FillChar(ShellExecuteInfo, SizeOf(ShellExecuteInfo), 0);
@@ -2863,7 +2854,6 @@ var
   Ini: TIniFile;
   Volumes: TDockerVolumeNames;
   BackupFolder: string;
-
   // Convert a timestamped backup folder name into a date for retention sorting.
   // Einen Zeitstempel-Backupordnernamen fuer die Aufbewahrungssortierung in ein Datum umwandeln.
   function FolderNameToDateTime(const Folder: string): TDateTime;
@@ -3148,206 +3138,183 @@ var
   OutputLogPath: string;
   SuccessStatus: string;
   ExitCode: DWORD;
-  ShouldWait: Boolean;
 begin
-  ShouldWait := False;
-  FillChar(StartupInfo, SizeOf(TStartupInfo), 0);
-  StartupInfo.cb := SizeOf(TStartupInfo);
-  StartupInfo.dwFlags := STARTF_USESHOWWINDOW;
-  StartupInfo.wShowWindow := SW_HIDE;
-  OutputLogPath := PrepareScriptOutputLog;
-  MarkGeneratedScriptHidden(CmdTargetPath);
-  Cmd := BuildPowerShellCommand(CmdTargetPath, OutputLogPath); // Script path.
-  // Skriptpfad.
-  if IsRestoreApplyingSettings then
-    RunningStatus := 'Wiederherstellung wird abgeschlossen. Bitte warten ...'
-  else if IsUpdate then
-    RunningStatus := 'Update wird gestartet. Bitte warten ...'
-  else if IsPaperlessInstallation then
-    RunningStatus := 'Paperless-Installation wird gestartet. Bitte warten ...'
-  else if IsBackup then
-    RunningStatus := 'Backup wird gestartet. Bitte warten ...'
-  else if RestoreEstimateText.Trim <> '' then
-    RunningStatus := 'Wiederherstellung wird gestartet. Bitte warten ...'
-  else
-    RunningStatus := 'Wiederherstellung wird gestartet. Bitte warten ...';
-  if IsPaperlessInstallation then
-  begin
-    InstallCancelRequested := False;
-    RunningScriptProcessId := 0;
-  end;
-  PrepareScriptProgress(RunningStatus);
-  if CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NO_WINDOW, nil, nil, StartupInfo, ProcessInfo) then
-  begin
+  try
+    FillChar(StartupInfo, SizeOf(TStartupInfo), 0);
+    StartupInfo.cb := SizeOf(TStartupInfo);
+    StartupInfo.dwFlags := STARTF_USESHOWWINDOW;
+    StartupInfo.wShowWindow := SW_HIDE;
+    OutputLogPath := PrepareScriptOutputLog;
+    MarkGeneratedScriptHidden(CmdTargetPath);
+    Cmd := BuildPowerShellCommand(CmdTargetPath, OutputLogPath); // Script path.
+    // Skriptpfad.
+    if IsRestoreApplyingSettings then
+      RunningStatus := 'Wiederherstellung wird abgeschlossen. Bitte warten ...'
+    else if IsUpdate then
+      RunningStatus := 'Update wird gestartet. Bitte warten ...'
+    else if IsPaperlessInstallation then
+      RunningStatus := 'Paperless-Installation wird gestartet. Bitte warten ...'
+    else if IsBackup then
+      RunningStatus := 'Backup wird gestartet. Bitte warten ...'
+    else if RestoreEstimateText.Trim <> '' then
+      RunningStatus := 'Wiederherstellung wird gestartet. Bitte warten ...'
+    else
+      RunningStatus := 'Wiederherstellung wird gestartet. Bitte warten ...';
     if IsPaperlessInstallation then
-      RunningScriptProcessId := ProcessInfo.dwProcessId;
-    ShouldWait := True;
-    UpdateScriptProgress(RunningStatus);
-    Sleep(1500);
-    if IsUpdate = False then
     begin
-        if ShouldWait then
+      InstallCancelRequested := False;
+      RunningScriptProcessId := 0;
+    end;
+    PrepareScriptProgress(RunningStatus);
+    if CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NO_WINDOW, nil, nil, StartupInfo, ProcessInfo) then
+    begin
+      if IsPaperlessInstallation then
+        RunningScriptProcessId := ProcessInfo.dwProcessId;
+      UpdateScriptProgress(RunningStatus);
+      Sleep(1500);
+      if IsUpdate = False then
+      begin
+        // Wait for the process to finish.
+        // Warten, bis der Prozess beendet ist.
+        WaitForScriptWithProgress(ProcessInfo.hProcess, RunningStatus, OutputLogPath);
+        // Check the exit code.
+        // Den Exit-Code prüfen.
+        GetExitCodeProcess(ProcessInfo.hProcess, ExitCode);
+        CloseHandle(ProcessInfo.hProcess);
+        CloseHandle(ProcessInfo.hThread);
+        Sleep(1000);
+        if ExitCode = 0 then
         begin
-          // Wait for the process to finish.
-          // Warten, bis der Prozess beendet ist.
-          WaitForScriptWithProgress(ProcessInfo.hProcess, RunningStatus, OutputLogPath);
-          // Check the exit code.
-          // Den Exit-Code prüfen.
-          GetExitCodeProcess(ProcessInfo.hProcess, ExitCode);
-          CloseHandle(ProcessInfo.hProcess);
-          CloseHandle(ProcessInfo.hThread);
-          Sleep(1000);
-          if ExitCode = 0 then
-          begin
-            if IsPaperlessInstallation = True then
-              SuccessStatus := 'Paperless-Installation abgeschlossen.'
-            else if IsBackup = True then
-              SuccessStatus := 'Backupvorgang abgeschlossen.'
-            else if IsUpdate = True then
-              SuccessStatus := 'Update abgeschlossen.'
-            else
-              SuccessStatus := 'Wiederherstellung abgeschlossen.';
-            if (SuccessStatus <> 'Wiederherstellung abgeschlossen.') and not IsRestoreApplyingSettings then
-              FinishScriptProgress(SuccessStatus, True);
-            if IsPaperlessInstallation = True then
-            begin
-              WriteStandardVersionAfterInstallation;
-              CenteredMessageBox('Paperless wurde erfolgreich installiert und gestartet.' + #13#10 +
-                'Sie können Paperless nun im Browser öffnen (http://localhost:8000). Geben Sie Paperless ein wenig Zeit zum starten.',
-                'Installation abgeschlossen', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
-
-              SetupFrm.DockerGefundenLbl.Caption := 'Paperless erfolgreich installiert.';
-              SetupFrm.PaperlessInstallierenBtn.Enabled := False;
-              SetupFrm.BitteBestaetigenLbl.Visible := True;
-
-
-              SetupFrm.HinweisMemo.Lines.Clear;
-              SetupFrm.HinweisMemo.Lines.Add('Ihr Paperless wurde erfolgreich installiert.');
-              SetupFrm.HinweisMemo.Lines.Add(' ');
-              SetupFrm.HinweisMemo.Lines.Add('Nun können Sie Paperless starten, indem Sie Ihren Browser öffnen');
-              SetupFrm.HinweisMemo.Lines.Add('und folgende Adresse eingeben oder kopieren und einfügen, oder oben den gelben Link klicken:');
-              SetupFrm.HinweisMemo.Lines.Add(' ');
-              SetupFrm.HinweisMemo.Lines.Add(PaperlessLocalUrl);
-              SetupFrm.HinweisMemo.Lines.Add(' ');
-              SetupFrm.HinweisMemo.Lines.Add('Bitte geben Sie dem System ein wenig Zeit, bevor Sie die Seite aufrufen.');
-              SetupFrm.HinweisMemo.Lines.Add(' ');
-              SetupFrm.HinweisMemo.Lines.Add('Nach dem Öffnen von Paperless werden Sie gebeten einen Benutzernamen und ein Passwort zu vergeben. Speichern Sie diese Zugangsdaten in einem Passwortmanager wie KeePassXC!');
-              SetupFrm.LinkKlickLbl.Caption := PaperlessFallbackLocalUrl;
-              SetupFrm.Label1.Caption := 'Paperless öffnen:';
-              SetupFrm.SieBenoetigenDockerLbl.Caption := 'Alles installiert.';
-              SetupFrm.KeePassXCLbl.Visible := True;
-              SetupFrm.Label1.Visible := True;
-              SetupFrm.LinkKlickLbl.Visible := True;
-              SetupFrm.WillkommenLbl.Visible := False;
-              SetupFrm.ComputerRalleLbl.Visible := False;
-              IsPaperlessInstallation := False;
-              SetupFrm.InstallationCancelBtn.Visible := False;
-              SetupFrm.HinweisVerstandenBtn.Enabled := True;
-            end
-            else if IsBackup = True then
-            begin
-              if not IsAutostart then
-              begin
-                CenteredMessageBox('Backup abgeschlossen. Sie können das Programm jetzt schließen.' + #13#10 +
-                'Bitte geben Sie Paperless Zeit zum starten.',
-                'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
-              end;
-
-              WriteImageVersionWithSetupForm(BackupPath);
-
-            end
-            else
-            begin
-              if not IsAutostart = True then
-              begin
-                if IsUpdate = True then
-                begin
-                  CenteredMessageBox('Update abgeschlossen. Sie können das Programm jetzt schließen.' + #13#10 +
-                  'Bitte geben Sie Paperless Zeit zum starten.',
-                  'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
-                end else
-                begin
-                  IsRestoreApplyingSettings := True;
-                  SaveSettingsBtnClick(nil);
-                end;
-              end;
-            end;
-          end
+          if IsPaperlessInstallation = True then
+            SuccessStatus := 'Paperless-Installation abgeschlossen.'
+          else if IsBackup = True then
+            SuccessStatus := 'Backupvorgang abgeschlossen.'
           else
+            SuccessStatus := 'Wiederherstellung abgeschlossen.';
+          if (SuccessStatus <> 'Wiederherstellung abgeschlossen.') and not IsRestoreApplyingSettings then
+            FinishScriptProgress(SuccessStatus, True);
+          if IsPaperlessInstallation = True then
           begin
-            if InstallCancelRequested and IsPaperlessInstallation then
-            begin
-              FinishScriptProgress('Installation abgebrochen.', False);
-              if Assigned(SetupFrm) then
-                SetupFrm.HinweisVerstandenBtn.Enabled := True;
-              CenteredShowMessage('Installation wurde abgebrochen. Bereits geladene Docker-Images wurden entfernt.');
-              IsPaperlessInstallation := False;
-              InstallCancelRequested := False;
-            end
-            else
-            begin
-              FinishScriptProgress('Vorgang fehlgeschlagen.', False);
-              CenteredShowMessage('Vorgang fehlgeschlagen. Fehlercode: ' + IntToStr(ExitCode));
-            end;
-            ClearRestoreProgressState;
-          end;
-        end else
-        begin
-          FinishScriptProgress('Skript konnte nicht gestartet werden.', False);
-          CenteredShowMessage('Fehler beim Starten des Skripts.');
-          ClearRestoreProgressState;
-        end;
-    end else
-        begin
-          // Wait for the process to finish.
-          // Warten, bis der Prozess beendet ist.
-          WaitForScriptWithProgress(ProcessInfo.hProcess, RunningStatus, OutputLogPath);
-          // Check the exit code.
-          // Den Exit-Code prüfen.
-          GetExitCodeProcess(ProcessInfo.hProcess, ExitCode);
-          CloseHandle(ProcessInfo.hProcess);
-          CloseHandle(ProcessInfo.hThread);
-          if ExitCode = 0 then
-          begin
-            if IsRestoreApplyingSettings then
-              FinishScriptProgress('Wiederherstellung abgeschlossen.', True)
-            else
-              FinishScriptProgress('Update abgeschlossen.', True);
-            SaveBlankEmailSettings();
-            if IsRestoreApplyingSettings then
-            begin
-              CenteredMessageBox('Wiederherstellung abgeschlossen.', 'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
-              IsRestoreApplyingSettings := False;
-              ClearRestoreProgressState;
-            end
-            else
-              CenteredMessageBox('Paperless wurde erfolgreich aktualisiert' + #13#10 +
+            WriteStandardVersionAfterInstallation;
+            CenteredMessageBox('Paperless wurde erfolgreich installiert und gestartet.' + #13#10 +
               'Sie können Paperless nun im Browser öffnen (http://localhost:8000). Geben Sie Paperless ein wenig Zeit zum starten.',
               'Installation abgeschlossen', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
-            IsUpdate := False;
+            SetupFrm.DockerGefundenLbl.Caption := 'Paperless erfolgreich installiert.';
+            SetupFrm.PaperlessInstallierenBtn.Enabled := False;
+            SetupFrm.BitteBestaetigenLbl.Visible := True;
+            SetupFrm.HinweisMemo.Lines.Clear;
+            SetupFrm.HinweisMemo.Lines.Add('Ihr Paperless wurde erfolgreich installiert.');
+            SetupFrm.HinweisMemo.Lines.Add(' ');
+            SetupFrm.HinweisMemo.Lines.Add('Nun können Sie Paperless starten, indem Sie Ihren Browser öffnen');
+            SetupFrm.HinweisMemo.Lines.Add('und folgende Adresse eingeben oder kopieren und einfügen, oder oben den gelben Link klicken:');
+            SetupFrm.HinweisMemo.Lines.Add(' ');
+            SetupFrm.HinweisMemo.Lines.Add(PaperlessLocalUrl);
+            SetupFrm.HinweisMemo.Lines.Add(' ');
+            SetupFrm.HinweisMemo.Lines.Add('Bitte geben Sie dem System ein wenig Zeit, bevor Sie die Seite aufrufen.');
+            SetupFrm.HinweisMemo.Lines.Add(' ');
+            SetupFrm.HinweisMemo.Lines.Add('Nach dem Öffnen von Paperless werden Sie gebeten einen Benutzernamen und ein Passwort zu vergeben. Speichern Sie diese Zugangsdaten in einem Passwortmanager wie KeePassXC!');
+            SetupFrm.LinkKlickLbl.Caption := PaperlessFallbackLocalUrl;
+            SetupFrm.Label1.Caption := 'Paperless öffnen:';
+            SetupFrm.SieBenoetigenDockerLbl.Caption := 'Alles installiert.';
+            SetupFrm.KeePassXCLbl.Visible := True;
+            SetupFrm.Label1.Visible := True;
+            SetupFrm.LinkKlickLbl.Visible := True;
+            SetupFrm.WillkommenLbl.Visible := False;
+            SetupFrm.ComputerRalleLbl.Visible := False;
+            IsPaperlessInstallation := False;
+            SetupFrm.InstallationCancelBtn.Visible := False;
+            SetupFrm.HinweisVerstandenBtn.Enabled := True;
+          end
+          else if IsBackup = True then
+          begin
+            if not IsAutostart then
+            begin
+              CenteredMessageBox('Backup abgeschlossen. Sie können das Programm jetzt schließen.' + #13#10 +
+              'Bitte geben Sie Paperless Zeit zum starten.',
+              'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
+            end;
+            WriteImageVersionWithSetupForm(BackupPath);
           end
           else
           begin
-            FinishScriptProgress('Paperless-Update fehlgeschlagen.', False);
+            if not IsAutostart = True then
+            begin
+              IsRestoreApplyingSettings := True;
+              SaveSettingsBtnClick(nil);
+            end;
+          end;
+        end
+        else
+        begin
+          if InstallCancelRequested and IsPaperlessInstallation then
+          begin
+            FinishScriptProgress('Installation abgebrochen.', False);
+            if Assigned(SetupFrm) then
+              SetupFrm.HinweisVerstandenBtn.Enabled := True;
+            CenteredShowMessage('Installation wurde abgebrochen. Bereits geladene Docker-Images wurden entfernt.');
+            IsPaperlessInstallation := False;
+            InstallCancelRequested := False;
+          end
+          else
+          begin
+            FinishScriptProgress('Vorgang fehlgeschlagen.', False);
             CenteredShowMessage('Vorgang fehlgeschlagen. Fehlercode: ' + IntToStr(ExitCode));
+          end;
+          ClearRestoreProgressState;
+        end;
+      end
+      else
+      begin
+        // Wait for the process to finish.
+        // Warten, bis der Prozess beendet ist.
+        WaitForScriptWithProgress(ProcessInfo.hProcess, RunningStatus, OutputLogPath);
+        // Check the exit code.
+        // Den Exit-Code prüfen.
+        GetExitCodeProcess(ProcessInfo.hProcess, ExitCode);
+        CloseHandle(ProcessInfo.hProcess);
+        CloseHandle(ProcessInfo.hThread);
+        if ExitCode = 0 then
+        begin
+          if IsRestoreApplyingSettings then
+            FinishScriptProgress('Wiederherstellung abgeschlossen.', True)
+          else
+            FinishScriptProgress('Update abgeschlossen.', True);
+          SaveBlankEmailSettings();
+          if IsRestoreApplyingSettings then
+          begin
+            CenteredMessageBox('Wiederherstellung abgeschlossen.', 'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
             IsRestoreApplyingSettings := False;
             ClearRestoreProgressState;
-          end;
+          end
+          else
+            CenteredMessageBox('Paperless wurde erfolgreich aktualisiert' + #13#10 +
+            'Sie können Paperless nun im Browser öffnen (http://localhost:8000). Geben Sie Paperless ein wenig Zeit zum starten.',
+            'Installation abgeschlossen', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
+          IsUpdate := False;
+        end
+        else
+        begin
+          FinishScriptProgress('Paperless-Update fehlgeschlagen.', False);
+          CenteredShowMessage('Vorgang fehlgeschlagen. Fehlercode: ' + IntToStr(ExitCode));
+          IsRestoreApplyingSettings := False;
+          ClearRestoreProgressState;
         end;
-  end
-  else
-  begin
-    FinishScriptProgress('Skript konnte nicht gestartet werden.', False);
-    CenteredShowMessage('Fehler beim Starten des Skripts.');
-    IsRestoreApplyingSettings := False;
-    ClearRestoreProgressState;
+      end;
+    end
+    else
+    begin
+      FinishScriptProgress('Skript konnte nicht gestartet werden.', False);
+      CenteredShowMessage('Fehler beim Starten des Skripts.');
+      IsRestoreApplyingSettings := False;
+      ClearRestoreProgressState;
+    end;
+    ActiveControl := nil;
+    RunningScriptProcessId := 0;
+    if IsAutostart = True then
+    Application.Terminate;
+  finally
+    DeleteGeneratedScriptFile(CmdTargetPath);
   end;
-  ActiveControl := nil;
-  RunningScriptProcessId := 0;
-  DeleteGeneratedScriptFile(CmdTargetPath);
-  if IsAutostart = True then
-  Application.Terminate;
-
 end;
 
 // Run the restart or update script and show the final result to the user.
@@ -3362,121 +3329,121 @@ var
   ExitCode: DWORD;
   WasApplyingEmailSettings: Boolean;
 begin
-  WasApplyingEmailSettings := IsApplyingEmailSettings;
-  FillChar(StartupInfo, SizeOf(TStartupInfo), 0);
-  StartupInfo.cb := SizeOf(TStartupInfo);
-  StartupInfo.dwFlags := STARTF_USESHOWWINDOW;
-  StartupInfo.wShowWindow := SW_HIDE;
-  OutputLogPath := PrepareScriptOutputLog;
-  MarkGeneratedScriptHidden(CmdTargetPath);
-  Cmd := BuildPowerShellCommand(CmdTargetPath, OutputLogPath); // Script path.
-  // Skriptpfad.
-  if WasApplyingEmailSettings then
-    RunningStatus := 'Mail-Einstellungen werden angewendet. Bitte warten ...'
-  else if PaperlessUpdate then
-    RunningStatus := 'Update wird gestartet. Bitte warten ...'
-  else
-    RunningStatus := 'Neustart wird gestartet. Bitte warten ...';
-  PrepareScriptProgress(RunningStatus);
-  if PaperlessUpdate = False then
-  begin
-    // Start the process.
-    // Den Prozess starten.
-    if CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NO_WINDOW, nil, nil, StartupInfo, ProcessInfo) then
+  try
+    WasApplyingEmailSettings := IsApplyingEmailSettings;
+    FillChar(StartupInfo, SizeOf(TStartupInfo), 0);
+    StartupInfo.cb := SizeOf(TStartupInfo);
+    StartupInfo.dwFlags := STARTF_USESHOWWINDOW;
+    StartupInfo.wShowWindow := SW_HIDE;
+    OutputLogPath := PrepareScriptOutputLog;
+    MarkGeneratedScriptHidden(CmdTargetPath);
+    Cmd := BuildPowerShellCommand(CmdTargetPath, OutputLogPath); // Script path.
+    // Skriptpfad.
+    if WasApplyingEmailSettings then
+      RunningStatus := 'Mail-Einstellungen werden angewendet. Bitte warten ...'
+    else if PaperlessUpdate then
+      RunningStatus := 'Update wird gestartet. Bitte warten ...'
+    else
+      RunningStatus := 'Neustart wird gestartet. Bitte warten ...';
+    PrepareScriptProgress(RunningStatus);
+    if PaperlessUpdate = False then
     begin
-      UpdateScriptProgress(RunningStatus);
-      Sleep(1000);
-      // Wait for the process to finish.
-      // Warten, bis der Prozess beendet ist.
-      WaitForScriptWithProgress(ProcessInfo.hProcess, RunningStatus, OutputLogPath);
-      // Check the exit code.
-      // Den Exit-Code prüfen.
-      GetExitCodeProcess(ProcessInfo.hProcess, ExitCode);
-      CloseHandle(ProcessInfo.hProcess);
-      CloseHandle(ProcessInfo.hThread);
-
-      // Exit code 0 means success.
-      // Exit-Code 0 bedeutet Erfolg.
-      if ExitCode = 0 then
+      // Start the process.
+      // Den Prozess starten.
+      if CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NO_WINDOW, nil, nil, StartupInfo, ProcessInfo) then
       begin
-        if WasApplyingEmailSettings then
+        UpdateScriptProgress(RunningStatus);
+        Sleep(1000);
+        // Wait for the process to finish.
+        // Warten, bis der Prozess beendet ist.
+        WaitForScriptWithProgress(ProcessInfo.hProcess, RunningStatus, OutputLogPath);
+        // Check the exit code.
+        // Den Exit-Code prüfen.
+        GetExitCodeProcess(ProcessInfo.hProcess, ExitCode);
+        CloseHandle(ProcessInfo.hProcess);
+        CloseHandle(ProcessInfo.hThread);
+        // Exit code 0 means success.
+        // Exit-Code 0 bedeutet Erfolg.
+        if ExitCode = 0 then
         begin
-          FinishScriptProgress('Mail-Einstellungen angewendet.', True);
-          CenteredMessageBox('Mail-Einstellungen wurden angewendet. Sie können das Programm jetzt schließen.' + #13#10 +
-            'Bitte geben Sie den Paperless Komponenten Zeit zum starten.',
-            'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
+          if WasApplyingEmailSettings then
+          begin
+            FinishScriptProgress('Mail-Einstellungen angewendet.', True);
+            CenteredMessageBox('Mail-Einstellungen wurden angewendet. Sie können das Programm jetzt schließen.' + #13#10 +
+              'Bitte geben Sie den Paperless Komponenten Zeit zum starten.',
+              'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
+          end
+          else
+          begin
+            FinishScriptProgress('Neustart abgeschlossen.', True);
+            CenteredMessageBox('Neustart abgeschlossen. Sie können das Programm jetzt schließen.' + #13#10 +
+              'Bitte geben Sie den Paperless Komponenten Zeit zum starten.',
+              'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
+          end;
         end
         else
         begin
-          FinishScriptProgress('Neustart abgeschlossen.', True);
-          CenteredMessageBox('Neustart abgeschlossen. Sie können das Programm jetzt schließen.' + #13#10 +
-            'Bitte geben Sie den Paperless Komponenten Zeit zum starten.',
-            'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
+          FinishScriptProgress('Neustart fehlgeschlagen.', False);
+          // Show a failure message when the process returns an error.
+          // Eine Fehlermeldung anzeigen, wenn der Prozess einen Fehler zurückgibt.
+          CenteredShowMessage('Der Vorgang ist fehlgeschlagen. Fehlercode: ' + IntToStr(ExitCode));
         end;
       end
       else
       begin
-        FinishScriptProgress('Neustart fehlgeschlagen.', False);
-        // Show a failure message when the process returns an error.
-        // Eine Fehlermeldung anzeigen, wenn der Prozess einen Fehler zurückgibt.
-        CenteredShowMessage('Der Vorgang ist fehlgeschlagen. Fehlercode: ' + IntToStr(ExitCode));
+        FinishScriptProgress('Skript konnte nicht gestartet werden.', False);
+        CenteredShowMessage('Fehler beim Starten des Prozesses.');
       end;
-    end
-    else
-    begin
-      FinishScriptProgress('Skript konnte nicht gestartet werden.', False);
-      CenteredShowMessage('Fehler beim Starten des Prozesses.');
+      ActiveControl := nil; // Remove focus from the current control.
+      // Den Fokus vom aktuellen Steuerelement entfernen.
+      if WasApplyingEmailSettings then
+        IsApplyingEmailSettings := False;
     end;
-    ActiveControl := nil; // Remove focus from the current control.
-    // Den Fokus vom aktuellen Steuerelement entfernen.
-    if WasApplyingEmailSettings then
-      IsApplyingEmailSettings := False;
-  end;
-
-  if PaperlessUpdate = true then
-  begin
-    // Start the process.
-    // Den Prozess starten.
-    if CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NO_WINDOW, nil, nil, StartupInfo, ProcessInfo) then
+    if PaperlessUpdate = true then
     begin
-      UpdateScriptProgress(RunningStatus);
-      Sleep(1000);
-      // Wait for the process to finish.
-      // Warten, bis der Prozess beendet ist.
-      WaitForScriptWithProgress(ProcessInfo.hProcess, RunningStatus, OutputLogPath);
-      // Check the exit code.
-      // Den Exit-Code prüfen.
-      GetExitCodeProcess(ProcessInfo.hProcess, ExitCode);
-      CloseHandle(ProcessInfo.hProcess);
-      CloseHandle(ProcessInfo.hThread);
-
-      // Exit code 0 means success.
-      // Exit-Code 0 bedeutet Erfolg.
-      if ExitCode = 0 then
+      // Start the process.
+      // Den Prozess starten.
+      if CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NO_WINDOW, nil, nil, StartupInfo, ProcessInfo) then
       begin
-        FinishScriptProgress('Update abgeschlossen.', True);
-        CenteredMessageBox('Neustart und Updatesuche abgeschlossen. Sie können das Programm jetzt schließen.' + #13#10 +
-          'Bitte geben Sie den Paperless Komponenten Zeit zum starten.' + #13#10 +
-          'Lagen Updates vor, wurden diese installiert.',
-          'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
+        UpdateScriptProgress(RunningStatus);
+        Sleep(1000);
+        // Wait for the process to finish.
+        // Warten, bis der Prozess beendet ist.
+        WaitForScriptWithProgress(ProcessInfo.hProcess, RunningStatus, OutputLogPath);
+        // Check the exit code.
+        // Den Exit-Code prüfen.
+        GetExitCodeProcess(ProcessInfo.hProcess, ExitCode);
+        CloseHandle(ProcessInfo.hProcess);
+        CloseHandle(ProcessInfo.hThread);
+        // Exit code 0 means success.
+        // Exit-Code 0 bedeutet Erfolg.
+        if ExitCode = 0 then
+        begin
+          FinishScriptProgress('Update abgeschlossen.', True);
+          CenteredMessageBox('Neustart und Updatesuche abgeschlossen. Sie können das Programm jetzt schließen.' + #13#10 +
+            'Bitte geben Sie den Paperless Komponenten Zeit zum starten.' + #13#10 +
+            'Lagen Updates vor, wurden diese installiert.',
+            'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
+        end
+        else
+        begin
+          FinishScriptProgress('Neustart und Updatesuche fehlgeschlagen.', False);
+          // Show a failure message when the process returns an error.
+          // Eine Fehlermeldung anzeigen, wenn der Prozess einen Fehler zurückgibt.
+          CenteredShowMessage('Der Vorgang ist fehlgeschlagen. Fehlercode: ' + IntToStr(ExitCode));
+        end;
       end
       else
       begin
-        FinishScriptProgress('Neustart und Updatesuche fehlgeschlagen.', False);
-        // Show a failure message when the process returns an error.
-        // Eine Fehlermeldung anzeigen, wenn der Prozess einen Fehler zurückgibt.
-        CenteredShowMessage('Der Vorgang ist fehlgeschlagen. Fehlercode: ' + IntToStr(ExitCode));
+        FinishScriptProgress('Skript konnte nicht gestartet werden.', False);
+        CenteredShowMessage('Fehler beim Starten des Prozesses.');
       end;
-    end
-    else
-    begin
-      FinishScriptProgress('Skript konnte nicht gestartet werden.', False);
-      CenteredShowMessage('Fehler beim Starten des Prozesses.');
+      ActiveControl := nil; // Remove focus from the current control.
+      // Den Fokus vom aktuellen Steuerelement entfernen.
     end;
-    ActiveControl := nil; // Remove focus from the current control.
-    // Den Fokus vom aktuellen Steuerelement entfernen.
+  finally
+    DeleteGeneratedScriptFile(CmdTargetPath);
   end;
-  DeleteGeneratedScriptFile(CmdTargetPath);
 end;
 
 // Create paperless-neustart.ps1 to stop and start Paperless again.
@@ -3822,49 +3789,42 @@ procedure TMainformFrm.ImprintLblClick(Sender: TObject);
 begin
   ShellExecute(0, 'open', ImprintUrl, nil, nil, SW_SHOWNORMAL);
 end;
-
 // Open the Paperless video playlist.
 // Die Paperless-Video-Playlist oeffnen.
 procedure TMainformFrm.PaperlessPlaylistLblClick(Sender: TObject);
 begin
   ShellExecute(0, 'open', PaperlessPlaylistUrl, nil, nil, SW_SHOWNORMAL);
 end;
-
 // Open the YouTube channel.
 // Den YouTube-Kanal oeffnen.
 procedure TMainformFrm.MyYouTubeChannelLblClick(Sender: TObject);
 begin
  ShellExecute(0, 'open', YouTubeChannelUrl, nil, nil, SW_SHOWNORMAL);
 end;
-
 // Open the backup program guide.
 // Die Anleitung zum Backup-Programm oeffnen.
 procedure TMainformFrm.BackupProgramGuideLblClick(Sender: TObject);
 begin
  ShellExecute(0, 'open', BackupGuideUrl, nil, nil, SW_SHOWNORMAL);
 end;
-
 // Open the main ComputerRalle website.
 // Die Haupt-Webseite von ComputerRalle oeffnen.
 procedure TMainformFrm.Web1LblClick(Sender: TObject);
 begin
  ShellExecute(0, 'open', ComputerRalleUrl, nil, nil, SW_SHOWNORMAL);
 end;
-
 // Open the ComputerRalle blog.
 // Den ComputerRalle-Blog oeffnen.
 procedure TMainformFrm.Web2LblClick(Sender: TObject);
 begin
  ShellExecute(0, 'open', BlogUrl, nil, nil, SW_SHOWNORMAL);
 end;
-
 // Open the newsletter signup page.
 // Die Newsletter-Anmeldeseite oeffnen.
 procedure TMainformFrm.NewsletterLblClick(Sender: TObject);
 begin
   ShellExecute(0, 'open', NewsletterUrl, nil, nil, SW_SHOWNORMAL);
 end;
-
 // Open the program download page when an update is available.
 // Die Programm-Downloadseite oeffnen, wenn ein Update verfuegbar ist.
 procedure TMainformFrm.ProgramUpdateLblClick(Sender: TObject);
