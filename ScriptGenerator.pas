@@ -147,8 +147,18 @@ begin
   Lines.Add('  docker compose exec -T paperless python3 manage.py migrate');
   Lines.Add('  if ($LASTEXITCODE -ne 0) {');
   Lines.Add('    Write-Host "Hinweis: Django-Datenbankmigration konnte jetzt nicht abgeschlossen werden. Das Skript laeuft weiter." -ForegroundColor Yellow');
-  Lines.Add('    $global:LASTEXITCODE = 0');
+    Lines.Add('    $global:LASTEXITCODE = 0');
   Lines.Add('  }');
+end;
+
+// Add cleanup for dangling Docker images left behind by pulls or tag updates.
+// Bereinigung fuer herrenlose Docker-Images hinzufuegen, die durch Pulls oder Tag-Updates entstehen.
+procedure AddDanglingImagePrune(const Lines: TStringList);
+begin
+  Lines.Add('  Write-Host "Nicht mehr verwendete Docker-Images werden geloescht"');
+  Lines.Add('  Wait-Countdown 3');
+  Lines.Add('  Invoke-DockerStep { docker image prune -f } "Fehler beim Bereinigen nicht verwendeter Docker-Images."');
+  Lines.Add('');
 end;
 
 // Create the manual backup PowerShell script.
@@ -188,6 +198,7 @@ begin
     Lines.Add('  Wait-Countdown 3');
     Lines.Add('  Invoke-DockerStep { docker volume prune -f } "Fehler beim Bereinigen nicht verwendeter Volumes."');
     Lines.Add('  Wait-Countdown 3');
+    AddDanglingImagePrune(Lines);
     Lines.Add('  Write-Host "-----------------------------------------"');
     Lines.Add('  Write-Host "Backup abgeschlossen: $(Get-Date)"');
     Lines.Add('  Write-Host "Dateien gespeichert in: $BackupDir"');
@@ -232,6 +243,7 @@ begin
     AddEncryptedEmailEnvBackup(Lines);
     Lines.Add('  Invoke-DockerStep { docker compose up -d } "Fehler beim Starten der Container."');
     Lines.Add('  Invoke-DockerStep { docker volume prune -f } "Fehler beim Bereinigen nicht verwendeter Volumes."');
+    AddDanglingImagePrune(Lines);
     Lines.Add('  Add-Content -LiteralPath $PlannedLog -Value ("Backup abgeschlossen: " + (Get-Date))');
     Lines.Add('  Add-Content -LiteralPath $PlannedLog -Value ("Backup-Ziel: " + $BackupDir)');
     AddPsFooter(Lines);
@@ -279,6 +291,7 @@ begin
     Lines.Add('  Wait-Countdown 3');
     Lines.Add('  Invoke-DockerStep { docker volume prune -f } "Fehler beim Bereinigen nicht verwendeter Volumes."');
     Lines.Add('  Wait-Countdown 3');
+    AddDanglingImagePrune(Lines);
     Lines.Add('  Write-Host "-----------------------------------------"');
     Lines.Add('  Write-Host "Wiederherstellung abgeschlossen: $(Get-Date)"');
     Lines.Add('  Write-Host "Dateien aus: $BackupDir"');
@@ -315,6 +328,7 @@ begin
     Lines.Add('  Wait-Countdown 3');
     Lines.Add('  Invoke-DockerStep { docker volume prune -f } "Fehler beim Bereinigen nicht verwendeter Volumes."');
     Lines.Add('  Wait-Countdown 3');
+    AddDanglingImagePrune(Lines);
     Lines.Add('  Start-Sleep -Seconds 3');
     AddBestEffortDjangoMigration(Lines);
     Lines.Add('  Start-Sleep -Seconds 3');

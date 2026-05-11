@@ -722,6 +722,9 @@ begin
       CmdFile.Add('  Set-Location -LiteralPath ''' + StringReplace(AppDataFolder, '''', '''''', [rfReplaceAll]) + '''');
       CmdFile.Add('  docker compose --progress plain -f docker-compose.yml up -d');
       CmdFile.Add('  if ($LASTEXITCODE -ne 0) { throw "Fehler beim Starten von Docker Compose. (ExitCode $LASTEXITCODE)" }');
+      CmdFile.Add('  Write-Host "Nicht mehr verwendete Docker-Images werden geloescht"');
+      CmdFile.Add('  docker image prune -f');
+      CmdFile.Add('  if ($LASTEXITCODE -ne 0) { throw "Fehler beim Bereinigen nicht verwendeter Docker-Images. (ExitCode $LASTEXITCODE)" }');
       CmdFile.Add('  Write-Host "Systeme starten. Fenster wird gleich geschlossen ..."');
       CmdFile.Add('  for ($i = 10; $i -ge 1; $i--) { Write-Host $i; Start-Sleep -Seconds 1 }');
       CmdFile.Add('} catch {');
@@ -778,6 +781,10 @@ begin
         CmdFile.Add('  Wait-Countdown 3');
         CmdFile.Add('  Invoke-Step { docker volume prune -f } "Fehler beim Bereinigen nicht verwendeter Volumes."');
         CmdFile.Add('  Wait-Countdown 3');
+        CmdFile.Add('  Write-Host "Nicht mehr verwendete Docker-Images werden geloescht"');
+        CmdFile.Add('  Wait-Countdown 3');
+        CmdFile.Add('  Invoke-Step { docker image prune -f } "Fehler beim Bereinigen nicht verwendeter Docker-Images."');
+        CmdFile.Add('  Wait-Countdown 3');
         CmdFile.Add('  Write-Host "Systeme starten. Fenster wird gleich geschlossen ..."');
         CmdFile.Add('  Wait-Countdown 10');
         CmdFile.Add('} catch {');
@@ -812,6 +819,7 @@ begin
   end
   else
   begin
+    RunCommand('docker', 'image prune -f', ExitCode);
     CenteredMessageBox(
       'Paperless wurde gestartet.',
       'Erfolg',

@@ -4,6 +4,11 @@ All notable changes to this project are documented here.
 
 Alle wichtigen Aenderungen an diesem Projekt werden hier dokumentiert.
 
+## Unreleased / Noch nicht veroeffentlicht
+
+- Added Docker dangling image cleanup after generated backup, restore, restart, setup, and update scripts run.
+- Bereinigung herrenloser Docker-Images nach erzeugten Backup-, Wiederherstellungs-, Neustart-, Setup- und Update-Skripten ergaenzt.
+
 ## 5.26.4.105 - 2026-05-11
 
 - Added password-based encryption for Paperless mail settings in backups as `email-versand.env.enc`.
