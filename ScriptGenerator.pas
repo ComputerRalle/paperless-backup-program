@@ -51,11 +51,15 @@ implementation
 uses
   System.Classes, System.SysUtils;
 
+// Quote a value for safe use as a PowerShell single-quoted string.
+// Einen Wert sicher als einfach gequotete PowerShell-Zeichenkette schreiben.
 function PsQuote(const Value: string): string;
 begin
   Result := '''' + StringReplace(Value, '''', '''''', [rfReplaceAll]) + '''';
 end;
 
+// Add shared PowerShell helper functions and error handling defaults.
+// Gemeinsame PowerShell-Hilfsfunktionen und Fehlerbehandlungs-Vorgaben hinzufuegen.
 procedure AddPsHeader(const Lines: TStringList);
 begin
   Lines.Add('$ErrorActionPreference = ''Stop''');
@@ -73,6 +77,8 @@ begin
   Lines.Add('');
 end;
 
+// Add the common PowerShell catch block and success exit code.
+// Den gemeinsamen PowerShell-catch-Block und den Erfolgs-Exitcode hinzufuegen.
 procedure AddPsFooter(const Lines: TStringList);
 begin
   Lines.Add('');
@@ -85,11 +91,15 @@ begin
   Lines.Add('exit 0');
 end;
 
+// Save a generated PowerShell script as UTF-8.
+// Ein erzeugtes PowerShell-Skript als UTF-8 speichern.
 procedure SavePsScript(const Lines: TStringList; const TargetPath: string);
 begin
   Lines.SaveToFile(TargetPath, TEncoding.UTF8);
 end;
 
+// Add commands that archive one Docker volume into the backup folder.
+// Befehle hinzufuegen, die ein Docker-Volume in den Backup-Ordner archivieren.
 procedure AddVolumeBackup(const Lines: TStringList; const VolumeName, DisplayName: string);
 begin
   Lines.Add(Format('  Write-Host "Backup: %s"', [DisplayName]));
@@ -98,6 +108,8 @@ begin
   Lines.Add('');
 end;
 
+// Add commands that restore one Docker volume from its archive.
+// Befehle hinzufuegen, die ein Docker-Volume aus seinem Archiv wiederherstellen.
 procedure AddVolumeRestore(const Lines: TStringList; const VolumeName, DisplayName: string);
 begin
   Lines.Add(Format('  Write-Host "Wiederherstellen Volume: %s."', [DisplayName]));
@@ -108,6 +120,8 @@ begin
   Lines.Add('');
 end;
 
+// Add a best-effort copy step for the encrypted email settings file.
+// Einen Best-Effort-Kopierschritt fuer die verschluesselte E-Mail-Einstellungsdatei hinzufuegen.
 procedure AddEncryptedEmailEnvBackup(const Lines: TStringList);
 begin
   Lines.Add('  $EncryptedEmailEnvFile = Join-Path $ComposeDir "email-versand.env.enc"');
@@ -120,6 +134,8 @@ begin
   Lines.Add('');
 end;
 
+// Add a non-fatal Django migration step so scripts can continue if Paperless is not ready yet.
+// Einen nicht-fatalen Django-Migrationsschritt hinzufuegen, damit Skripte weiterlaufen, wenn Paperless noch nicht bereit ist.
 procedure AddBestEffortDjangoMigration(const Lines: TStringList);
 begin
   Lines.Add('  Write-Host "Aktualisiere Django-Datenbankstruktur..."');
@@ -130,6 +146,8 @@ begin
   Lines.Add('  }');
 end;
 
+// Create the manual backup PowerShell script.
+// Das PowerShell-Skript fuer ein manuelles Backup erstellen.
 procedure CreateManualBackupCmdScript(
   const TargetPath, ComposePath, BackupPath, AppDataFolder, DatabaseContainerName: string;
   const Volumes: TDockerVolumeNames);
@@ -179,6 +197,8 @@ begin
   end;
 end;
 
+// Create the planned backup PowerShell script used by Windows Task Scheduler.
+// Das PowerShell-Skript fuer geplante Backups in der Windows-Aufgabenplanung erstellen.
 procedure CreatePlannedBackupCmdScript(
   const TargetPath, ComposePath, BackupBasePath, AppDataFolder, DatabaseContainerName: string;
   const Volumes: TDockerVolumeNames);
@@ -216,6 +236,8 @@ begin
   end;
 end;
 
+// Create the restore PowerShell script for a selected backup folder.
+// Das PowerShell-Skript fuer die Wiederherstellung aus einem gewaehlten Backup-Ordner erstellen.
 procedure CreateRestoreCmdScript(
   const TargetPath, ComposePath, BackupFolder, DatabaseContainerName: string;
   const Volumes: TDockerVolumeNames);
@@ -266,6 +288,8 @@ begin
   end;
 end;
 
+// Create the PowerShell script that restarts Paperless and runs maintenance steps.
+// Das PowerShell-Skript erstellen, das Paperless neu startet und Wartungsschritte ausfuehrt.
 procedure CreateRestartCmdScript(const TargetPath, ComposePath: string);
 var
   Lines: TStringList;
@@ -296,6 +320,8 @@ begin
   end;
 end;
 
+// Create the PowerShell script that removes the scheduled backup task.
+// Das PowerShell-Skript erstellen, das die geplante Backup-Aufgabe entfernt.
 procedure CreateDeleteBackupScheduleCmdScript(const TargetPath: string);
 var
   Lines: TStringList;
@@ -314,6 +340,8 @@ begin
   end;
 end;
 
+// Create the PowerShell script that registers or updates the scheduled backup task.
+// Das PowerShell-Skript erstellen, das die geplante Backup-Aufgabe eintraegt oder aktualisiert.
 procedure CreateBackupScheduleCmdScript(
   const TargetPath, BackupScriptPath, Weekdays, Hour, Minute: string);
 var

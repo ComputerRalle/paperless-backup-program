@@ -45,6 +45,8 @@ implementation
 uses
   System.Classes, System.SysUtils, System.IOUtils;
 
+// Build the docker-compose.yml content from selected image versions and settings.
+// Den Inhalt der docker-compose.yml aus den gewaehlten Image-Versionen und Einstellungen erstellen.
 function CreateDockerComposeContent(
   const Versions: TDockerImageVersions;
   const PaperlessInput: string;
@@ -138,6 +140,8 @@ begin
     '  db_data:';
 end;
 
+// Save the generated docker-compose.yml content as UTF-8.
+// Den erzeugten docker-compose.yml-Inhalt als UTF-8 speichern.
 procedure SaveDockerComposeFile(const TargetPath, Content: string);
 begin
   TFile.WriteAllText(TargetPath, Content, TEncoding.UTF8);

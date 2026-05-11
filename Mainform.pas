@@ -1054,6 +1054,8 @@ begin
   if Assigned(Label32) then
     Label32.Visible := False;
 end;
+// Encrypt email-versand.env for the current backup and keep a prepared local copy.
+// email-versand.env fuer das aktuelle Backup verschluesseln und eine vorbereitete lokale Kopie behalten.
 procedure TMainformFrm.EncryptEmailEnvForBackup(const TargetBackupPath: string);
 var
   SourceEnvPath, TargetEncryptedPath, LocalEncryptedPath, Password: string;
@@ -1083,6 +1085,8 @@ begin
     CenteredShowMessage('Mail-Einstellungen konnten nicht verschlüsselt werden: ' + E.Message);
   end;
 end;
+// Restore encrypted mail settings from the backup when the user provides the password.
+// Verschluesselte Mail-Einstellungen aus dem Backup wiederherstellen, wenn der Benutzer das Passwort eingibt.
 procedure TMainformFrm.RestoreEmailEnvFromBackup(const SourceBackupPath, TargetComposePath: string);
 var
   SourceEncryptedPath, TargetEnvPath, Password: string;
@@ -1132,18 +1136,19 @@ begin
     end;
   end;
 end;
-
+// Validate that the selected backup folder contains all files needed for restore.
+// Pruefen, ob der gewaehlte Backup-Ordner alle Dateien fuer die Wiederherstellung enthaelt.
 function TMainformFrm.ValidateRestoreBackupFolder(const BackupFolder: string): Boolean;
 var
   MissingFiles: TStringList;
   BasePath: string;
-
+  // Require one file inside the selected backup folder.
+  // Eine Datei innerhalb des gewaehlten Backup-Ordners verlangen.
   procedure RequireFile(const FileName: string);
   begin
     if not FileExists(BasePath + FileName) then
       MissingFiles.Add(FileName);
   end;
-
 begin
   Result := False;
   if not DirectoryExists(BackupFolder) then
@@ -1177,7 +1182,6 @@ begin
   end;
   Result := True;
 end;
-
 // Open the support page in the default browser.
 // Die Unterstützungsseite im Standardbrowser öffnen.
 procedure TMainformFrm.BuyMeACoffeeBtnClick(Sender: TObject);
@@ -2319,7 +2323,6 @@ begin
     end;
     if (ComposePath <> '') and DirectoryExists(ComposePath) then
       ComposePath := IncludeTrailingPathDelimiter(ComposePath) + DockerComposeFileName;
-
     if ComposePath = '' then
     begin
       CenteredShowMessage('Fehler: Kein Docker-Compose-Pfad in der INI gespeichert.');
@@ -2350,7 +2353,6 @@ begin
   // The scheduled task starts the planned backup PowerShell script.
   // Die geplante Aufgabe startet das geplante Backup-PowerShell-Skript.
   CreateBackupScheduleCmdScript(ScriptPath, TargetCmdPath, Weekdays, Hour, Minute);
-
   // Run the script silently in the background.
   // Das Skript still im Hintergrund ausführen.
   FillChar(ShellExecuteInfo, SizeOf(ShellExecuteInfo), 0);
@@ -2810,6 +2812,8 @@ var
   Ini: TIniFile;
   Volumes: TDockerVolumeNames;
   BackupFolder: string;
+  // Convert a timestamped backup folder name into a date for retention sorting.
+  // Einen Zeitstempel-Backupordnernamen fuer die Aufbewahrungssortierung in ein Datum umwandeln.
   function FolderNameToDateTime(const Folder: string): TDateTime;
   var
     Name: string;
@@ -3755,40 +3759,50 @@ end;
 // Help links
 // Hilfelinks
 // --------------------------------------------------------------
+// Open the legal notice page.
+// Die Impressumsseite oeffnen.
 procedure TMainformFrm.ImprintLblClick(Sender: TObject);
 begin
   ShellExecute(0, 'open', ImprintUrl, nil, nil, SW_SHOWNORMAL);
 end;
-
+// Open the Paperless video playlist.
+// Die Paperless-Video-Playlist oeffnen.
 procedure TMainformFrm.PaperlessPlaylistLblClick(Sender: TObject);
 begin
   ShellExecute(0, 'open', PaperlessPlaylistUrl, nil, nil, SW_SHOWNORMAL);
 end;
-
+// Open the YouTube channel.
+// Den YouTube-Kanal oeffnen.
 procedure TMainformFrm.MyYouTubeChannelLblClick(Sender: TObject);
 begin
  ShellExecute(0, 'open', YouTubeChannelUrl, nil, nil, SW_SHOWNORMAL);
 end;
-
+// Open the backup program guide.
+// Die Anleitung zum Backup-Programm oeffnen.
 procedure TMainformFrm.BackupProgramGuideLblClick(Sender: TObject);
 begin
  ShellExecute(0, 'open', BackupGuideUrl, nil, nil, SW_SHOWNORMAL);
 end;
-
+// Open the main ComputerRalle website.
+// Die Haupt-Webseite von ComputerRalle oeffnen.
 procedure TMainformFrm.Web1LblClick(Sender: TObject);
 begin
  ShellExecute(0, 'open', ComputerRalleUrl, nil, nil, SW_SHOWNORMAL);
 end;
+// Open the ComputerRalle blog.
+// Den ComputerRalle-Blog oeffnen.
 procedure TMainformFrm.Web2LblClick(Sender: TObject);
 begin
  ShellExecute(0, 'open', BlogUrl, nil, nil, SW_SHOWNORMAL);
 end;
-
+// Open the newsletter signup page.
+// Die Newsletter-Anmeldeseite oeffnen.
 procedure TMainformFrm.NewsletterLblClick(Sender: TObject);
 begin
   ShellExecute(0, 'open', NewsletterUrl, nil, nil, SW_SHOWNORMAL);
 end;
-
+// Open the program download page when an update is available.
+// Die Programm-Downloadseite oeffnen, wenn ein Update verfuegbar ist.
 procedure TMainformFrm.ProgramUpdateLblClick(Sender: TObject);
 begin
   ShellExecute(0, 'open', ProgramDownloadUrl, nil, nil, SW_SHOWNORMAL);

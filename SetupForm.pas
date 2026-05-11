@@ -342,6 +342,8 @@ begin
   end;
 end;
 
+// Save that the first notice was accepted and close the setup notice form.
+// Speichern, dass der erste Hinweis akzeptiert wurde, und das Hinweisfenster schliessen.
 procedure TSetupFrm.NoticeAcceptedBtnClick(Sender: TObject);
 var
   Ini: TIniFile;

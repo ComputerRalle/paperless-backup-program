@@ -137,11 +137,15 @@ begin
   Result := CallNextHookEx(MessageBoxHook, Code, WParam, LParam);
 end;
 
+// Show a centered information message owned by the active form.
+// Eine zentrierte Informationsmeldung mit dem aktiven Formular als Besitzer anzeigen.
 procedure CenteredShowMessage(const Msg: string);
 begin
   CenteredMessageDlg(Msg, mtInformation, [mbOK], 0);
 end;
 
+// Show a centered VCL message dialog and return the selected button.
+// Einen zentrierten VCL-Meldungsdialog anzeigen und die gewaehlte Schaltflaeche zurueckgeben.
 function CenteredMessageDlg(const Msg: string; DlgType: TMsgDlgType; Buttons: TMsgDlgButtons; HelpCtx: Longint): Integer;
 var
   Dialog: TForm;
@@ -158,6 +162,8 @@ begin
   end;
 end;
 
+// Show a centered native Windows message box that stays above the application.
+// Eine zentrierte native Windows-Messagebox anzeigen, die vor der Anwendung bleibt.
 function CenteredMessageBox(const Text, Caption: string; Flags: Cardinal): Integer;
 var
   OwnerHandle: HWND;
@@ -182,6 +188,8 @@ begin
   end;
 end;
 
+// Ask the user for a password, optionally with confirmation.
+// Den Benutzer nach einem Passwort fragen, optional mit Passwortwiederholung.
 function RequestPasswordDialog(const DialogCaption, Prompt: string; const ConfirmPassword: Boolean; out Password: string; const CancelButtonCaption: string): Boolean;
 var
   Dialog: TForm;
@@ -302,6 +310,8 @@ begin
   until False;
 end;
 
+// Ask for a password and allow the user to intentionally skip this step.
+// Ein Passwort abfragen und dem Benutzer das bewusste Ueberspringen erlauben.
 function RequestPasswordOrSkipDialog(const DialogCaption, Prompt, SkipButtonCaption: string; out Password: string): Integer;
 var
   Dialog: TForm;
