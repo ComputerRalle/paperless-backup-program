@@ -4,7 +4,7 @@ All notable changes to this project are documented here.
 
 Alle wichtigen Aenderungen an diesem Projekt werden hier dokumentiert.
 
-## Unreleased / Noch nicht veroeffentlicht
+## 5.26.4.105 - 2026-05-11
 
 - Added password-based encryption for Paperless mail settings in backups as `email-versand.env.enc`.
 - Passwortbasierte Verschluesselung fuer Paperless-Mail-Einstellungen in Backups als `email-versand.env.enc` ergaenzt.
@@ -44,8 +44,10 @@ Alle wichtigen Aenderungen an diesem Projekt werden hier dokumentiert.
 - Timeout und laufendes Pipe-Lesen fuer versteckte Befehlsausgaben ergaenzt, um Haenger bei groesserer Docker- oder PowerShell-Ausgabe zu vermeiden.
 - Fixed setup-form lifetime handling when compose files and image version metadata are written from the main form.
 - Lebensdauerbehandlung des Setup-Formulars korrigiert, wenn Compose-Dateien und Image-Versionen aus dem Hauptformular geschrieben werden.
-- Updated project version metadata to `5.26.4.103`.
-- Projekt-Versionsmetadaten auf `5.26.4.103` aktualisiert.
+- Updated project version metadata to `5.26.4.104`.
+- Projekt-Versionsmetadaten auf `5.26.4.104` aktualisiert.
+- Updated update metadata to `5.26.4.105`.
+- Update-Metadaten auf `5.26.4.105` aktualisiert.
 - Documented the Windows CNG based encryption approach and password-loss limitation.
 - Windows-CNG-basierte Verschluesselung und die Einschraenkung bei verlorenem Passwort dokumentiert.
 - Switched generated backup, restore, restart, update, and scheduler scripts from CMD to PowerShell.
