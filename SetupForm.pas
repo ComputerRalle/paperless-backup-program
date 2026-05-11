@@ -77,6 +77,9 @@ var
   PaperlessContainerRunning: Boolean;
   DockerAvailable: Boolean;
   TerminateApplicationOnClose: Boolean;
+  // True when the form is shown by the 30-day reminder instead of first setup.
+  // Wahr, wenn das Formular durch die 30-Tage-Erinnerung statt der Ersteinrichtung angezeigt wird.
+  NoticeReminderMode: Boolean;
   // Docker image versions
   // Docker-Image-Versionen
   paperless_ngx_version: string;
@@ -315,7 +318,19 @@ begin
   if not DockerAvailable then Exit;
   if DockerAvailable = True then
   begin
-    SieBenoetigenDockerLbl.Caption := 'Docker ist Installiert. Sie können Paperless installieren.';
+    if NoticeReminderMode then
+    begin
+      // Hide the installation prompt when this is only the recurring notice.
+      // Die Installationsaufforderung ausblenden, wenn dies nur der wiederkehrende Hinweis ist.
+      SieBenoetigenDockerLbl.Visible := False;
+      SieBenoetigenDockerLbl.Caption := '';
+      PaperlessInstallierenBtn.Enabled := False;
+    end
+    else
+    begin
+      SieBenoetigenDockerLbl.Visible := True;
+      SieBenoetigenDockerLbl.Caption := 'Docker ist Installiert. Sie können Paperless installieren.';
+    end;
     WillkommenLbl.Visible := True;
     SieBenoetigenDockerLbl.Refresh;
     Label1.Visible := False;
@@ -382,6 +397,10 @@ begin
    try
     try
       Ini.WriteString('Einrichtung', 'Hinweis verstanden', 'Ja');
+      // Remember the exact confirmation time for the 30-day reminder cycle.
+      // Den genauen Bestaetigungszeitpunkt fuer den 30-Tage-Hinweis merken.
+      Ini.WriteDateTime('Einrichtung', 'Hinweis zuletzt verstanden', Now);
+      Ini.UpdateFile;
     except
       CenteredShowMessage('Einstellungen.ini kann nicht geschrieben werden. Rechte?');
     end;

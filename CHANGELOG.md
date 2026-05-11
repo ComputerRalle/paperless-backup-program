@@ -12,6 +12,14 @@ Alle wichtigen Aenderungen an diesem Projekt werden hier dokumentiert.
 - Neuerzeugung versteckter PowerShell-Skripte korrigiert, damit vorhandene versteckte Dateien vor dem Schreiben freigegeben werden.
 - Moved one-time PowerShell script cleanup into operation-finally blocks so scripts are removed when the program finishes the active task.
 - Bereinigung einmaliger PowerShell-Skripte in Abschlussbloecke verschoben, damit Skripte entfernt werden, wenn das Programm die aktive Aufgabe beendet.
+- Stored the notice confirmation timestamp separately so the welcome notice is shown again every 30 days.
+- Separaten Bestaetigungszeitpunkt fuer den Hinweis gespeichert, damit der Willkommenshinweis alle 30 Tage erneut angezeigt wird.
+- Hid the Paperless installation prompt when the welcome notice is opened as a 30-day reminder.
+- Paperless-Installationsaufforderung ausgeblendet, wenn der Willkommenshinweis als 30-Tage-Erinnerung geoeffnet wird.
+- Fixed the document-by-email tab so opening it only loads mail settings and no longer starts setup dialogs.
+- Tab "Dok als E-Mail" korrigiert, damit beim Oeffnen nur Mail-Einstellungen geladen und keine Einrichtungsdialoge mehr gestartet werden.
+- Reset stale update flags around restore runs so repeated restores keep the restore status text.
+- Veraltete Update-Flags rund um Wiederherstellungen zurueckgesetzt, damit wiederholte Wiederherstellungen den Wiederherstellungstext behalten.
 
 ## 5.26.4.105 - 2026-05-11
 

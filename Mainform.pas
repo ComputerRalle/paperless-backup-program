@@ -184,7 +184,6 @@ type
     procedure LoadEmailSettings;
     procedure SaveEmailSettingsBtnClick(Sender: TObject);
     procedure SaveEmptyEnvFile();
-    procedure RequireCompletedSettings;
     procedure StartAndMonitorRestart;
     procedure SaveBlankEmailSettings();
     procedure UpdateDoneCbClick(Sender: TObject);
@@ -274,6 +273,7 @@ var
 
 implementation
 {$R *.dfm}
+
 // Mark a generated script file as hidden in the Windows file system.
 // Eine erzeugte Skriptdatei im Windows-Dateisystem als versteckt markieren.
 procedure MarkGeneratedScriptHidden(const ScriptPath: string);
@@ -285,6 +285,7 @@ begin
   if Attributes <> -1 then
     FileSetAttr(ScriptPath, Attributes or faHidden);
 end;
+
 // Delete a generated one-time script after it has finished running.
 // Ein erzeugtes Einmal-Skript nach seinem Lauf loeschen.
 procedure DeleteGeneratedScriptFile(const ScriptPath: string);
@@ -303,6 +304,7 @@ begin
       LogWarning('Generated script cleanup failed for "' + ScriptPath + '": ' + E.Message);
   end;
 end;
+
 // Read PAPERLESS_SECRET_KEY from a backup metadata file.
 // PAPERLESS_SECRET_KEY aus einer Backup-Metadatendatei lesen.
 function ReadPaperlessSecretKeyFromBackupFile(const SecretKeyFilePath: string): string;
@@ -1083,6 +1085,7 @@ begin
   if Assigned(Label32) then
     Label32.Visible := False;
 end;
+
 // Encrypt email-versand.env for the current backup and keep a prepared local copy.
 // email-versand.env fuer das aktuelle Backup verschluesseln und eine vorbereitete lokale Kopie behalten.
 procedure TMainformFrm.EncryptEmailEnvForBackup(const TargetBackupPath: string);
@@ -1114,6 +1117,7 @@ begin
     CenteredShowMessage('Mail-Einstellungen konnten nicht verschlüsselt werden: ' + E.Message);
   end;
 end;
+
 // Restore encrypted mail settings from the backup when the user provides the password.
 // Verschluesselte Mail-Einstellungen aus dem Backup wiederherstellen, wenn der Benutzer das Passwort eingibt.
 procedure TMainformFrm.RestoreEmailEnvFromBackup(const SourceBackupPath, TargetComposePath: string);
@@ -1165,12 +1169,14 @@ begin
     end;
   end;
 end;
+
 // Validate that the selected backup folder contains all files needed for restore.
 // Pruefen, ob der gewaehlte Backup-Ordner alle Dateien fuer die Wiederherstellung enthaelt.
 function TMainformFrm.ValidateRestoreBackupFolder(const BackupFolder: string): Boolean;
 var
   MissingFiles: TStringList;
   BasePath: string;
+
   // Require one file inside the selected backup folder.
   // Eine Datei innerhalb des gewaehlten Backup-Ordners verlangen.
   procedure RequireFile(const FileName: string);
@@ -1178,6 +1184,7 @@ var
     if not FileExists(BasePath + FileName) then
       MissingFiles.Add(FileName);
   end;
+
 begin
   Result := False;
   if not DirectoryExists(BackupFolder) then
@@ -1211,6 +1218,7 @@ begin
   end;
   Result := True;
 end;
+
 // Open the support page in the default browser.
 // Die Unterstützungsseite im Standardbrowser öffnen.
 procedure TMainformFrm.BuyMeACoffeeBtnClick(Sender: TObject);
@@ -1481,6 +1489,9 @@ var
   StartParameter: string;
   Ini: TIniFile;
   Value: string;
+  SettingsPath: string;
+  LastNoticeAccepted: TDateTime;
+  SettingsFileAge: Integer;
   ComposePathTextFile: string;
   OldPath: string;
   StoredPath: string;
@@ -1504,9 +1515,11 @@ begin
 
   // Check whether the user already accepted the notice.
   // Prüfen, ob der Benutzer den Hinweis bereits akzeptiert hat.
-  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + SettingsFileName);
+  SettingsPath := IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + SettingsFileName;
+  Ini := TIniFile.Create(SettingsPath);
   try
     Value := Ini.ReadString('Einrichtung', 'Hinweis verstanden', '');
+    LastNoticeAccepted := Ini.ReadDateTime('Einrichtung', 'Hinweis zuletzt verstanden', 0);
   finally
     Ini.Free;
   end;
@@ -1518,14 +1531,25 @@ begin
     // Die alte Hinweisdatei löschen, nachdem der INI-Wert vorhanden ist.
     if FileExists(NoticeFilePath) then DeleteFile(NoticeFilePath);
 
-    // Show the notice again after 30 days.
-    // Den Hinweis nach 30 Tagen erneut anzeigen.
-    if DaysBetween(Now, FileDateToDateTime(FileAge(IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + SettingsFileName))) > 30 then
+    if LastNoticeAccepted = 0 then
+    begin
+      // Migrate older settings by using the existing INI timestamp once.
+      // Aeltere Einstellungen einmalig ueber das vorhandene INI-Datum migrieren.
+      SettingsFileAge := FileAge(SettingsPath);
+      if SettingsFileAge <> -1 then
+        LastNoticeAccepted := FileDateToDateTime(SettingsFileAge);
+    end;
+
+    // Show the notice again after 30 days since the user accepted it.
+    // Den Hinweis 30 Tage nach der letzten Bestaetigung erneut anzeigen.
+    if (LastNoticeAccepted = 0) or (DaysBetween(Now, LastNoticeAccepted) >= 30) then
     begin
       SetupFrm := TSetupFrm.Create(Self);
       try
+        NoticeReminderMode := True;
         SetupFrm.ShowModal;
       finally
+        NoticeReminderMode := False;
         SetupFrm.Free;
         SetupFrm := nil;
       end;
@@ -1535,6 +1559,7 @@ begin
     begin
       SetupFrm := TSetupFrm.Create(Self);
       try
+        NoticeReminderMode := False;
         SetupFrm.ShowModal;
       finally
         SetupFrm.Free;
@@ -2364,6 +2389,7 @@ begin
     end;
     if (ComposePath <> '') and DirectoryExists(ComposePath) then
       ComposePath := IncludeTrailingPathDelimiter(ComposePath) + DockerComposeFileName;
+
     if ComposePath = '' then
     begin
       CenteredShowMessage('Fehler: Kein Docker-Compose-Pfad in der INI gespeichert.');
@@ -2394,6 +2420,7 @@ begin
   // The scheduled task starts the planned backup PowerShell script.
   // Die geplante Aufgabe startet das geplante Backup-PowerShell-Skript.
   CreateBackupScheduleCmdScript(ScriptPath, TargetCmdPath, Weekdays, Hour, Minute);
+
   // Run the script silently in the background.
   // Das Skript still im Hintergrund ausführen.
   FillChar(ShellExecuteInfo, SizeOf(ShellExecuteInfo), 0);
@@ -2451,45 +2478,36 @@ begin
         // Read the .env file.
         // Die .env-Datei lesen.
         EnvList.LoadFromFile(EnvFilePath);
-        // Check whether setup is still pending.
-        // Prüfen, ob die Einrichtung noch aussteht.
-        if (EnvList.Values['Eingerichtet'] = 'Nein') and not EmailEnvHasConfiguredValues(EnvList) then
+        // Copy saved values into the edit fields without starting setup actions.
+        // Gespeicherte Werte in die Eingabefelder uebernehmen, ohne Einrichtungsaktionen zu starten.
+        SMTPServerEdit.Text := EnvList.Values['PAPERLESS_EMAIL_HOST'];
+        SMTPPortEdit.Text := EnvList.Values['PAPERLESS_EMAIL_PORT'];
+        UserNameEdit.Text := EnvList.Values['PAPERLESS_EMAIL_HOST_USER'];
+        MailAccountPasswordEdit.Text := EnvList.Values['PAPERLESS_EMAIL_HOST_PASSWORD'];
+        EMailSentFromEdit.Text := EnvList.Values['PAPERLESS_EMAIL_FROM'];
+        // Restore the SSL/TLS selection.
+        // Die SSL/TLS-Auswahl wiederherstellen.
+        if EnvList.Values['PAPERLESS_EMAIL_USE_SSL'] = 'true' then
         begin
-          RequireCompletedSettings;
+          SSLoTLSRg.ItemIndex := 0;  // SSL
+          // SSL
+        end
+        else if EnvList.Values['PAPERLESS_EMAIL_USE_TLS'] = 'true' then
+        begin
+          SSLoTLSRg.ItemIndex := 1;  // TLS
+          // TLS
         end
         else
         begin
-          // Copy saved values into the edit fields.
-          // Gespeicherte Werte in die Eingabefelder übernehmen.
-          SMTPServerEdit.Text := EnvList.Values['PAPERLESS_EMAIL_HOST'];
-          SMTPPortEdit.Text := EnvList.Values['PAPERLESS_EMAIL_PORT'];
-          UserNameEdit.Text := EnvList.Values['PAPERLESS_EMAIL_HOST_USER'];
-          MailAccountPasswordEdit.Text := EnvList.Values['PAPERLESS_EMAIL_HOST_PASSWORD'];
-          EMailSentFromEdit.Text := EnvList.Values['PAPERLESS_EMAIL_FROM'];
-          // Restore the SSL/TLS selection.
-          // Die SSL/TLS-Auswahl wiederherstellen.
-          if EnvList.Values['PAPERLESS_EMAIL_USE_SSL'] = 'true' then
-          begin
-            SSLoTLSRg.ItemIndex := 0;  // SSL
-            // SSL
-          end
-          else if EnvList.Values['PAPERLESS_EMAIL_USE_TLS'] = 'true' then
-          begin
-            SSLoTLSRg.ItemIndex := 1;  // TLS
-            // TLS
-          end
-          else
-          begin
-            // No SSL/TLS option is selected.
-            // Keine SSL/TLS-Option ist ausgewählt.
-            SSLoTLSRg.ItemIndex := -1;
-          end;
-          // Empty values also mean no selection.
-          // Leere Werte bedeuten ebenfalls keine Auswahl.
-          if (EnvList.Values['PAPERLESS_EMAIL_USE_SSL'] = '') and (EnvList.Values['PAPERLESS_EMAIL_USE_TLS'] = '') then
-          begin
-            SSLoTLSRg.ItemIndex := -1;
-          end;
+          // No SSL/TLS option is selected.
+          // Keine SSL/TLS-Option ist ausgewählt.
+          SSLoTLSRg.ItemIndex := -1;
+        end;
+        // Empty values also mean no selection.
+        // Leere Werte bedeuten ebenfalls keine Auswahl.
+        if (EnvList.Values['PAPERLESS_EMAIL_USE_SSL'] = '') and (EnvList.Values['PAPERLESS_EMAIL_USE_TLS'] = '') then
+        begin
+          SSLoTLSRg.ItemIndex := -1;
         end;
       except
         on E: Exception do
@@ -2502,40 +2520,6 @@ begin
   else
   begin
     CenteredShowMessage('Die Datei "email-versand.env" existiert nicht.');
-  end;
-end;
-
-// Prepare the compose file before email settings can be completed.
-// Die Compose-Datei vorbereiten, bevor E-Mail-Einstellungen abgeschlossen werden können.
-procedure TMainformFrm.RequireCompletedSettings;
-var
-  Response: Integer;
-begin
-  // Ask before changing the compose file and restarting Paperless.
-  // Vor dem Ändern der Compose-Datei und dem Neustart von Paperless nachfragen.
-  Response := CenteredMessageDlg('E-Mail-Einstellungen stehen aus. Dazu muss Paperless gestoppt werden.' + sLineBreak +
-                        'Es werden einige Einstellungen angepasst, eine neue docker-compose-Datei'  + sLineBreak +
-                        'erzeugt und Paperless dann neu gestartet.' + sLineBreak + sLineBreak +
-                        'Wenn dieser Vorgang abgeschlossen ist, können Sie ihre Mail-Server-Daten ins Formular eintragen.'  + sLineBreak +
-                        'Danach ist Paperless in der Lage, Dokumente via Mail zu versenden' + sLineBreak + sLineBreak +
-                        'Möchten Sie fortfahren?', mtConfirmation, [mbOk, mbCancel], 0);
-
-  // Continue when the user confirms.
-  // Fortfahren, wenn der Benutzer bestätigt.
-  if Response = mrOk then
-  begin
-    IsUpdate:= True;
-    // Write a new docker-compose.yml file.
-    // Eine neue docker-compose.yml-Datei schreiben.
-     CreateDockerComposeWithSetupForm;
-  end
-  else
-  begin
-    // Stop when the user cancels.
-    // Abbrechen, wenn der Benutzer abbricht.
-    IsUpdate := False;
-    CenteredShowMessage('Der Vorgang wurde abgebrochen.');
-    Exit;
   end;
 end;
 
@@ -2854,6 +2838,7 @@ var
   Ini: TIniFile;
   Volumes: TDockerVolumeNames;
   BackupFolder: string;
+
   // Convert a timestamped backup folder name into a date for retention sorting.
   // Einen Zeitstempel-Backupordnernamen fuer die Aufbewahrungssortierung in ein Datum umwandeln.
   function FolderNameToDateTime(const Folder: string): TDateTime;
@@ -3017,6 +3002,11 @@ begin
   ReadContainerNamesFromFile;
   IsBackup := False;
   IsPaperlessInstallation := False;
+  // Clear stale update state before a new restore run starts.
+  // Veralteten Update-Zustand vor einer neuen Wiederherstellung zuruecksetzen.
+  IsUpdate := False;
+  PaperlessUpdate := False;
+  IsRestoreApplyingSettings := False;
   if ComposePath = '' then
   begin
     CenteredShowMessage('Bitte zuerst den Paperless-Ordner auswählen.');
@@ -3199,9 +3189,11 @@ begin
             CenteredMessageBox('Paperless wurde erfolgreich installiert und gestartet.' + #13#10 +
               'Sie können Paperless nun im Browser öffnen (http://localhost:8000). Geben Sie Paperless ein wenig Zeit zum starten.',
               'Installation abgeschlossen', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
+
             SetupFrm.DockerGefundenLbl.Caption := 'Paperless erfolgreich installiert.';
             SetupFrm.PaperlessInstallierenBtn.Enabled := False;
             SetupFrm.BitteBestaetigenLbl.Visible := True;
+
             SetupFrm.HinweisMemo.Lines.Clear;
             SetupFrm.HinweisMemo.Lines.Add('Ihr Paperless wurde erfolgreich installiert.');
             SetupFrm.HinweisMemo.Lines.Add(' ');
@@ -3291,11 +3283,14 @@ begin
             'Sie können Paperless nun im Browser öffnen (http://localhost:8000). Geben Sie Paperless ein wenig Zeit zum starten.',
             'Installation abgeschlossen', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
           IsUpdate := False;
+          PaperlessUpdate := False;
         end
         else
         begin
           FinishScriptProgress('Paperless-Update fehlgeschlagen.', False);
           CenteredShowMessage('Vorgang fehlgeschlagen. Fehlercode: ' + IntToStr(ExitCode));
+          IsUpdate := False;
+          PaperlessUpdate := False;
           IsRestoreApplyingSettings := False;
           ClearRestoreProgressState;
         end;
@@ -3305,6 +3300,8 @@ begin
     begin
       FinishScriptProgress('Skript konnte nicht gestartet werden.', False);
       CenteredShowMessage('Fehler beim Starten des Skripts.');
+      IsUpdate := False;
+      PaperlessUpdate := False;
       IsRestoreApplyingSettings := False;
       ClearRestoreProgressState;
     end;
@@ -3362,6 +3359,7 @@ begin
         GetExitCodeProcess(ProcessInfo.hProcess, ExitCode);
         CloseHandle(ProcessInfo.hProcess);
         CloseHandle(ProcessInfo.hThread);
+
         // Exit code 0 means success.
         // Exit-Code 0 bedeutet Erfolg.
         if ExitCode = 0 then
@@ -3399,6 +3397,7 @@ begin
       if WasApplyingEmailSettings then
         IsApplyingEmailSettings := False;
     end;
+
     if PaperlessUpdate = true then
     begin
       // Start the process.
@@ -3415,6 +3414,7 @@ begin
         GetExitCodeProcess(ProcessInfo.hProcess, ExitCode);
         CloseHandle(ProcessInfo.hProcess);
         CloseHandle(ProcessInfo.hThread);
+
         // Exit code 0 means success.
         // Exit-Code 0 bedeutet Erfolg.
         if ExitCode = 0 then
@@ -3789,42 +3789,49 @@ procedure TMainformFrm.ImprintLblClick(Sender: TObject);
 begin
   ShellExecute(0, 'open', ImprintUrl, nil, nil, SW_SHOWNORMAL);
 end;
+
 // Open the Paperless video playlist.
 // Die Paperless-Video-Playlist oeffnen.
 procedure TMainformFrm.PaperlessPlaylistLblClick(Sender: TObject);
 begin
   ShellExecute(0, 'open', PaperlessPlaylistUrl, nil, nil, SW_SHOWNORMAL);
 end;
+
 // Open the YouTube channel.
 // Den YouTube-Kanal oeffnen.
 procedure TMainformFrm.MyYouTubeChannelLblClick(Sender: TObject);
 begin
  ShellExecute(0, 'open', YouTubeChannelUrl, nil, nil, SW_SHOWNORMAL);
 end;
+
 // Open the backup program guide.
 // Die Anleitung zum Backup-Programm oeffnen.
 procedure TMainformFrm.BackupProgramGuideLblClick(Sender: TObject);
 begin
  ShellExecute(0, 'open', BackupGuideUrl, nil, nil, SW_SHOWNORMAL);
 end;
+
 // Open the main ComputerRalle website.
 // Die Haupt-Webseite von ComputerRalle oeffnen.
 procedure TMainformFrm.Web1LblClick(Sender: TObject);
 begin
  ShellExecute(0, 'open', ComputerRalleUrl, nil, nil, SW_SHOWNORMAL);
 end;
+
 // Open the ComputerRalle blog.
 // Den ComputerRalle-Blog oeffnen.
 procedure TMainformFrm.Web2LblClick(Sender: TObject);
 begin
  ShellExecute(0, 'open', BlogUrl, nil, nil, SW_SHOWNORMAL);
 end;
+
 // Open the newsletter signup page.
 // Die Newsletter-Anmeldeseite oeffnen.
 procedure TMainformFrm.NewsletterLblClick(Sender: TObject);
 begin
   ShellExecute(0, 'open', NewsletterUrl, nil, nil, SW_SHOWNORMAL);
 end;
+
 // Open the program download page when an update is available.
 // Die Programm-Downloadseite oeffnen, wenn ein Update verfuegbar ist.
 procedure TMainformFrm.ProgramUpdateLblClick(Sender: TObject);
