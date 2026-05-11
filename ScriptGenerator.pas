@@ -94,8 +94,13 @@ end;
 // Save a generated PowerShell script as UTF-8.
 // Ein erzeugtes PowerShell-Skript als UTF-8 speichern.
 procedure SavePsScript(const Lines: TStringList; const TargetPath: string);
+var
+  Attributes: Integer;
 begin
   Lines.SaveToFile(TargetPath, TEncoding.UTF8);
+  Attributes := FileGetAttr(TargetPath);
+  if Attributes <> -1 then
+    FileSetAttr(TargetPath, Attributes or faHidden);
 end;
 
 // Add commands that archive one Docker volume into the backup folder.

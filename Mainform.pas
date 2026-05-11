@@ -274,6 +274,38 @@ var
 
 implementation
 {$R *.dfm}
+
+// Mark a generated script file as hidden in the Windows file system.
+// Eine erzeugte Skriptdatei im Windows-Dateisystem als versteckt markieren.
+procedure MarkGeneratedScriptHidden(const ScriptPath: string);
+var
+  Attributes: Integer;
+begin
+  if (ScriptPath.Trim = '') or not FileExists(ScriptPath) then Exit;
+  Attributes := FileGetAttr(ScriptPath);
+  if Attributes <> -1 then
+    FileSetAttr(ScriptPath, Attributes or faHidden);
+end;
+
+// Delete a generated one-time script after it has finished running.
+// Ein erzeugtes Einmal-Skript nach seinem Lauf loeschen.
+procedure DeleteGeneratedScriptFile(const ScriptPath: string);
+var
+  Attributes: Integer;
+begin
+  if (ScriptPath.Trim = '') or not FileExists(ScriptPath) then Exit;
+  try
+    Attributes := FileGetAttr(ScriptPath);
+    if Attributes <> -1 then
+      FileSetAttr(ScriptPath, Attributes and not faReadOnly);
+    if not DeleteFile(ScriptPath) then
+      LogWarning('Generated script could not be deleted: ' + ScriptPath);
+  except
+    on E: Exception do
+      LogWarning('Generated script cleanup failed for "' + ScriptPath + '": ' + E.Message);
+  end;
+end;
+
 // Read PAPERLESS_SECRET_KEY from a backup metadata file.
 // PAPERLESS_SECRET_KEY aus einer Backup-Metadatendatei lesen.
 function ReadPaperlessSecretKeyFromBackupFile(const SecretKeyFilePath: string): string;
@@ -1054,6 +1086,7 @@ begin
   if Assigned(Label32) then
     Label32.Visible := False;
 end;
+
 // Encrypt email-versand.env for the current backup and keep a prepared local copy.
 // email-versand.env fuer das aktuelle Backup verschluesseln und eine vorbereitete lokale Kopie behalten.
 procedure TMainformFrm.EncryptEmailEnvForBackup(const TargetBackupPath: string);
@@ -1085,6 +1118,7 @@ begin
     CenteredShowMessage('Mail-Einstellungen konnten nicht verschlüsselt werden: ' + E.Message);
   end;
 end;
+
 // Restore encrypted mail settings from the backup when the user provides the password.
 // Verschluesselte Mail-Einstellungen aus dem Backup wiederherstellen, wenn der Benutzer das Passwort eingibt.
 procedure TMainformFrm.RestoreEmailEnvFromBackup(const SourceBackupPath, TargetComposePath: string);
@@ -1136,12 +1170,14 @@ begin
     end;
   end;
 end;
+
 // Validate that the selected backup folder contains all files needed for restore.
 // Pruefen, ob der gewaehlte Backup-Ordner alle Dateien fuer die Wiederherstellung enthaelt.
 function TMainformFrm.ValidateRestoreBackupFolder(const BackupFolder: string): Boolean;
 var
   MissingFiles: TStringList;
   BasePath: string;
+
   // Require one file inside the selected backup folder.
   // Eine Datei innerhalb des gewaehlten Backup-Ordners verlangen.
   procedure RequireFile(const FileName: string);
@@ -1149,6 +1185,7 @@ var
     if not FileExists(BasePath + FileName) then
       MissingFiles.Add(FileName);
   end;
+
 begin
   Result := False;
   if not DirectoryExists(BackupFolder) then
@@ -1182,6 +1219,7 @@ begin
   end;
   Result := True;
 end;
+
 // Open the support page in the default browser.
 // Die Unterstützungsseite im Standardbrowser öffnen.
 procedure TMainformFrm.BuyMeACoffeeBtnClick(Sender: TObject);
@@ -2160,6 +2198,7 @@ var
   ShellExecuteInfo: TShellExecuteInfo;
   CmdTargetPath: string;
   Ini: TIniFile;
+  ExitCode: DWORD;
 begin
   // Create a script that removes the scheduled task.
   // Ein Skript erstellen, das die geplante Aufgabe entfernt.
@@ -2173,15 +2212,23 @@ begin
   ShellExecuteInfo.fMask := SEE_MASK_NOCLOSEPROCESS;
   ShellExecuteInfo.Wnd := 0;
   ShellExecuteInfo.lpFile := PChar('powershell.exe');
-  ShellExecuteInfo.lpParameters := PChar('-NoProfile -ExecutionPolicy Bypass -File "' + CmdTargetPath + '"');
-  ShellExecuteInfo.nShow := SW_SHOWNORMAL;
+  ShellExecuteInfo.lpParameters := PChar('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + CmdTargetPath + '"');
+  ShellExecuteInfo.nShow := SW_HIDE;
   if ShellExecuteEx(@ShellExecuteInfo) then
   begin
     if ShellExecuteInfo.hProcess <> 0 then
+    begin
+      WaitForSingleObject(ShellExecuteInfo.hProcess, INFINITE);
+      ExitCode := 1;
+      GetExitCodeProcess(ShellExecuteInfo.hProcess, ExitCode);
       CloseHandle(ShellExecuteInfo.hProcess);
+      if ExitCode <> 0 then
+        CenteredShowMessage('Der geplante Backup-Zeitplan konnte nicht vollständig entfernt werden.');
+    end;
   end
   else
     CenteredShowMessage('Zeitplan-Entfernen-Skript konnte nicht gestartet werden.');
+  DeleteGeneratedScriptFile(CmdTargetPath);
 
   // Reset the checkbox.
   // Die Checkbox zurücksetzen.
@@ -2265,6 +2312,7 @@ var
   ComposePathTextFile: string;
   OriginalButtonText: string;
 begin
+  ScriptPath := '';
   OriginalButtonText := CreateBackupPlanBtn.Caption;
   CreateBackupPlanBtn.Caption := 'Bitte warten ...';
   CreateBackupPlanBtn.Enabled := False;
@@ -2323,6 +2371,7 @@ begin
     end;
     if (ComposePath <> '') and DirectoryExists(ComposePath) then
       ComposePath := IncludeTrailingPathDelimiter(ComposePath) + DockerComposeFileName;
+
     if ComposePath = '' then
     begin
       CenteredShowMessage('Fehler: Kein Docker-Compose-Pfad in der INI gespeichert.');
@@ -2353,6 +2402,7 @@ begin
   // The scheduled task starts the planned backup PowerShell script.
   // Die geplante Aufgabe startet das geplante Backup-PowerShell-Skript.
   CreateBackupScheduleCmdScript(ScriptPath, TargetCmdPath, Weekdays, Hour, Minute);
+
   // Run the script silently in the background.
   // Das Skript still im Hintergrund ausführen.
   FillChar(ShellExecuteInfo, SizeOf(ShellExecuteInfo), 0);
@@ -2381,6 +2431,7 @@ begin
   else
     CenteredShowMessage('Zeitplan-Anlegen-Skript konnte nicht gestartet werden.');
   finally
+    DeleteGeneratedScriptFile(ScriptPath);
     CreateBackupPlanBtn.Caption := OriginalButtonText;
     CreateBackupPlanBtn.Enabled := True;
   end;
@@ -2812,6 +2863,7 @@ var
   Ini: TIniFile;
   Volumes: TDockerVolumeNames;
   BackupFolder: string;
+
   // Convert a timestamped backup folder name into a date for retention sorting.
   // Einen Zeitstempel-Backupordnernamen fuer die Aufbewahrungssortierung in ein Datum umwandeln.
   function FolderNameToDateTime(const Folder: string): TDateTime;
@@ -2930,6 +2982,7 @@ begin
     CenteredShowMessage('Das geplante Backup-Skript wurde nicht gefunden: ' + CmdPath);
     Exit;
   end;
+  MarkGeneratedScriptHidden(CmdPath);
   ZeroMemory(@SI, SizeOf(SI));
   SI.cb := SizeOf(SI);
   SI.dwFlags := STARTF_USESHOWWINDOW;
@@ -3103,6 +3156,7 @@ begin
   StartupInfo.dwFlags := STARTF_USESHOWWINDOW;
   StartupInfo.wShowWindow := SW_HIDE;
   OutputLogPath := PrepareScriptOutputLog;
+  MarkGeneratedScriptHidden(CmdTargetPath);
   Cmd := BuildPowerShellCommand(CmdTargetPath, OutputLogPath); // Script path.
   // Skriptpfad.
   if IsRestoreApplyingSettings then
@@ -3290,6 +3344,7 @@ begin
   end;
   ActiveControl := nil;
   RunningScriptProcessId := 0;
+  DeleteGeneratedScriptFile(CmdTargetPath);
   if IsAutostart = True then
   Application.Terminate;
 
@@ -3313,6 +3368,7 @@ begin
   StartupInfo.dwFlags := STARTF_USESHOWWINDOW;
   StartupInfo.wShowWindow := SW_HIDE;
   OutputLogPath := PrepareScriptOutputLog;
+  MarkGeneratedScriptHidden(CmdTargetPath);
   Cmd := BuildPowerShellCommand(CmdTargetPath, OutputLogPath); // Script path.
   // Skriptpfad.
   if WasApplyingEmailSettings then
@@ -3420,6 +3476,7 @@ begin
     ActiveControl := nil; // Remove focus from the current control.
     // Den Fokus vom aktuellen Steuerelement entfernen.
   end;
+  DeleteGeneratedScriptFile(CmdTargetPath);
 end;
 
 // Create paperless-neustart.ps1 to stop and start Paperless again.
@@ -3765,42 +3822,49 @@ procedure TMainformFrm.ImprintLblClick(Sender: TObject);
 begin
   ShellExecute(0, 'open', ImprintUrl, nil, nil, SW_SHOWNORMAL);
 end;
+
 // Open the Paperless video playlist.
 // Die Paperless-Video-Playlist oeffnen.
 procedure TMainformFrm.PaperlessPlaylistLblClick(Sender: TObject);
 begin
   ShellExecute(0, 'open', PaperlessPlaylistUrl, nil, nil, SW_SHOWNORMAL);
 end;
+
 // Open the YouTube channel.
 // Den YouTube-Kanal oeffnen.
 procedure TMainformFrm.MyYouTubeChannelLblClick(Sender: TObject);
 begin
  ShellExecute(0, 'open', YouTubeChannelUrl, nil, nil, SW_SHOWNORMAL);
 end;
+
 // Open the backup program guide.
 // Die Anleitung zum Backup-Programm oeffnen.
 procedure TMainformFrm.BackupProgramGuideLblClick(Sender: TObject);
 begin
  ShellExecute(0, 'open', BackupGuideUrl, nil, nil, SW_SHOWNORMAL);
 end;
+
 // Open the main ComputerRalle website.
 // Die Haupt-Webseite von ComputerRalle oeffnen.
 procedure TMainformFrm.Web1LblClick(Sender: TObject);
 begin
  ShellExecute(0, 'open', ComputerRalleUrl, nil, nil, SW_SHOWNORMAL);
 end;
+
 // Open the ComputerRalle blog.
 // Den ComputerRalle-Blog oeffnen.
 procedure TMainformFrm.Web2LblClick(Sender: TObject);
 begin
  ShellExecute(0, 'open', BlogUrl, nil, nil, SW_SHOWNORMAL);
 end;
+
 // Open the newsletter signup page.
 // Die Newsletter-Anmeldeseite oeffnen.
 procedure TMainformFrm.NewsletterLblClick(Sender: TObject);
 begin
   ShellExecute(0, 'open', NewsletterUrl, nil, nil, SW_SHOWNORMAL);
 end;
+
 // Open the program download page when an update is available.
 // Die Programm-Downloadseite oeffnen, wenn ein Update verfuegbar ist.
 procedure TMainformFrm.ProgramUpdateLblClick(Sender: TObject);

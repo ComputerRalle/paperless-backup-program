@@ -93,6 +93,19 @@ implementation
 
 uses
   Mainform, DockerComposeGenerator, AppConfig, AppLogger, AppDialogs;
+
+// Mark a generated setup PowerShell script as hidden.
+// Ein erzeugtes Setup-PowerShell-Skript als versteckt markieren.
+procedure MarkSetupScriptHidden(const ScriptPath: string);
+var
+  Attributes: Integer;
+begin
+  if (ScriptPath.Trim = '') or not FileExists(ScriptPath) then Exit;
+  Attributes := FileGetAttr(ScriptPath);
+  if Attributes <> -1 then
+    FileSetAttr(ScriptPath, Attributes or faHidden);
+end;
+
 // Generate a per-installation Paperless secret key.
 // Einen Paperless Secret Key pro Installation erzeugen.
 function GeneratePaperlessSecretKey: string;
@@ -717,6 +730,7 @@ begin
       CmdFile.Add('}');
       CmdFile.Add('exit 0');
       CmdFile.SaveToFile(CmdTargetPath, TEncoding.UTF8);
+      MarkSetupScriptHidden(CmdTargetPath);
     finally
       CmdFile.Free;
     end;
@@ -772,6 +786,7 @@ begin
         CmdFile.Add('}');
         CmdFile.Add('exit 0');
         CmdFile.SaveToFile(CmdTargetPath, TEncoding.UTF8);
+        MarkSetupScriptHidden(CmdTargetPath);
       finally
         CmdFile.Free;
       end;
