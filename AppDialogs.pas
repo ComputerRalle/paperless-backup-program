@@ -1,4 +1,4 @@
-// --------------------------------------------------------------
+﻿// --------------------------------------------------------------
 // Original author: Ralf-Peter Kleinert - 2025
 // Ursprünglicher Autor: Ralf-Peter Kleinert - 2025
 // Alias: #ComputerRalle / DIGITAL-easy
@@ -15,13 +15,17 @@
 // GNU General Public License v3 - siehe LICENSE.txt im Repository
 // --------------------------------------------------------------
 
+// Gemeinsame Meldungs-, Passwort- und Ordnerdialoge. Alle werden am Hauptfenster ausgerichtet; vor dessen Anzeige dient der Monitor-Arbeitsbereich als Bezug.
 unit AppDialogs;
 
 interface
 
 uses
-  Winapi.Windows, Vcl.Dialogs;
+  Winapi.Windows, Vcl.Dialogs, Vcl.Forms;
 
+procedure CenterFormOnApplication(const Dialog: TForm);
+function CenteredFolderDialogExecute(const Dialog: TFileOpenDialog): Boolean;
+function CenteredSelectDirectory(const Caption: string; var Directory: string): Boolean;
 procedure CenteredShowMessage(const Msg: string);
 function CenteredMessageDlg(const Msg: string; DlgType: TMsgDlgType; Buttons: TMsgDlgButtons; HelpCtx: Longint): Integer;
 function CenteredMessageBox(const Text, Caption: string; Flags: Cardinal): Integer;
@@ -31,61 +35,59 @@ function RequestPasswordOrSkipDialog(const DialogCaption, Prompt, SkipButtonCapt
 implementation
 
 uses
-  System.SysUtils, System.Types, Vcl.Forms, Vcl.Controls, Vcl.StdCtrls;
+  System.SysUtils, System.Types, Winapi.MultiMon, Vcl.Controls, Vcl.StdCtrls;
 
 threadvar
   MessageBoxHook: HHOOK;
   MessageBoxOwnerHandle: HWND;
 
-// Return the rectangle that should own centered dialogs.
-// Das Rechteck zurueckgeben, an dem Dialoge zentriert werden sollen.
+// Vorwärtsdeklaration für die gemeinsame Auswahl des Bezugsfensters.
+function ActivePopupParent: TCustomForm; forward;
+
+// Liefert das Fensterhandle des Dialogbezugs; ohne geeignetes Formular wird das Application-Handle verwendet.
 function ActiveFormHandle: HWND;
 var
-  ActiveForm: TCustomForm;
+  PopupParent: TCustomForm;
 begin
-  ActiveForm := Screen.ActiveCustomForm;
-  if Assigned(ActiveForm) and ActiveForm.HandleAllocated then
-  begin
-    Result := ActiveForm.Handle;
-    Exit;
-  end;
-
-  if Assigned(Application.MainForm) and Application.MainForm.HandleAllocated then
-  begin
-    Result := Application.MainForm.Handle;
-    Exit;
-  end;
-
-  Result := Application.Handle;
+  PopupParent := ActivePopupParent;
+  if Assigned(PopupParent) then Result := PopupParent.Handle
+  else Result := Application.Handle;
 end;
 
-// Return the form that should act as popup parent for modal dialogs.
-// Das Formular zurueckgeben, das Popup-Parent fuer modale Dialoge sein soll.
+// Bevorzugt das Hauptfenster, damit die Zentrierung bei aktivem Setup- oder Passwortdialog nicht wandert.
+// Falls noch kein Hauptfensterhandle vorhanden ist, dient das aktive Formular als Rückfall.
 function ActivePopupParent: TCustomForm;
 begin
+  Result := Application.MainForm;
+  if Assigned(Result) and Result.HandleAllocated then Exit;
   Result := Screen.ActiveCustomForm;
   if Assigned(Result) and Result.HandleAllocated then Exit;
-
-  if Assigned(Application.MainForm) and Application.MainForm.HandleAllocated then
-    Result := Application.MainForm
-  else
-    Result := nil;
+  Result := nil;
 end;
-
-// Return the rectangle of the form that should own centered dialogs.
-// Das Rechteck des Formulars zurueckgeben, zu dem Dialoge gehoeren sollen.
+// Verwendet die tatsächlichen Bildschirmkoordinaten des sichtbaren Bezugsfensters.
+// Vor dessen Anzeige gilt die Monitor-Arbeitsfläche, da die VCL-Startposition noch nicht endgültig ist.
 function OwnerFormRect(const OwnerHandle: HWND): TRect;
+var
+  MonitorInfo: TMonitorInfo;
 begin
-  if (OwnerHandle = 0) or not GetWindowRect(OwnerHandle, Result) then
+  if (OwnerHandle <> 0) and IsWindowVisible(OwnerHandle) and
+     GetWindowRect(OwnerHandle, Result) then Exit;
+
+  // Vor Anzeige des Hauptfensters dessen Monitor-Arbeitsbereich verwenden.
+  MonitorInfo.cbSize := SizeOf(MonitorInfo);
+  if GetMonitorInfo(MonitorFromWindow(OwnerHandle, MONITOR_DEFAULTTONEAREST),
+    @MonitorInfo) then
+    Result := MonitorInfo.rcWork
+  else
     Result := Screen.WorkAreaRect;
 end;
 
-// Center a window over its owning form.
-// Ein Fenster ueber seinem besitzenden Formular zentrieren.
+// Berechnet die Mitte anhand der aktuellen Fenstergröße. VCL-Fenster erhalten synchronisierte Bounds; native Dialoge werden über SetWindowPos verschoben.
 procedure CenterWindowOnOwner(WindowHandle, OwnerHandle: HWND);
 var
   OwnerRect, DialogRect: TRect;
   DialogWidth, DialogHeight, NewLeft, NewTop: Integer;
+  Control: TWinControl;
 begin
   if WindowHandle = 0 then Exit;
 
@@ -96,11 +98,16 @@ begin
   NewLeft := OwnerRect.Left + ((OwnerRect.Right - OwnerRect.Left) - DialogWidth) div 2;
   NewTop := OwnerRect.Top + ((OwnerRect.Bottom - OwnerRect.Top) - DialogHeight) div 2;
 
-  SetWindowPos(WindowHandle, 0, NewLeft, NewTop, 0, 0, SWP_NOSIZE or SWP_NOZORDER or SWP_NOACTIVATE);
+  // VCL-Koordinaten mitführen, damit die Anzeige die berechnete Position beibehält.
+  Control := FindControl(WindowHandle);
+  if Control is TCustomForm then
+    Control.SetBounds(NewLeft, NewTop, DialogWidth, DialogHeight)
+  else
+    SetWindowPos(WindowHandle, 0, NewLeft, NewTop, 0, 0, SWP_NOSIZE or SWP_NOZORDER or SWP_NOACTIVATE);
 end;
 
-// Prepare a modal dialog so it stays in front of the active application form.
-// Einen modalen Dialog so vorbereiten, dass er vor dem aktiven Formular bleibt.
+// Legt PopupParent und Position vor ShowModal fest und hält den Dialog vor der Anwendung.
+// Position darf nicht während OnShow/OnHide geändert werden, da dies das Fenster neu erzeugen kann.
 procedure PrepareModalDialog(const Dialog: TForm; const OwnerHandle: HWND);
 var
   PopupParent: TCustomForm;
@@ -118,8 +125,8 @@ begin
   SetForegroundWindow(Dialog.Handle);
 end;
 
-// Center native Windows message boxes as soon as they are activated.
-// Native Windows-Messageboxen beim Aktivieren zentrieren.
+// Zentriert den nativen Dialog bei seiner ersten Aktivierung und entfernt danach den Thread-Hook.
+// Der aufrufende Dialogwrapper entfernt einen eventuell verbliebenen Hook im finally-Block.
 function MessageBoxCbtHook(Code: Integer; WParam: WPARAM; LParam: LPARAM): LRESULT; stdcall;
 begin
   if Code = HCBT_ACTIVATE then
@@ -137,15 +144,13 @@ begin
   Result := CallNextHookEx(MessageBoxHook, Code, WParam, LParam);
 end;
 
-// Show a centered information message owned by the active form.
 // Eine zentrierte Informationsmeldung mit dem aktiven Formular als Besitzer anzeigen.
 procedure CenteredShowMessage(const Msg: string);
 begin
   CenteredMessageDlg(Msg, mtInformation, [mbOK], 0);
 end;
 
-// Show a centered VCL message dialog and return the selected button.
-// Einen zentrierten VCL-Meldungsdialog anzeigen und die gewaehlte Schaltflaeche zurueckgeben.
+// Einen zentrierten VCL-Meldungsdialog anzeigen und die gewaehlte Schaltflaeche zurückgeben.
 function CenteredMessageDlg(const Msg: string; DlgType: TMsgDlgType; Buttons: TMsgDlgButtons; HelpCtx: Longint): Integer;
 var
   Dialog: TForm;
@@ -162,7 +167,6 @@ begin
   end;
 end;
 
-// Show a centered native Windows message box that stays above the application.
 // Eine zentrierte native Windows-Messagebox anzeigen, die vor der Anwendung bleibt.
 function CenteredMessageBox(const Text, Caption: string; Flags: Cardinal): Integer;
 var
@@ -188,8 +192,54 @@ begin
   end;
 end;
 
-// Ask the user for a password, optionally with confirmation.
-// Den Benutzer nach einem Passwort fragen, optional mit Passwortwiederholung.
+// Verschiebt das Formular bei unveränderter Größe auf den gemeinsamen Dialogbezug.
+// Keine Änderung von Position: Der Aufruf ist damit auch aus OnShow ohne RecreateWnd vorgesehen.
+procedure CenterFormOnApplication(const Dialog: TForm);
+begin
+  // Position changes recreate the window and are forbidden inside OnShow/OnHide.
+  // Im OnShow/OnHide nur verschieben, ohne das Fenster neu zu erzeugen.
+  CenterWindowOnOwner(Dialog.Handle, ActiveFormHandle);
+end;
+
+// Startet die native Ordnerauswahl mit Besitzerhandle und zentriert ihr Fenster bei Aktivierung.
+// Der Hook wird auch bei Abbruch oder Exception wieder entfernt.
+function CenteredFolderDialogExecute(const Dialog: TFileOpenDialog): Boolean;
+var
+  OwnerHandle: HWND;
+begin
+  OwnerHandle := ActiveFormHandle;
+  MessageBoxOwnerHandle := OwnerHandle;
+  MessageBoxHook := SetWindowsHookEx(WH_CBT, @MessageBoxCbtHook, 0, GetCurrentThreadId);
+  try
+    Result := Dialog.Execute(OwnerHandle);
+  finally
+    if MessageBoxHook <> 0 then
+    begin
+      UnhookWindowsHookEx(MessageBoxHook);
+      MessageBoxHook := 0;
+    end;
+    MessageBoxOwnerHandle := 0;
+  end;
+end;
+
+// Zeigt eine Dateisystem-Ordnerauswahl. Directory wird ausschließlich bei erfolgreicher Auswahl überschrieben.
+function CenteredSelectDirectory(const Caption: string; var Directory: string): Boolean;
+var
+  Dialog: TFileOpenDialog;
+begin
+  Dialog := TFileOpenDialog.Create(nil);
+  try
+    Dialog.Title := Caption;
+    Dialog.Options := [fdoPickFolders, fdoPathMustExist, fdoForceFileSystem];
+    if DirectoryExists(Directory) then Dialog.DefaultFolder := Directory;
+    Result := CenteredFolderDialogExecute(Dialog);
+    if Result then Directory := Dialog.FileName;
+  finally
+    Dialog.Free;
+  end;
+end;
+// Fragt ein maskiertes Passwort ab und prüft bei Bedarf die Wiederholung. Leere oder abweichende Angaben führen erneut zur Eingabe.
+// Bei Abbruch bleibt das Ergebnis False; der temporäre Dialog wird in jedem Fall freigegeben.
 function RequestPasswordDialog(const DialogCaption, Prompt: string; const ConfirmPassword: Boolean; out Password: string; const CancelButtonCaption: string): Boolean;
 var
   Dialog: TForm;
@@ -310,8 +360,8 @@ begin
   until False;
 end;
 
-// Ask for a password and allow the user to intentionally skip this step.
-// Ein Passwort abfragen und dem Benutzer das bewusste Ueberspringen erlauben.
+// Unterscheidet Passwortbestätigung, ausdrückliches Überspringen und Abbruch über ModalResult.
+// Die Eingabe bleibt maskiert; ohne Passwort kann nur übersprungen oder abgebrochen werden.
 function RequestPasswordOrSkipDialog(const DialogCaption, Prompt, SkipButtonCaption: string; out Password: string): Integer;
 var
   Dialog: TForm;
