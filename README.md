@@ -108,6 +108,20 @@ Die Anwendung speichert Laufzeiteinstellungen im Benutzerprofil:
 - `update/` - update metadata.
 - `update/` - Update-Metadaten.
 
+## Projektleitung und Mitarbeit / Project leadership and contributions
+
+Die Initiative zu diesem Projekt und die Projektleitung liegen bei Ralf-Peter Kleinert / ComputerRalle. Über die Entwicklungsrichtung, die Aufnahme von Beiträgen und offizielle Veröffentlichungen entscheidet Ralf-Peter Kleinert / ComputerRalle. Schreib- und Administrationsrechte für die offiziellen Repositories werden ausschließlich nach ausdrücklicher Freigabe vergeben.
+
+Beiträge können über Pull Requests vorgeschlagen werden. Größere Änderungen und neue Funktionen sollen vorab mit der Projektleitung abgestimmt werden. Ein eingereichter oder übernommener Beitrag begründet keinen Anspruch auf Schreibrechte oder Mitentscheidung über das offizielle Projekt. Die Urheberrechte der jeweiligen Beitragenden bleiben bestehen.
+
+Diese Regeln betreffen die Verwaltung des offiziellen Projekts. Die durch die GPLv3 gewährten Rechte, einschließlich eigener Änderungen und Abspaltungen, bleiben unberührt.
+
+The project was initiated and is led by Ralf-Peter Kleinert / ComputerRalle. Ralf-Peter Kleinert / ComputerRalle decides on development direction, acceptance of contributions and official releases. Write and administrative access to the official repositories is granted only with explicit approval.
+
+Contributions may be proposed through pull requests. Major changes and new features should be discussed with the project lead beforehand. Submitting or having a contribution accepted does not confer write access or decision-making authority over the official project. Contributors retain copyright in their respective contributions.
+
+These rules govern administration of the official project. Rights granted by the GPLv3, including modifications and forks, remain unaffected.
+
 ## License / Lizenz
 
 Copyright (C) 2026 Ralf-Peter Kleinert / ComputerRalle
