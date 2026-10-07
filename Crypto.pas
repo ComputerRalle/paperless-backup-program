@@ -14,6 +14,7 @@
 // GNU General Public License v3 - see LICENSE.txt in the repository
 // --------------------------------------------------------------
 
+// Passwortbasierte Dateiverschlüsselung über Windows CNG: PBKDF2-HMAC-SHA256, getrennte AES-/HMAC-Schlüssel, AES-256-CBC und authentifizierter Dateikopf.
 unit Crypto;
 
 interface
@@ -63,7 +64,6 @@ const
   DerivedKeySize = AesKeySize + HmacKeySize;
   Pbkdf2Iterations = ULONG(600000);
 
-// Open a Windows CNG algorithm provider.
 // Einen Windows-CNG-Algorithmusanbieter oeffnen.
 function BCryptOpenAlgorithmProvider(
   out phAlgorithm: BCRYPT_ALG_HANDLE;
@@ -71,13 +71,11 @@ function BCryptOpenAlgorithmProvider(
   pszImplementation: PWideChar;
   dwFlags: ULONG): NTSTATUS; stdcall; external 'bcrypt.dll';
 
-// Close a Windows CNG algorithm provider.
-// Einen Windows-CNG-Algorithmusanbieter schliessen.
+// Einen Windows-CNG-Algorithmusanbieter schließen.
 function BCryptCloseAlgorithmProvider(
   hAlgorithm: BCRYPT_ALG_HANDLE;
   dwFlags: ULONG): NTSTATUS; stdcall; external 'bcrypt.dll';
 
-// Fill a buffer with cryptographically secure random bytes.
 // Einen Puffer mit kryptografisch sicheren Zufallsbytes fuellen.
 function BCryptGenRandom(
   hAlgorithm: BCRYPT_ALG_HANDLE;
@@ -85,7 +83,6 @@ function BCryptGenRandom(
   cbBuffer: ULONG;
   dwFlags: ULONG): NTSTATUS; stdcall; external 'bcrypt.dll';
 
-// Read a property from a Windows CNG object.
 // Eine Eigenschaft von einem Windows-CNG-Objekt lesen.
 function BCryptGetProperty(
   hObject: BCRYPT_HANDLE;
@@ -95,7 +92,6 @@ function BCryptGetProperty(
   out pcbResult: ULONG;
   dwFlags: ULONG): NTSTATUS; stdcall; external 'bcrypt.dll';
 
-// Set a property on a Windows CNG object.
 // Eine Eigenschaft an einem Windows-CNG-Objekt setzen.
 function BCryptSetProperty(
   hObject: BCRYPT_HANDLE;
@@ -104,7 +100,6 @@ function BCryptSetProperty(
   cbInput: ULONG;
   dwFlags: ULONG): NTSTATUS; stdcall; external 'bcrypt.dll';
 
-// Derive key material from a password using PBKDF2.
 // Schluesselmaterial aus einem Passwort mit PBKDF2 ableiten.
 function BCryptDeriveKeyPBKDF2(
   hPrf: BCRYPT_ALG_HANDLE;
@@ -117,7 +112,6 @@ function BCryptDeriveKeyPBKDF2(
   cbDerivedKey: ULONG;
   dwFlags: ULONG): NTSTATUS; stdcall; external 'bcrypt.dll';
 
-// Create a symmetric encryption key from raw key bytes.
 // Einen symmetrischen Verschluesselungsschluessel aus Rohbytes erzeugen.
 function BCryptGenerateSymmetricKey(
   hAlgorithm: BCRYPT_ALG_HANDLE;
@@ -128,12 +122,10 @@ function BCryptGenerateSymmetricKey(
   cbSecret: ULONG;
   dwFlags: ULONG): NTSTATUS; stdcall; external 'bcrypt.dll';
 
-// Release a Windows CNG symmetric key handle.
-// Ein Windows-CNG-Handle fuer symmetrische Schluessel freigeben.
+// Ein Windows-CNG-Handle für symmetrische Schlüssel freigeben.
 function BCryptDestroyKey(hKey: BCRYPT_KEY_HANDLE): NTSTATUS; stdcall; external 'bcrypt.dll';
 
-// Encrypt bytes with a Windows CNG symmetric key.
-// Bytes mit einem symmetrischen Windows-CNG-Schluessel verschluesseln.
+// Bytes mit einem symmetrischen Windows-CNG-Schlüssel verschlüsseln.
 function BCryptEncrypt(
   hKey: BCRYPT_KEY_HANDLE;
   pbInput: PByte;
@@ -146,8 +138,7 @@ function BCryptEncrypt(
   out pcbResult: ULONG;
   dwFlags: ULONG): NTSTATUS; stdcall; external 'bcrypt.dll';
 
-// Decrypt bytes with a Windows CNG symmetric key.
-// Bytes mit einem symmetrischen Windows-CNG-Schluessel entschluesseln.
+// Bytes mit einem symmetrischen Windows-CNG-Schlüssel entschlüsseln.
 function BCryptDecrypt(
   hKey: BCRYPT_KEY_HANDLE;
   pbInput: PByte;
@@ -160,8 +151,7 @@ function BCryptDecrypt(
   out pcbResult: ULONG;
   dwFlags: ULONG): NTSTATUS; stdcall; external 'bcrypt.dll';
 
-// Create a Windows CNG hash or HMAC handle.
-// Ein Windows-CNG-Handle fuer Hash oder HMAC erzeugen.
+// Ein Windows-CNG-Handle für Hash oder HMAC erzeugen.
 function BCryptCreateHash(
   hAlgorithm: BCRYPT_ALG_HANDLE;
   out phHash: BCRYPT_HASH_HANDLE;
@@ -171,15 +161,13 @@ function BCryptCreateHash(
   cbSecret: ULONG;
   dwFlags: ULONG): NTSTATUS; stdcall; external 'bcrypt.dll';
 
-// Add data to a Windows CNG hash or HMAC calculation.
-// Daten zu einer Windows-CNG-Hash- oder HMAC-Berechnung hinzufuegen.
+// Daten zu einer Windows-CNG-Hash- oder HMAC-Berechnung hinzufügen.
 function BCryptHashData(
   hHash: BCRYPT_HASH_HANDLE;
   pbInput: PByte;
   cbInput: ULONG;
   dwFlags: ULONG): NTSTATUS; stdcall; external 'bcrypt.dll';
 
-// Finish a Windows CNG hash or HMAC calculation.
 // Eine Windows-CNG-Hash- oder HMAC-Berechnung abschliessen.
 function BCryptFinishHash(
   hHash: BCRYPT_HASH_HANDLE;
@@ -187,7 +175,6 @@ function BCryptFinishHash(
   cbOutput: ULONG;
   dwFlags: ULONG): NTSTATUS; stdcall; external 'bcrypt.dll';
 
-// Release a Windows CNG hash handle.
 // Ein Windows-CNG-Hash-Handle freigeben.
 function BCryptDestroyHash(hHash: BCRYPT_HASH_HANDLE): NTSTATUS; stdcall; external 'bcrypt.dll';
 
@@ -199,8 +186,7 @@ begin
     raise Exception.Create(Operation + ' fehlgeschlagen. NTSTATUS=$' + IntToHex(Cardinal(Status), 8));
 end;
 
-// Return a writable byte pointer or nil for an empty byte array.
-// Einen beschreibbaren Byte-Zeiger oder nil fuer ein leeres Byte-Array zurueckgeben.
+// Einen beschreibbaren Byte-Zeiger oder nil für ein leeres Byte-Array zurückgeben.
 function BytesData(var Bytes: TBytes): PByte;
 begin
   if Length(Bytes) = 0 then
@@ -209,8 +195,7 @@ begin
     Result := PByte(Pointer(Bytes));
 end;
 
-// Return a read-only byte pointer or nil for an empty byte array.
-// Einen lesenden Byte-Zeiger oder nil fuer ein leeres Byte-Array zurueckgeben.
+// Einen lesenden Byte-Zeiger oder nil für ein leeres Byte-Array zurückgeben.
 function ConstBytesData(const Bytes: TBytes): PByte;
 begin
   if Length(Bytes) = 0 then
@@ -219,8 +204,7 @@ begin
     Result := PByte(Pointer(Bytes));
 end;
 
-// Append one byte array to another.
-// Ein Byte-Array an ein anderes anhaengen.
+// Ein Byte-Array an ein anderes anhängen.
 procedure AppendBytes(var Target: TBytes; const Source: TBytes);
 var
   OldLength: Integer;
@@ -231,8 +215,7 @@ begin
     Move(Source[0], Target[OldLength], Length(Source));
 end;
 
-// Append a 32-bit unsigned integer to a byte array.
-// Eine vorzeichenlose 32-Bit-Zahl an ein Byte-Array anhaengen.
+// Eine vorzeichenlose 32-Bit-Zahl an ein Byte-Array anhängen.
 procedure AppendUInt32(var Target: TBytes; const Value: ULONG);
 var
   OldLength: Integer;
@@ -242,7 +225,6 @@ begin
   Move(Value, Target[OldLength], SizeOf(Value));
 end;
 
-// Read a 32-bit unsigned integer from a byte array and advance the offset.
 // Eine vorzeichenlose 32-Bit-Zahl aus einem Byte-Array lesen und den Offset weiterstellen.
 function ReadUInt32(const Source: TBytes; var Offset: Integer): ULONG;
 begin
@@ -252,7 +234,6 @@ begin
   Inc(Offset, SizeOf(Result));
 end;
 
-// Read a fixed number of bytes and advance the offset.
 // Eine feste Anzahl Bytes lesen und den Offset weiterstellen.
 function ReadBytes(const Source: TBytes; var Offset: Integer; const Count: Integer): TBytes;
 begin
@@ -264,8 +245,7 @@ begin
   Inc(Offset, Count);
 end;
 
-// Generate cryptographically secure random bytes through Windows CNG.
-// Kryptografisch sichere Zufallsbytes ueber Windows CNG erzeugen.
+// Kryptografisch sichere Zufallsbytes über Windows CNG erzeugen.
 function RandomBytes(const Count: Integer): TBytes;
 begin
   SetLength(Result, Count);
@@ -273,7 +253,6 @@ begin
     CheckStatus(BCryptGenRandom(nil, BytesData(Result), Count, BCRYPT_USE_SYSTEM_PREFERRED_RNG), 'Zufallsdaten erzeugen');
 end;
 
-// Read an unsigned integer property from a Windows CNG handle.
 // Eine vorzeichenlose Integer-Eigenschaft von einem Windows-CNG-Handle lesen.
 function GetUInt32Property(const Handle: BCRYPT_HANDLE; const PropertyName: string): ULONG;
 var
@@ -285,7 +264,6 @@ begin
     'Crypto-Eigenschaft lesen');
 end;
 
-// Set a string property on a Windows CNG handle.
 // Eine Zeichenketten-Eigenschaft an einem Windows-CNG-Handle setzen.
 procedure SetStringProperty(const Handle: BCRYPT_HANDLE; const PropertyName, Value: string);
 begin
@@ -294,8 +272,8 @@ begin
     'Crypto-Eigenschaft setzen');
 end;
 
-// Derive the AES key and HMAC key from the password and salt.
-// AES-Schluessel und HMAC-Schluessel aus Passwort und Salt ableiten.
+// Leitet mit PBKDF2-HMAC-SHA256 Schlüsselmaterial aus dem UTF-8-Passwort und zufälligem Salt ab.
+// Die Aufrufer trennen daraus AES- und HMAC-Schlüssel; Windows-CNG-Handles werden im finally-Block freigegeben.
 function DeriveKeys(const Password: string; const Salt: TBytes): TBytes;
 var
   Alg: BCRYPT_ALG_HANDLE;
@@ -320,7 +298,6 @@ begin
   end;
 end;
 
-// Copy a checked byte range from a larger byte array.
 // Einen geprueften Bytebereich aus einem groesseren Byte-Array kopieren.
 function SliceBytes(const Source: TBytes; const Offset, Count: Integer): TBytes;
 begin
@@ -331,8 +308,7 @@ begin
     Move(Source[Offset], Result[0], Count);
 end;
 
-// Encrypt or decrypt bytes with AES-256-CBC and block padding.
-// Bytes mit AES-256-CBC und Block-Padding ver- oder entschluesseln.
+// Bytes mit AES-256-CBC und Block-Padding ver- oder entschlüsseln.
 function AesCrypt(const Input, AesKey, Iv: TBytes; const Encrypt: Boolean): TBytes;
 var
   Alg: BCRYPT_ALG_HANDLE;
@@ -373,8 +349,7 @@ begin
   end;
 end;
 
-// Calculate an HMAC-SHA256 over the given data.
-// Einen HMAC-SHA256 ueber die angegebenen Daten berechnen.
+// Einen HMAC-SHA256 über die angegebenen Daten berechnen.
 function HmacSha256(const Data, HmacKey: TBytes): TBytes;
 var
   Alg: BCRYPT_ALG_HANDLE;
@@ -405,8 +380,8 @@ begin
   end;
 end;
 
-// Compare two byte arrays without early exit on differing content.
-// Zwei Byte-Arrays ohne fruehen Abbruch bei unterschiedlichem Inhalt vergleichen.
+// Vergleicht gleich lange Bytefolgen ohne frühen Abbruch bei unterschiedlichem Inhalt.
+// Abweichende Längen werden vorab erkannt; dies ist keine Zusicherung konstanter Laufzeit des gesamten Entschlüsselungsablaufs.
 function SameBytesConstantTime(const Left, Right: TBytes): Boolean;
 var
   I: Integer;
@@ -420,8 +395,8 @@ begin
   Result := Diff = 0;
 end;
 
-// Build the portable encrypted payload with header, parameters, ciphertext, and HMAC.
-// Die portable verschluesselte Nutzlast mit Header, Parametern, Ciphertext und HMAC erstellen.
+// Serialisiert Magic, Version, Iterationen und Längen als Dateikopf, danach Salt, IV, Ciphertext und HMAC.
+// Mit leerem HMAC entsteht exakt der Datenbereich, der vor dem Anhängen des Prüfcodes authentifiziert wird.
 function BuildEncryptedPayload(const Salt, Iv, CipherText, Hmac: TBytes): TBytes;
 var
   MagicBytes: TBytes;
@@ -440,8 +415,7 @@ begin
   AppendBytes(Result, Hmac);
 end;
 
-// Encrypt raw bytes with a password and return the complete portable payload.
-// Rohbytes mit einem Passwort verschluesseln und die vollstaendige portable Nutzlast zurueckgeben.
+// Rohbytes mit einem Passwort verschlüsseln und die vollstaendige portable Nutzlast zurückgeben.
 function EncryptBytesWithPassword(const PlainBytes: TBytes; const Password: string): TBytes;
 var
   Salt, Iv, Keys, AesKey, HmacKey, CipherText, AuthenticatedData, Hmac: TBytes;
@@ -456,13 +430,14 @@ begin
   HmacKey := SliceBytes(Keys, AesKeySize, HmacKeySize);
   CipherText := AesCrypt(PlainBytes, AesKey, Iv, True);
 
+  // Der HMAC umfasst Header, Parameter und Ciphertext, aber nicht den angehängten HMAC selbst.
   AuthenticatedData := BuildEncryptedPayload(Salt, Iv, CipherText, nil);
   Hmac := HmacSha256(AuthenticatedData, HmacKey);
   Result := BuildEncryptedPayload(Salt, Iv, CipherText, Hmac);
 end;
 
-// Verify and decrypt a portable encrypted payload with a password.
-// Eine portable verschluesselte Nutzlast mit einem Passwort pruefen und entschluesseln.
+// Validiert Dateiformat, unterstützte Parameter und exakte Nutzlastlänge und prüft danach den HMAC.
+// Erst bei gültigem HMAC wird AES entschlüsselt; falsches Passwort und veränderte Nutzlast ergeben dieselbe Fehlermeldung.
 function DecryptBytesWithPassword(const EncryptedBytes: TBytes; const Password: string): TBytes;
 var
   Offset: Integer;
@@ -500,37 +475,35 @@ begin
   Keys := DeriveKeys(Password, Salt);
   AesKey := SliceBytes(Keys, 0, AesKeySize);
   HmacKey := SliceBytes(Keys, AesKeySize, HmacKeySize);
+  // Der HMAC umfasst Header, Parameter und Ciphertext, aber nicht den angehängten HMAC selbst.
   AuthenticatedData := BuildEncryptedPayload(Salt, Iv, CipherText, nil);
   CalculatedHmac := HmacSha256(AuthenticatedData, HmacKey);
   if not SameBytesConstantTime(StoredHmac, CalculatedHmac) then
     raise Exception.Create('Passwort falsch oder verschluesselte Daten wurden veraendert.');
 
+  // Keine Entschlüsselung unauthentifizierter Daten: Der HMAC wurde unmittelbar zuvor geprüft.
   Result := AesCrypt(CipherText, AesKey, Iv, False);
 end;
 
-// Encrypt a UTF-8 string with a password.
-// Eine UTF-8-Zeichenkette mit einem Passwort verschluesseln.
+// Eine UTF-8-Zeichenkette mit einem Passwort verschlüsseln.
 function EncryptStringWithPassword(const PlainText, Password: string): TBytes;
 begin
   Result := EncryptBytesWithPassword(TEncoding.UTF8.GetBytes(PlainText), Password);
 end;
 
-// Decrypt bytes and return the plaintext as UTF-8 string.
-// Bytes entschluesseln und den Klartext als UTF-8-Zeichenkette zurueckgeben.
+// Bytes entschlüsseln und den Klartext als UTF-8-Zeichenkette zurückgeben.
 function DecryptStringWithPassword(const EncryptedBytes: TBytes; const Password: string): string;
 begin
   Result := TEncoding.UTF8.GetString(DecryptBytesWithPassword(EncryptedBytes, Password));
 end;
 
-// Encrypt a file with a password and write the encrypted target file.
-// Eine Datei mit einem Passwort verschluesseln und die verschluesselte Zieldatei schreiben.
+// Eine Datei mit einem Passwort verschlüsseln und die verschluesselte Zieldatei schreiben.
 procedure EncryptFileWithPassword(const SourceFile, TargetFile, Password: string);
 begin
   TFile.WriteAllBytes(TargetFile, EncryptBytesWithPassword(TFile.ReadAllBytes(SourceFile), Password));
 end;
 
-// Decrypt a file with a password and write the plaintext target file.
-// Eine Datei mit einem Passwort entschluesseln und die Klartext-Zieldatei schreiben.
+// Eine Datei mit einem Passwort entschlüsseln und die Klartext-Zieldatei schreiben.
 procedure DecryptFileWithPassword(const SourceFile, TargetFile, Password: string);
 begin
   TFile.WriteAllBytes(TargetFile, DecryptBytesWithPassword(TFile.ReadAllBytes(SourceFile), Password));
