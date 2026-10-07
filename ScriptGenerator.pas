@@ -1,4 +1,4 @@
-// --------------------------------------------------------------
+﻿// --------------------------------------------------------------
 // Original author: Ralf-Peter Kleinert - 2025
 // Ursprünglicher Autor: Ralf-Peter Kleinert - 2025
 // Alias: #ComputerRalle / DIGITAL-easy
@@ -15,6 +15,7 @@
 // GNU General Public License v3 - siehe LICENSE.txt im Repository
 // --------------------------------------------------------------
 
+// Erzeugt PowerShell-Skripte für Backup, Restore, Neustart und Aufgabenplanung. Die Cmd-Namen sind historisch; alle erzeugten Dateien sind PS1 für powershell.exe.
 unit ScriptGenerator;
 
 interface
@@ -39,7 +40,7 @@ procedure CreatePlannedBackupCmdScript(
 
 procedure CreateRestoreCmdScript(
   const TargetPath, ComposePath, BackupFolder, DatabaseContainerName: string;
-  const Volumes: TDockerVolumeNames);
+  const Volumes: TDockerVolumeNames; const UseLegacyBackupNames: Boolean = False);
 
 procedure CreateRestartCmdScript(const TargetPath, ComposePath: string);
 procedure CreateDeleteBackupScheduleCmdScript(const TargetPath: string);
@@ -51,15 +52,14 @@ implementation
 uses
   System.Classes, System.SysUtils;
 
-// Quote a value for safe use as a PowerShell single-quoted string.
 // Einen Wert sicher als einfach gequotete PowerShell-Zeichenkette schreiben.
 function PsQuote(const Value: string): string;
 begin
   Result := '''' + StringReplace(Value, '''', '''''', [rfReplaceAll]) + '''';
 end;
 
-// Add shared PowerShell helper functions and error handling defaults.
-// Gemeinsame PowerShell-Hilfsfunktionen und Fehlerbehandlungs-Vorgaben hinzufuegen.
+// Erzeugt gemeinsame PS-Helfer: terminierende PowerShell-Fehler und ausdrückliche Prüfung nativer Docker-Exitcodes.
+// ErrorActionPreference allein erkennt einen fehlgeschlagenen Docker-Prozess nicht zuverlässig.
 procedure AddPsHeader(const Lines: TStringList);
 begin
   Lines.Add('$ErrorActionPreference = ''Stop''');
@@ -77,8 +77,7 @@ begin
   Lines.Add('');
 end;
 
-// Add the common PowerShell catch block and success exit code.
-// Den gemeinsamen PowerShell-catch-Block und den Erfolgs-Exitcode hinzufuegen.
+// Den gemeinsamen PowerShell-catch-Block und den Erfolgs-Exitcode hinzufügen.
 procedure AddPsFooter(const Lines: TStringList);
 begin
   Lines.Add('');
@@ -91,8 +90,8 @@ begin
   Lines.Add('exit 0');
 end;
 
-// Save a generated PowerShell script as UTF-8.
-// Ein erzeugtes PowerShell-Skript als UTF-8 speichern.
+// Speichert PS1 als UTF-8 mit BOM für Windows PowerShell und markiert sie anschließend als versteckt.
+// Eine vorhandene Zieldatei wird vor dem Schreiben von Hidden/ReadOnly befreit und entfernt.
 procedure SavePsScript(const Lines: TStringList; const TargetPath: string);
 var
   Attributes: Integer;
@@ -110,8 +109,7 @@ begin
     FileSetAttr(TargetPath, Attributes or faHidden);
 end;
 
-// Add commands that archive one Docker volume into the backup folder.
-// Befehle hinzufuegen, die ein Docker-Volume in den Backup-Ordner archivieren.
+// Befehle hinzufügen, die ein Docker-Volume in den Backup-Ordner archivieren.
 procedure AddVolumeBackup(const Lines: TStringList; const VolumeName, DisplayName: string);
 begin
   Lines.Add(Format('  Write-Host "Backup: %s"', [DisplayName]));
@@ -120,20 +118,19 @@ begin
   Lines.Add('');
 end;
 
-// Add commands that restore one Docker volume from its archive.
-// Befehle hinzufuegen, die ein Docker-Volume aus seinem Archiv wiederherstellen.
-procedure AddVolumeRestore(const Lines: TStringList; const VolumeName, DisplayName: string);
+// Trennt PG18-Zielvolume und Archivnamen, damit alte Backups ohne Umbenennen der Quelldateien eingespielt werden.
+// Das erzeugte rm -rf /data/* entfernt keine Dotfiles; dieser bestehende Ablauf wird hier nicht geändert.
+procedure AddVolumeRestore(const Lines: TStringList; const VolumeName, DisplayName, ArchiveVolumeName: string);
 begin
   Lines.Add(Format('  Write-Host "Wiederherstellen Volume: %s."', [DisplayName]));
   Lines.Add('  Write-Host "Bitte warten, Wiederherstellung kann sehr lange dauern."');
-  Lines.Add(Format('  $Archive = Join-Path $BackupDir %s', [PsQuote(VolumeName + '.tar.gz')]));
+  Lines.Add(Format('  $Archive = Join-Path $BackupDir %s', [PsQuote(ArchiveVolumeName + '.tar.gz')]));
   Lines.Add('  if (-not (Test-Path -LiteralPath $Archive)) { throw "Fehler: Archiv fehlt: $Archive" }');
-  Lines.Add(Format('  Invoke-DockerStep { docker run --rm -v "%s:/data" -v "$BackupDir`:/backup" alpine sh -c "rm -rf /data/* && tar xzvf /backup/%s.tar.gz -C /data" } "Fehler beim Wiederherstellen von %s"', [VolumeName, VolumeName, DisplayName]));
+  Lines.Add(Format('  Invoke-DockerStep { docker run --rm -v "%s:/data" -v "$BackupDir`:/backup" alpine sh -c "rm -rf /data/* && tar xzvf /backup/%s.tar.gz -C /data" } "Fehler beim Wiederherstellen von %s"', [VolumeName, ArchiveVolumeName, DisplayName]));
   Lines.Add('');
 end;
 
-// Add a best-effort copy step for the encrypted email settings file.
-// Einen Best-Effort-Kopierschritt fuer die verschluesselte E-Mail-Einstellungsdatei hinzufuegen.
+// Einen Best-Effort-Kopierschritt für die verschluesselte E-Mail-Einstellungsdatei hinzufügen.
 procedure AddEncryptedEmailEnvBackup(const Lines: TStringList);
 begin
   Lines.Add('  $EncryptedEmailEnvFile = Join-Path $ComposeDir "email-versand.env.enc"');
@@ -146,8 +143,7 @@ begin
   Lines.Add('');
 end;
 
-// Add a non-fatal Django migration step so scripts can continue if Paperless is not ready yet.
-// Einen nicht-fatalen Django-Migrationsschritt hinzufuegen, damit Skripte weiterlaufen, wenn Paperless noch nicht bereit ist.
+// Einen nicht-fatalen Django-Migrationsschritt hinzufügen, damit Skripte weiterlaufen, wenn Paperless noch nicht bereit ist.
 procedure AddBestEffortDjangoMigration(const Lines: TStringList);
 begin
   Lines.Add('  Write-Host "Aktualisiere Django-Datenbankstruktur..."');
@@ -158,8 +154,7 @@ begin
   Lines.Add('  }');
 end;
 
-// Add cleanup for dangling Docker images left behind by pulls or tag updates.
-// Bereinigung fuer herrenlose Docker-Images hinzufuegen, die durch Pulls oder Tag-Updates entstehen.
+// Erzeugt docker image prune -f für unreferenzierte Images. Die Bereinigung gilt engineweit, nicht nur für dieses Compose-Projekt.
 procedure AddDanglingImagePrune(const Lines: TStringList);
 begin
   Lines.Add('  Write-Host "Nicht mehr verwendete Docker-Images werden geloescht"');
@@ -168,8 +163,8 @@ begin
   Lines.Add('');
 end;
 
-// Create the manual backup PowerShell script.
-// Das PowerShell-Skript fuer ein manuelles Backup erstellen.
+// Erzeugt SQL-Dump vor compose down, danach Archive einschließlich DB-Volume und den anschließenden Neustart.
+// Image-/Secret-Key-Metadaten ergänzt die Delphi-Erfolgsauswertung. Bei Abbruch nach down ist kein garantierter Neustart vorgesehen.
 procedure CreateManualBackupCmdScript(
   const TargetPath, ComposePath, BackupPath, AppDataFolder, DatabaseContainerName: string;
   const Volumes: TDockerVolumeNames);
@@ -220,8 +215,8 @@ begin
   end;
 end;
 
-// Create the planned backup PowerShell script used by Windows Task Scheduler.
-// Das PowerShell-Skript fuer geplante Backups in der Windows-Aufgabenplanung erstellen.
+// Erzeugt das direkt von der Aufgabenplanung ausgeführte Backup: SQL-Dump sowie data-, media- und export-Archive.
+// Kein physisches DB-Volume-Archiv und keine Delphi-Metadatenerzeugung. Retention wird nicht pro PS-Lauf ausgeführt.
 procedure CreatePlannedBackupCmdScript(
   const TargetPath, ComposePath, BackupBasePath, AppDataFolder, DatabaseContainerName: string;
   const Volumes: TDockerVolumeNames);
@@ -260,14 +255,28 @@ begin
   end;
 end;
 
-// Create the restore PowerShell script for a selected backup folder.
-// Das PowerShell-Skript fuer die Wiederherstellung aus einem gewaehlten Backup-Ordner erstellen.
+// Erzeugt Restore für alte oder neue Quelldateinamen; die Ziele bleiben stets die übergebenen PG18-Container und -Volumes.
+// Startet zunächst DB/Broker, wartet auf pg_isready und importiert SQL mit UTF-8-Pipe und ON_ERROR_STOP.
+// Erkennt den Django-Migrationsstand, migriert Legacy-Daten nötigenfalls über Paperless 2.20.15 und danach auf die Zielversion.
+// Paperless startet erst nach erfolgreicher Migration. Das alte physische PostgreSQL-Volume wird nicht zurückgespielt.
 procedure CreateRestoreCmdScript(
   const TargetPath, ComposePath, BackupFolder, DatabaseContainerName: string;
-  const Volumes: TDockerVolumeNames);
+  const Volumes: TDockerVolumeNames; const UseLegacyBackupNames: Boolean);
 var
   Lines: TStringList;
+  ArchiveVolumes: TDockerVolumeNames;
+  DumpContainerName: string;
 begin
+  // Nur die Quellnamen anpassen; Zielcontainer und Zielvolumes bleiben PG18.
+  ArchiveVolumes := Volumes;
+  DumpContainerName := DatabaseContainerName;
+  if UseLegacyBackupNames then
+  begin
+    ArchiveVolumes.Data := StringReplace(Volumes.Data, '-pg18', '', []);
+    ArchiveVolumes.Media := StringReplace(Volumes.Media, '-pg18', '', []);
+    ArchiveVolumes.ExportData := StringReplace(Volumes.ExportData, '-pg18', '', []);
+    DumpContainerName := StringReplace(DatabaseContainerName, '-pg18', '', []);
+  end;
   Lines := TStringList.Create;
   try
     AddPsHeader(Lines);
@@ -275,25 +284,52 @@ begin
     Lines.Add(Format('  $ComposeDir = %s', [PsQuote(ExtractFilePath(ComposePath))]));
     Lines.Add(Format('  $BackupDir = %s', [PsQuote(BackupFolder)]));
     Lines.Add(Format('  $DatabaseContainer = %s', [PsQuote(DatabaseContainerName)]));
+    Lines.Add(Format('  $DumpFile = Join-Path $BackupDir %s', [PsQuote(DumpContainerName + '_backup.sql')]));
+    Lines.Add('  if (-not (Test-Path -LiteralPath $DumpFile)) { throw "Fehler: Datenbank-Dump fehlt: $DumpFile" }');
     Lines.Add('  Set-Location -LiteralPath $ComposeDir');
     Lines.Add('  Write-Host "Stoppe Container..."');
     Lines.Add('  Invoke-DockerStep { docker compose down } "Fehler beim Stoppen der Container."');
-    AddVolumeRestore(Lines, Volumes.Data, 'data');
-    AddVolumeRestore(Lines, Volumes.Media, 'media');
-    AddVolumeRestore(Lines, Volumes.ExportData, 'export');
-    Lines.Add('  Write-Host "Starte Container..."');
-    Lines.Add('  Invoke-DockerStep { docker compose up -d } "Fehler beim Starten der Container."');
-    Lines.Add('  Write-Host "Wiederherstellen der PostgreSQL-Datenbank. Bitte haben Sie Geduld..."');
-    Lines.Add('  Start-Sleep -Seconds 3');
-    AddBestEffortDjangoMigration(Lines);
-    Lines.Add('  Start-Sleep -Seconds 3');
-    Lines.Add('  Write-Host "Wiederherstellen der PostgreSQL-Datenbank (Datenbank wird gestartet) ..."');
-    Lines.Add('  Wait-Countdown 15');
-    Lines.Add('  Invoke-DockerStep { docker exec -i $DatabaseContainer psql -U paperless paperless -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" } "Fehler beim Zuruecksetzen des public Schemas."');
-    Lines.Add('  $DumpFile = Join-Path $BackupDir ($DatabaseContainer + "_backup.sql")');
-    Lines.Add('  if (-not (Test-Path -LiteralPath $DumpFile)) { throw "Fehler: Datenbank-Dump fehlt: $DumpFile" }');
-    Lines.Add('  Get-Content -LiteralPath $DumpFile | docker exec -i $DatabaseContainer psql -U paperless paperless');
+    AddVolumeRestore(Lines, Volumes.Data, 'data', ArchiveVolumes.Data);
+    AddVolumeRestore(Lines, Volumes.Media, 'media', ArchiveVolumes.Media);
+    AddVolumeRestore(Lines, Volumes.ExportData, 'export', ArchiveVolumes.ExportData);
+    Lines.Add(Format('  $ComposeFile = %s', [PsQuote(ComposePath)]));
+    Lines.Add('  Write-Host "Starte Datenbank und Broker; Paperless bleibt bis nach der Migration gestoppt."');
+    Lines.Add('  Invoke-DockerStep { docker compose -f $ComposeFile up -d db broker } "Fehler beim Starten von Datenbank und Broker."');
+    // SQL-Reset/Import erst nach erfolgreicher Bereitschaftsprüfung ausführen.
+    Lines.Add('  $DatabaseReady = $false');
+    Lines.Add('  for ($Attempt = 0; $Attempt -lt 60; $Attempt++) {');
+    Lines.Add('    docker exec $DatabaseContainer pg_isready -U paperless -d paperless | Out-Null');
+    Lines.Add('    if ($LASTEXITCODE -eq 0) { $DatabaseReady = $true; break }');
+    Lines.Add('    Start-Sleep -Seconds 2');
+    Lines.Add('  }');
+    Lines.Add('  if (-not $DatabaseReady) { throw "PostgreSQL wurde innerhalb von 120 Sekunden nicht bereit." }');
+    Lines.Add('  Invoke-DockerStep { docker exec $DatabaseContainer psql -U paperless -d paperless -v ON_ERROR_STOP=1 -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" } "Fehler beim Zuruecksetzen des public Schemas."');
+    Lines.Add('  $OutputEncoding = New-Object System.Text.UTF8Encoding($false)');
+    Lines.Add('  Get-Content -LiteralPath $DumpFile -Encoding UTF8 | docker exec -i $DatabaseContainer psql -U paperless -d paperless -v ON_ERROR_STOP=1');
     Lines.Add('  if ($LASTEXITCODE -ne 0) { throw "Fehler beim Wiederherstellen der PostgreSQL-Datenbank. (ExitCode $LASTEXITCODE)" }');
+    // Dateinamen bestimmen nicht den Migrationsweg: Maßgeblich sind die importierten Django-Marker.
+    Lines.Add('  $MigrationQuery = "SELECT CASE WHEN EXISTS (SELECT 1 FROM django_migrations WHERE app=''documents'' ' +
+      'AND name IN (''1075_workflowaction_order'',''0001_squashed'',''0002_squashed'')) THEN ''ready'' ' +
+      'WHEN EXISTS (SELECT 1 FROM django_migrations WHERE app=''documents'') THEN ''legacy'' ELSE ''unknown'' END;"');
+    Lines.Add('  $MigrationState = docker exec $DatabaseContainer psql -U paperless -d paperless -v ON_ERROR_STOP=1 -At -c $MigrationQuery');
+    Lines.Add('  if ($LASTEXITCODE -ne 0) { throw "Migrationsstand konnte nicht gelesen werden." }');
+    Lines.Add('  $MigrationState = ($MigrationState -join '''').Trim()');
+    Lines.Add('  if ($MigrationState -eq ''legacy'') {');
+    Lines.Add('    Write-Host "Altes Backup: Zwischenmigration mit Paperless 2.20.15 erforderlich."');
+    Lines.Add('    $MigrationOverride = [IO.Path]::GetTempFileName()');
+    Lines.Add('    try {');
+    Lines.Add('      [IO.File]::WriteAllText($MigrationOverride, "services:`n  paperless:`n    image: ghcr.io/paperless-ngx/paperless-ngx:2.20.15`n", [Text.Encoding]::UTF8)');
+    Lines.Add('      Invoke-DockerStep { docker compose -f $ComposeFile -f $MigrationOverride pull paperless } "Paperless 2.20.15 konnte nicht geladen werden."');
+    Lines.Add('      Invoke-DockerStep { docker compose -f $ComposeFile -f $MigrationOverride run --rm --no-deps -T --entrypoint python3 paperless /usr/src/paperless/src/manage.py migrate --noinput } "Zwischenmigration mit Paperless 2.20.15 fehlgeschlagen."');
+    Lines.Add('    } finally { Remove-Item -LiteralPath $MigrationOverride -Force }');
+    Lines.Add('    $MigrationState = docker exec $DatabaseContainer psql -U paperless -d paperless -v ON_ERROR_STOP=1 -At -c $MigrationQuery');
+    Lines.Add('    if ($LASTEXITCODE -ne 0 -or ($MigrationState -join '''').Trim() -ne ''ready'') { throw "Erforderlicher Migrationsstand nicht erreicht. Paperless bleibt gestoppt." }');
+    Lines.Add('  } elseif ($MigrationState -eq ''ready'') {');
+    Lines.Add('    Write-Host "Datenbank bereits kompatibel: Zwischenmigration wird uebersprungen."');
+    Lines.Add('  } else { throw "Unbekannter Paperless-Migrationsstand. Abbruch." }');
+    Lines.Add('  Write-Host "Migration auf die konfigurierte Paperless-Zielversion..."');
+    Lines.Add('  Invoke-DockerStep { docker compose -f $ComposeFile run --rm --no-deps -T --entrypoint python3 paperless /usr/src/paperless/src/manage.py migrate --noinput } "Migration auf die Zielversion fehlgeschlagen."');
+    Lines.Add('  Invoke-DockerStep { docker compose -f $ComposeFile up -d } "Fehler beim Starten der Container."');
     Lines.Add('  Write-Host "Nicht mehr verwendete Volumes werden geloescht"');
     Lines.Add('  Wait-Countdown 3');
     Lines.Add('  Invoke-DockerStep { docker volume prune -f } "Fehler beim Bereinigen nicht verwendeter Volumes."');
@@ -313,8 +349,7 @@ begin
   end;
 end;
 
-// Create the PowerShell script that restarts Paperless and runs maintenance steps.
-// Das PowerShell-Skript erstellen, das Paperless neu startet und Wartungsschritte ausfuehrt.
+// Erzeugt compose down/up und anschließende Wartung. Die enthaltene Django-Migration ist hier weiterhin nichtfatal.
 procedure CreateRestartCmdScript(const TargetPath, ComposePath: string);
 var
   Lines: TStringList;
@@ -346,7 +381,6 @@ begin
   end;
 end;
 
-// Create the PowerShell script that removes the scheduled backup task.
 // Das PowerShell-Skript erstellen, das die geplante Backup-Aufgabe entfernt.
 procedure CreateDeleteBackupScheduleCmdScript(const TargetPath: string);
 var
@@ -366,7 +400,6 @@ begin
   end;
 end;
 
-// Create the PowerShell script that registers or updates the scheduled backup task.
 // Das PowerShell-Skript erstellen, das die geplante Backup-Aufgabe eintraegt oder aktualisiert.
 procedure CreateBackupScheduleCmdScript(
   const TargetPath, BackupScriptPath, Weekdays, Hour, Minute: string);
