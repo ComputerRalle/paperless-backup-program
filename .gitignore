@@ -46,3 +46,4 @@ __recovery/
 
 # Markdown-Dateien / Markdown files
 *.[mM][dD]
+!/README.md
