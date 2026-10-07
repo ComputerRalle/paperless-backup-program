@@ -38,6 +38,10 @@ vorbereiten und ausgewaehlte Docker-Image-Versionen verwalten.
 - Delphi with VCL support for building from source
 - A working Paperless-ngx Docker setup, or Docker Desktop ready for first setup
 
+Die Anwendung verwendet ausschließlich die mit Delphi mitgelieferten VCL-/RTL-Komponenten. Zusätzliche Komponenten oder Komponentenpakete von Drittanbietern müssen nicht installiert werden.
+
+The application uses only VCL/RTL components supplied with Delphi. No additional components or third-party component packages need to be installed.
+
 ## Build / Kompilieren
 
 Open `PaperlessBackupProgramm.dproj` in Delphi and build the Win32 target.
