@@ -15,6 +15,7 @@
 // GNU General Public License v3 - siehe LICENSE.txt im Repository
 // --------------------------------------------------------------
 
+// UTF-8-Anwendungslog als Best-Effort-Ausgabe. Erst nach bestätigtem Installationspfad initialisieren; Schreibfehler dürfen Arbeitsabläufe nicht abbrechen.
 unit AppLogger;
 
 interface
@@ -32,8 +33,8 @@ uses
 var
   LogFilePath: string;
 
-// Append one log line to the configured application log file.
-// Eine Logzeile an die konfigurierte Anwendungs-Logdatei anhaengen.
+// Hängt eine UTF-8-Zeile mit Zeitstempel und Stufe an das Anwendungslog an.
+// Ohne initialisierten Logpfad erfolgt kein Zugriff. Alle Schreibfehler werden abgefangen; sensible Werte darf der Aufrufer nicht übergeben.
 procedure WriteLog(const Level, MessageText: string);
 var
   LogLine: string;
@@ -51,7 +52,6 @@ begin
   end;
 end;
 
-// Initialize logging in the application data folder.
 // Logging im Anwendungsdatenordner initialisieren.
 procedure InitLogger(const AppDataFolder: string);
 begin
@@ -59,21 +59,18 @@ begin
   WriteLog('INFO', 'Logger initialized.');
 end;
 
-// Write an informational log entry.
 // Einen informativen Logeintrag schreiben.
 procedure LogInfo(const MessageText: string);
 begin
   WriteLog('INFO', MessageText);
 end;
 
-// Write a warning log entry.
 // Einen Warnungs-Logeintrag schreiben.
 procedure LogWarning(const MessageText: string);
 begin
   WriteLog('WARN', MessageText);
 end;
 
-// Write an error log entry.
 // Einen Fehler-Logeintrag schreiben.
 procedure LogError(const MessageText: string);
 begin
