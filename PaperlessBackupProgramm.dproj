@@ -55,7 +55,7 @@
         <DCC_F>false</DCC_F>
         <DCC_K>false</DCC_K>
         <DCC_Namespace>System;Xml;Data;Datasnap;Web;Soap;Vcl;Vcl.Imaging;Vcl.Touch;Vcl.Samples;Vcl.Shell;$(DCC_Namespace)</DCC_Namespace>
-        <Icon_MainIcon>$(BDS)\bin\delphi_PROJECTICON.ico</Icon_MainIcon>
+        <Icon_MainIcon>assets\ComputerRalle_2026.ico</Icon_MainIcon>
         <UWP_DelphiLogo44>$(BDS)\bin\Artwork\Windows\UWP\delphi_UwpDefault_44.png</UWP_DelphiLogo44>
         <UWP_DelphiLogo150>$(BDS)\bin\Artwork\Windows\UWP\delphi_UwpDefault_150.png</UWP_DelphiLogo150>
         <SanitizedProjectName>PaperlessBackupProgramm</SanitizedProjectName>
@@ -88,14 +88,13 @@
         <AppDPIAwarenessMode>PerMonitorV2</AppDPIAwarenessMode>
         <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
         <VerInfo_Locale>1031</VerInfo_Locale>
-        <VerInfo_Keys>CompanyName=DIGITAL-easy ComputerRalle;FileDescription=$(MSBuildProjectName);FileVersion=5.26.4.105;InternalName=Paperless Backup Program;LegalCopyright=Copyright (C) 2026 Ralf-Peter Kleinert / ComputerRalle;LegalTrademarks=Paperless Backup Program;OriginalFilename=Paperless Backup Program;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=5.26.4.105;Comments=Kein Gewähr auf Funktionalität. Verwednung auf eigene Gefahr. Entwicklung unter GNU General Public License v3 gestellt.</VerInfo_Keys>
-        <Icon_MainIcon>assets\Paperless_Windows_Backup_Icon5.ico</Icon_MainIcon>
-        <UWP_DelphiLogo44>assets\ralf-fuer-delphi-backup-tool-paperless.png</UWP_DelphiLogo44>
-        <UWP_DelphiLogo150>assets\ralf-fuer-delphi-backup-tool-paperless.png</UWP_DelphiLogo150>
+        <VerInfo_Keys>CompanyName=DIGITAL-easy ComputerRalle;FileDescription=$(MSBuildProjectName);FileVersion=5.26.10.100;InternalName=Paperless Backup Program;LegalCopyright=Copyright (C) 2026 Ralf-Peter Kleinert / ComputerRalle;LegalTrademarks=Paperless Backup Program;OriginalFilename=Paperless Backup Program;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=5.26.10.100;Comments=Kein Gewähr auf Funktionalität. Verwednung auf eigene Gefahr. Entwicklung unter GNU General Public License v3 gestellt.</VerInfo_Keys>
+        <UWP_DelphiLogo44>Social Media Logo ComputerRalle 2026 4000 72.png</UWP_DelphiLogo44>
+        <UWP_DelphiLogo150>Social Media Logo ComputerRalle 2026 4000 72.png</UWP_DelphiLogo150>
         <VerInfo_MajorVer>5</VerInfo_MajorVer>
         <VerInfo_MinorVer>26</VerInfo_MinorVer>
-        <VerInfo_Release>4</VerInfo_Release>
-        <VerInfo_Build>104</VerInfo_Build>
+        <VerInfo_Release>10</VerInfo_Release>
+        <VerInfo_Build>100</VerInfo_Build>
         <DCC_ExeOutput>C:\Users\Ralf-Peter Kleinert\Desktop\Compiler Ausgabe\</DCC_ExeOutput>
         <DCC_Define>Release;$(DCC_Define)</DCC_Define>
     </PropertyGroup>
@@ -168,7 +167,7 @@
                 </Excluded_Packages>
             </Delphi.Personality>
             <Deployment Version="4">
-                <DeployFile LocalName="assets\ralf-fuer-delphi-backup-tool-paperless.png" Configuration="Debug" Class="UWP_DelphiLogo44">
+                <DeployFile LocalName="Social Media Logo ComputerRalle 2026 4000 72.png" Configuration="Debug" Class="UWP_DelphiLogo44">
                     <Platform Name="Win32">
                         <RemoteDir>Assets\</RemoteDir>
                         <RemoteName>Logo44x44.png</RemoteName>

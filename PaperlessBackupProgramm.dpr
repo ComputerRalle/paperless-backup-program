@@ -1,3 +1,4 @@
+// VCL-Einstieg: Hauptformular zuerst erzeugen, damit es Besitzer und Bezugspunkt der Dialoge ist.
 program PaperlessBackupProgramm;
 
 uses
@@ -21,5 +22,6 @@ begin
   TStyleManager.TrySetStyle('Windows11 Modern Dark');
   Application.CreateForm(TMainformFrm, MainformFrm);
   Application.CreateForm(TSetupFrm, SetupFrm);
+  // Die Nachrichtenschleife zeigt das Hauptfenster; dessen OnShow kann Einrichtungsschritte auslösen.
   Application.Run;
 end.
