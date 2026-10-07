@@ -15,6 +15,7 @@
 // GNU General Public License v3 - siehe LICENSE.txt im Repository
 // --------------------------------------------------------------
 
+// Erzeugt ausschließlich YAML-Text und speichert ihn als UTF-8. Auswahl der Einstellungen und Start der fünf Compose-Dienste erfolgen im Setupformular.
 unit DockerComposeGenerator;
 
 interface
@@ -43,10 +44,11 @@ procedure SaveDockerComposeFile(const TargetPath, Content: string);
 implementation
 
 uses
-  System.Classes, System.SysUtils, System.IOUtils;
+  System.Classes, System.SysUtils, System.IOUtils, AppConfig;
 
-// Build the docker-compose.yml content from selected image versions and settings.
-// Den Inhalt der docker-compose.yml aus den gewaehlten Image-Versionen und Einstellungen erstellen.
+// Erzeugt die fünf Dienste broker, db, gotenberg, tika und paperless für das PG18-Projekt.
+// Versionsfelder liefern die ausgewählten Tags; Redis bezeichnet intern den Valkey-Broker. Alpine/Busybox sind keine Dauerdienste.
+// Der Datenbankmount verwendet /var/lib/postgresql für PG18. Ein PostgreSQL-17-Datenverzeichnis darf nicht direkt übernommen werden.
 function CreateDockerComposeContent(
   const Versions: TDockerImageVersions;
   const PaperlessInput: string;
@@ -57,42 +59,32 @@ begin
     '# Compose file for the Paperless Backup Program by ComputerRalle' + sLineBreak +
     '# ralf-peter-kleinert.de' + sLineBreak +
     '# The compose project name is also used as prefix for the Docker volumes' + sLineBreak +
-    'name: paperless-ngx' + sLineBreak + sLineBreak +
+    'name: ' + ComposeProjectName + sLineBreak + sLineBreak +
     'services:' + sLineBreak +
     '  broker:' + sLineBreak +
-    '    image: docker.io/library/redis:'+ Versions.Redis + sLineBreak +
+    '    image: valkey/valkey:'+ Versions.Redis + sLineBreak +
     '    restart: always' + sLineBreak + sLineBreak +
     '  db:' + sLineBreak +
-    '    image: docker.io/library/postgres:' + Versions.Postgres + sLineBreak +
+    '    image: postgres:' + Versions.Postgres + sLineBreak +
     '    restart: always' + sLineBreak +
     '    volumes:' + sLineBreak +
-    '      - db_data:/var/lib/postgresql/data' + sLineBreak +
+    '      - db_data_18:/var/lib/postgresql' + sLineBreak +
     '    environment:' + sLineBreak +
     '      POSTGRES_DB: paperless' + sLineBreak +
     '      POSTGRES_USER: paperless' + sLineBreak +
     '      POSTGRES_PASSWORD: paperless' + sLineBreak + sLineBreak +
+    // Forward selected image tags unchanged; defaults are Gotenberg 8 and Tika latest.
+    // Gewählte Image-Tags unverändert übernehmen; Vorgaben sind Gotenberg 8 und Tika latest.
     '  gotenberg:' + sLineBreak +
     '    image: gotenberg/gotenberg:' + Versions.Gotenberg + sLineBreak +
     '    restart: always' + sLineBreak +
-    '    environment:' + sLineBreak +
-    '      DISABLE_GOOGLE_CHROME: "1"' + sLineBreak + sLineBreak +
+    '    command:' + sLineBreak +
+    '      - "gotenberg"' + sLineBreak +
+    '      - "--chromium-disable-javascript=true"' + sLineBreak +
+    '      - "--chromium-allow-list=file:///tmp/.*"' + sLineBreak + sLineBreak +
     '  tika:' + sLineBreak +
-    '    image: docker.io/apache/tika:' + Versions.Tika + sLineBreak +
+    '    image: apache/tika:' + Versions.Tika + sLineBreak +
     '    restart: always' + sLineBreak + sLineBreak +
-    '# Alpine is used by the backup program for volume archives' + sLineBreak +
-    '  alpine:' + sLineBreak +
-    '    image: alpine:' + Versions.Alpine + sLineBreak +
-    '    container_name: alpine_helper' + sLineBreak +
-    '    entrypoint: sh' + sLineBreak +
-    '    stdin_open: true' + sLineBreak +
-    '    tty: true' + sLineBreak + sLineBreak +
-    '# BusyBox is available as an additional helper environment' + sLineBreak +
-    '  busybox:'   + sLineBreak +
-    '    image: busybox:' + Versions.Busybox + sLineBreak +
-    '    container_name: busybox_helper' + sLineBreak +
-    '    entrypoint: sh' + sLineBreak +
-    '    stdin_open: true' + sLineBreak +
-    '    tty: true' + sLineBreak + sLineBreak +
     '  paperless:' + sLineBreak +
     '    image: ghcr.io/paperless-ngx/paperless-ngx:' + Versions.Paperless + sLineBreak +
     '    depends_on:' + sLineBreak +
@@ -101,7 +93,7 @@ begin
     '      - gotenberg' + sLineBreak +
     '      - tika' + sLineBreak +
     '    ports:' + sLineBreak +
-    '      - "8000:8000"' + sLineBreak +
+    '      - "8001:8000"' + sLineBreak +
     '    restart: always' + sLineBreak +
     '    volumes:' + sLineBreak +
     '      - data:/usr/src/paperless/data' + sLineBreak +
@@ -137,11 +129,10 @@ begin
     '  data:' + sLineBreak +
     '  media:' + sLineBreak +
     '  export:' + sLineBreak +
-    '  db_data:';
+    '  db_data_18:';
 end;
 
-// Save the generated docker-compose.yml content as UTF-8.
-// Den erzeugten docker-compose.yml-Inhalt als UTF-8 speichern.
+// Speichert den fertig erzeugten Compose-Text als UTF-8; startet weder Docker noch eine Installation.
 procedure SaveDockerComposeFile(const TargetPath, Content: string);
 begin
   TFile.WriteAllText(TargetPath, Content, TEncoding.UTF8);
