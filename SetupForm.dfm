@@ -2,8 +2,8 @@ object SetupFrm: TSetupFrm
   Left = 0
   Top = 0
   Caption = 'Willkommen im Paperless Backup Programm'
-  ClientHeight = 611
-  ClientWidth = 844
+  ClientHeight = 612
+  ClientWidth = 848
   Color = clBtnFace
   Constraints.MaxHeight = 650
   Constraints.MaxWidth = 860
@@ -14,7 +14,7 @@ object SetupFrm: TSetupFrm
   Font.Height = -15
   Font.Name = 'Verdana'
   Font.Style = []
-  Position = poDesktopCenter
+  Position = poDesigned
   OnClose = FormClose
   OnCreate = FormCreate
   OnShow = FormShow
@@ -103,10 +103,10 @@ object SetupFrm: TSetupFrm
     OnClick = KeePassXCLblClick
   end
   object WillkommenLbl: TLabel
-    Left = 20
+    Left = 21
     Top = 114
     Width = 413
-    Height = 25
+    Height = 22
     AutoSize = False
     Caption = 'Willkommen im Paperless Backup Programm von: '
     Font.Charset = DEFAULT_CHARSET
@@ -118,7 +118,7 @@ object SetupFrm: TSetupFrm
     Visible = False
   end
   object ComputerRalleLbl: TLabel
-    Left = 435
+    Left = 440
     Top = 114
     Width = 142
     Height = 25
@@ -166,13 +166,14 @@ object SetupFrm: TSetupFrm
   object Panel14: TPanel
     Left = 0
     Top = 0
-    Width = 844
+    Width = 848
     Height = 56
     Align = alTop
     BevelOuter = bvNone
     Color = 3767324
     ParentBackground = False
     TabOrder = 2
+    ExplicitWidth = 844
     object Label8: TLabel
       Left = 20
       Top = 19
@@ -191,9 +192,9 @@ object SetupFrm: TSetupFrm
     object Label9: TLabel
       Left = 579
       Top = 21
-      Width = 249
+      Width = 233
       Height = 16
-      Caption = 'Getestet mit: Paperless-ngx v2.20.15'
+      Caption = 'Getestet mit: Paperless-ngx v3.2.1'
       Color = clWhite
       Font.Charset = DEFAULT_CHARSET
       Font.Color = clWindowText
@@ -206,11 +207,13 @@ object SetupFrm: TSetupFrm
   end
   object StatusBar1: TStatusBar
     Left = 0
-    Top = 592
-    Width = 844
+    Top = 593
+    Width = 848
     Height = 19
     Panels = <>
     SizeGrip = False
+    ExplicitTop = 592
+    ExplicitWidth = 844
   end
   object PaperlessInstallierenBtn: TButton
     Left = 21
@@ -228,29 +231,33 @@ object SetupFrm: TSetupFrm
     Left = 20
     Top = 148
     Width = 820
-    Height = 249
+    Height = 255
     Lines.Strings = (
       'Willkommen im Paperless Backup Programm.'
       ''
       
-        'Dieser Hinweis wird beim ersten Start, und alle 30 Tage angezeig' +
-        't.Wenn Ihr Paperless viele Dokumente '
-      'enth'#228'lt, wird ein Backup entsprechend gro'#223' werden.'
+        'Dieser Hinweis erscheint beim ersten Start und danach beim Progr' +
+        'ammstart alle 30 Tage ab Installation.'
+      
+        'Wenn Ihr Paperless viele Dokumente enth'#228'lt, wird ein Backup ents' +
+        'prechend gro'#223' werden.'
       ''
       
-        'W'#228'hlen Sie als Ziel einen Ordner aus, der '#252'ber gen'#252'gend Speicher' +
-        'platz f'#252'r das Backup verf'#252'gt. Sollten Sie '
+        'Bei der Installation wird der Ordner "Paperless Backup Programm ' +
+        'PG18" in einem selbst gew'#228'hlten Ordner '
       
-        'keinen Zielordner ausw'#228'hlen, wird der Ordner "Paperless Backup" ' +
-        'auf dem Desktop angelegt.'
-      ''
+        'oder wenn kein Ordner gew'#228'hlt wird im Benutzerordner angelegt. D' +
+        'ieser Ordner enth'#228'lt Ihre pers'#246'nlichen '
       
-        'In Ihrem Benutzerordner wird au'#223'erdem ein Ordner namens "Paperle' +
-        'ss Backup Programm" erstellt. Dieser '
+        'Einstellungen. L'#246'schen Sie ihn nicht '#8211' sonst gehen alle Einstell' +
+        'ungen verloren.'
       
-        'Ordner enth'#228'lt Ihre pers'#246'nlichen Einstellungen. L'#246'schen Sie ihn ' +
-        'nicht '#8211' sonst gehen alle Einstellungen '
-      'verloren.'
+        'W'#228'hlen Sie als Backup-Ziel einen Ordner aus, der '#252'ber gen'#252'gend S' +
+        'peicherplatz f'#252'r das Backup verf'#252'gt. '
+      
+        'Sollten Sie keinen Zielordner ausw'#228'hlen, wird der Ordner "Paperl' +
+        'ess Backup PG18" auf dem Desktop '
+      'angelegt.'
       ''
       'Sie verwenden das Programm auf eigene Verantwortung.')
     ReadOnly = True

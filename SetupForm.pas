@@ -15,6 +15,7 @@
 // GNU General Public License v3 - siehe LICENSE.txt im Repository
 // --------------------------------------------------------------
 
+// Hinweisfenster und Ersteinrichtung. Prüft Docker, übernimmt Versions-/Secret-Key-Einstellungen und stößt Compose-Erzeugung und Skriptstart an.
 unit SetupForm;
 
 interface
@@ -96,8 +97,6 @@ implementation
 
 uses
   Mainform, DockerComposeGenerator, AppConfig, AppLogger, AppDialogs;
-
-// Mark a generated setup PowerShell script as hidden.
 // Ein erzeugtes Setup-PowerShell-Skript als versteckt markieren.
 procedure MarkSetupScriptHidden(const ScriptPath: string);
 var
@@ -108,9 +107,7 @@ begin
   if Attributes <> -1 then
     FileSetAttr(ScriptPath, Attributes or faHidden);
 end;
-
-// Delete an existing generated setup script before writing it again.
-// Ein vorhandenes erzeugtes Setup-Skript loeschen, bevor es neu geschrieben wird.
+// Ein vorhandenes erzeugtes Setup-Skript löschen, bevor es neu geschrieben wird.
 procedure PrepareSetupScriptWrite(const ScriptPath: string);
 var
   Attributes: Integer;
@@ -121,8 +118,6 @@ begin
     FileSetAttr(ScriptPath, Attributes and not faHidden and not faReadOnly);
   DeleteFile(ScriptPath);
 end;
-
-// Generate a per-installation Paperless secret key.
 // Einen Paperless Secret Key pro Installation erzeugen.
 function GeneratePaperlessSecretKey: string;
 var
@@ -137,7 +132,6 @@ begin
   end;
   Result := Copy(Result, 1, 64);
 end;
-// Read an existing Paperless secret key from docker-compose.yml.
 // Einen vorhandenen Paperless Secret Key aus docker-compose.yml lesen.
 function ReadPaperlessSecretKeyFromCompose(const ComposePath: string): string;
 const
@@ -167,9 +161,8 @@ begin
     Lines.Free;
   end;
 end;
-// Reuse the saved key, import an existing compose key, migrate a legacy key, or create a new key.
 // Gespeicherten Key verwenden, vorhandenen Compose-Key importieren, Legacy-Key migrieren oder neuen Key erzeugen.
-function GetOrCreatePaperlessSecretKey(const Ini: TIniFile; const ComposePath: string): string;
+function GetOrCreatePaperlessSecretKey(const Ini: TAppSettingsIni; const ComposePath: string): string;
 var
   StoredKey, ComposeKey, LegacyStoredKey: string;
 begin
@@ -218,9 +211,8 @@ begin
   Ini.UpdateFile;
   LogInfo('New Paperless secret key generated and saved.');
 end;
-// Write the active Paperless secret key into the backup folder.
 // Den aktiven Paperless Secret Key in den Backup-Ordner schreiben.
-procedure WritePaperlessSecretKeyBackup(const TargetPath: string; const Ini: TIniFile);
+procedure WritePaperlessSecretKeyBackup(const TargetPath: string; const Ini: TAppSettingsIni);
 var
   ComposePath, SecretKey: string;
   Txt: TStringList;
@@ -246,11 +238,18 @@ begin
     Txt.Free;
   end;
 end;
-// Close the whole program when the notice form was opened as the first form.
-// Das gesamte Programm schließen, wenn das Hinweisfenster als erstes Fenster geöffnet wurde.
+// Beendet die Anwendung beim Schließen eines noch nicht bestätigten Setupfensters.
+// ApplicationClosing stoppt weitere Startschritte sofort, ohne auf die verzögerte Application.Terminated-Auswertung zu warten.
 procedure TSetupFrm.FormClose(Sender: TObject; var Action: TCloseAction);
 begin
-  if TerminateApplicationOnClose = True then Application.Terminate;
+  if TerminateApplicationOnClose then
+  begin
+    ApplicationClosing := True;
+    WantsInstall := False;
+    ShouldOpenPaperless := False;
+    ModalResult := mrCancel;
+    Application.Terminate;
+  end;
 end;
 
 // Make this form appear as a normal window in the Windows taskbar.
@@ -262,10 +261,12 @@ begin
   SetWindowLong(Handle, GWL_HWNDPARENT, 0);
 end;
 
-// Prepare the notice window and show the correct installation state.
-// Das Hinweisfenster vorbereiten und den passenden Installationsstatus anzeigen.
+// Richtet das Hinweisfenster aus und aktualisiert Docker-/Paperless-Zustand sowie passende Bedienelemente.
+// Der Erinnerungsmodus unterdrückt die Installationsaufforderung; Dockerprüfungen bleiben Teil dieses bestehenden Ablaufs.
 procedure TSetupFrm.FormShow(Sender: TObject);
 begin
+  if ApplicationClosing or Application.Terminated then Exit;
+  CenterFormOnApplication(Self);
   TerminateApplicationOnClose := True;
   WantsInstall := False;
   DockerAvailable := False;
@@ -382,23 +383,28 @@ begin
     HinweisVerstandenBtn.SetFocus;
   end;
 end;
-
-// Save that the first notice was accepted and close the setup notice form.
-// Speichern, dass der erste Hinweis akzeptiert wurde, und das Hinweisfenster schliessen.
+// Speichert die Bestätigung und deren Zeitpunkt oder merkt sie bis zur ersten Pfadwahl nur im Arbeitsspeicher.
+// Der Zeitpunkt verhindert Wiederholungen im aktuellen Intervall; er verschiebt das feste Installationsraster nicht.
 procedure TSetupFrm.NoticeAcceptedBtnClick(Sender: TObject);
 var
-  Ini: TIniFile;
+  Ini: TAppSettingsIni;
 begin
+  if ApplicationClosing or Application.Terminated then Exit;
   TerminateApplicationOnClose := False;
+  if not InstallationPathReady then
+  begin
+    NoticeAcceptedBeforeInstallation := True;
+    Close;
+    Exit;
+  end;
   if not DirectoryExists(Mainform.AppDataFolder) then ForceDirectories(AppDataFolder);
   // Store this state in the INI file.
   // Diesen Zustand in der INI-Datei speichern.
-  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + SettingsFileName);
+  Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + SettingsFileName);
    try
     try
       Ini.WriteString('Einrichtung', 'Hinweis verstanden', 'Ja');
-      // Remember the exact confirmation time for the 30-day reminder cycle.
-      // Den genauen Bestaetigungszeitpunkt fuer den 30-Tage-Hinweis merken.
+      // Bestätigung im aktuellen 30-Tage-Intervall merken; der Installationstag bleibt unverändert.
       Ini.WriteDateTime('Einrichtung', 'Hinweis zuletzt verstanden', Now);
       Ini.UpdateFile;
     except
@@ -410,14 +416,16 @@ begin
    Close;
 end;
 
-// Start the first Paperless setup after the user confirms it.
 // Die erste Paperless-Einrichtung starten, nachdem der Benutzer bestätigt hat.
 procedure TSetupFrm.InstallPaperlessBtnClick(Sender: TObject);
 var
   InstallErfolgreich: Boolean;
   ExitCode: Cardinal;
-  Ini:TiniFile;
+  Ini:TAppSettingsIni;
 begin
+  if ApplicationClosing or Application.Terminated then Exit;
+  WantsInstall := False;
+  if not MainformFrm.SelectInstallationFolder then Exit;
   WantsInstall := True;
   BorderIcons := [];
   BorderStyle := bsSingle;
@@ -452,6 +460,7 @@ begin
     ShouldOpenPaperless := False;
     Exit;
   end;
+  if ApplicationClosing or Application.Terminated then Exit;
   IsPaperlessInstallation := True;
   ShouldOpenPaperless := True;
   PaperlessInstallierenBtn.Enabled := False;
@@ -461,7 +470,7 @@ begin
 
   // Create the desktop consume folder if it does not exist.
   // Den Consume-Ordner auf dem Desktop erstellen, falls er nicht existiert.
-  PaperlessInput := IncludeTrailingPathDelimiter(GetEnvironmentVariable('USERPROFILE')) + 'Desktop\Paperless-Input';
+  PaperlessInput := IncludeTrailingPathDelimiter(GetEnvironmentVariable('USERPROFILE')) + 'Desktop\' + PaperlessInputFolderName;
   if not DirectoryExists(PaperlessInput) then ForceDirectories(PaperlessInput);
 
   // Step 3: Check whether Docker is working.
@@ -491,7 +500,8 @@ begin
     DockerAvailable := True;
   end;
 
-  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + SettingsFileName);
+  if ApplicationClosing or Application.Terminated then Exit;
+  Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + SettingsFileName);
   try
      try
       // Save the installation state before running the script.
@@ -511,7 +521,6 @@ begin
   BorderIcons := [biSystemMenu, biMinimize, biMaximize];
   BorderStyle := bsSizeable;
 end;
-// Cancel a running first installation and remove images already pulled by compose.
 // Eine laufende Erstinstallation abbrechen und bereits von Compose geladene Images entfernen.
 procedure TSetupFrm.InstallationCancelBtnClick(Sender: TObject);
 begin
@@ -520,11 +529,9 @@ begin
   InstallLbl.Caption := 'Installation wird abgebrochen. Bitte warten ...';
   ProgressBar2.Visible := True;
   MainformFrm.CancelPaperlessInstallation;
-
   HinweisVerstandenBtn.Enabled := False;
 end;
 
-// Check whether Docker can answer "docker info".
 // Prüfen, ob Docker auf "docker info" antworten kann.
 procedure TSetupFrm.CheckDockerAvailable;
 var
@@ -559,7 +566,6 @@ begin
 
 end;
 
-// Start an external command, wait for it, and return its exit code.
 // Einen externen Befehl starten, darauf warten und den Exit-Code zurückgeben.
 function TSetupFrm.RunCommand(const ExeName, Params: string; out ExitCode: Cardinal): Boolean;
 const
@@ -630,7 +636,6 @@ begin
   end;
 end;
 
-// Check whether Windows can find docker.exe through the PATH variable.
 // Prüfen, ob Windows docker.exe über die PATH-Variable finden kann.
 function TSetupFrm.IsDockerInPath: Boolean;
 var
@@ -643,14 +648,12 @@ begin
 end;
 
 
-// Open the KeePassXC help video.
 // Das KeePassXC-Hilfevideo öffnen.
 procedure TSetupFrm.KeePassXCLblClick(Sender: TObject);
 begin
   ShellExecute(0, 'open', KeePassHelpVideoUrl, nil, nil, SW_SHOWNORMAL);
 end;
 
-// Open either Paperless or Docker, depending on the current form state.
 // Je nach aktuellem Formularzustand Paperless oder Docker öffnen.
 procedure TSetupFrm.LinkClickLblClick(Sender: TObject);
 begin
@@ -661,27 +664,27 @@ begin
   ShellExecute(0, 'open', DockerDesktopUrl, nil, nil, SW_SHOWNORMAL);
 end;
 
-// Open the ComputerRalle website.
 // Die ComputerRalle-Webseite öffnen.
 procedure TSetupFrm.ComputerRalleLblClick(Sender: TObject);
 begin
-  ShellExecute(0, 'open', ComputerRalleUrl, nil, nil, SW_SHOWNORMAL);
+  ShellExecute(0, 'open', ComputerRalleSetupUrl, nil, nil, SW_SHOWNORMAL);
 end;
 
-// Create docker-compose.yml and, depending on the mode, start or restart Paperless.
-// docker-compose.yml erstellen und Paperless je nach Modus starten oder neu starten.
+// Übernimmt INI-/UI-Versionen und Secret Key und lässt den separaten Compose-Generator das YAML schreiben.
+// Je nach Modus entsteht das Installations-/Updateskript oder ein Neustart. Diese Methode kann echte Docker-Aktionen anstoßen.
 procedure TSetupFrm.CreateDockerComposeFile;
 var
   ComposePath, ComposeContent: string;
   PaperlessSecretKey: string;
   CmdFile: TStringList;
-  Ini: TIniFile;
+  Ini: TAppSettingsIni;
   Versions: TDockerImageVersions;
 begin
+  if ApplicationClosing or Application.Terminated then Exit;
   ComposePath := IncludeTrailingPathDelimiter(AppDataFolder) + DockerComposeFileName;
   // Read image versions from the INI file and apply defaults when empty.
   // Image-Versionen aus der INI-Datei lesen und bei leeren Werten Standardwerte verwenden.
-  Ini := TIniFile.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
+  Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
     MainformFrm.redis_version_edit.Text := Ini.ReadString(IniSectionVersions, IniKeyRedisVersion, '');
     if MainformFrm.redis_version_edit.Text = '' then
@@ -695,6 +698,8 @@ begin
     if MainformFrm.postgres_version_edit.Text = '' then
       MainformFrm.postgres_version_edit.Text := DefaultPostgresVersion;
 
+    // Compose respects custom tags; missing values use Gotenberg 8 and Tika latest.
+    // Compose berücksichtigt eigene Tags; fehlende Werte erhalten Gotenberg 8 und Tika latest.
     MainformFrm.gotenberg_version_edit.Text := Ini.ReadString(IniSectionVersions, IniKeyGotenbergVersion, '');
     if MainformFrm.gotenberg_version_edit.Text = '' then
       MainformFrm.gotenberg_version_edit.Text := DefaultGotenbergVersion;
@@ -751,20 +756,57 @@ begin
     CmdFile := TStringList.Create;
     try
       CmdFile.Add('$ErrorActionPreference = ''Stop''');
+      CmdFile.Add('');
       CmdFile.Add('try {');
-      CmdFile.Add('  Set-Location -LiteralPath ''' + StringReplace(AppDataFolder, '''', '''''', [rfReplaceAll]) + '''');
-      CmdFile.Add('  docker compose --progress plain -f docker-compose.yml up -d');
-      CmdFile.Add('  if ($LASTEXITCODE -ne 0) { throw "Fehler beim Starten von Docker Compose. (ExitCode $LASTEXITCODE)" }');
-      CmdFile.Add('  Write-Host "Nicht mehr verwendete Docker-Images werden geloescht"');
-      CmdFile.Add('  docker image prune -f');
-      CmdFile.Add('  if ($LASTEXITCODE -ne 0) { throw "Fehler beim Bereinigen nicht verwendeter Docker-Images. (ExitCode $LASTEXITCODE)" }');
-      CmdFile.Add('  Write-Host "Systeme starten. Fenster wird gleich geschlossen ..."');
-      CmdFile.Add('  for ($i = 10; $i -ge 1; $i--) { Write-Host $i; Start-Sleep -Seconds 1 }');
+      CmdFile.Add('    $ComposeFile = Join-Path $PSScriptRoot ''docker-compose.yml''');
+      CmdFile.Add('    $EmailFile = Join-Path $PSScriptRoot ''email-versand.env''');
+      CmdFile.Add('');
+      CmdFile.Add('    $null = Get-Command docker -CommandType Application -ErrorAction Stop');
+      CmdFile.Add('');
+      CmdFile.Add('    foreach ($File in @($ComposeFile, $EmailFile)) {');
+      CmdFile.Add('        if (-not (Test-Path -LiteralPath $File -PathType Leaf)) {');
+      CmdFile.Add('            throw "Benötigte Datei fehlt: $File"');
+      CmdFile.Add('        }');
+      CmdFile.Add('    }');
+      CmdFile.Add('');
+      CmdFile.Add('    Set-Location -LiteralPath $PSScriptRoot');
+      CmdFile.Add('');
+      CmdFile.Add('    docker info | Out-Null');
+      CmdFile.Add('    if ($LASTEXITCODE -ne 0) {');
+      CmdFile.Add('        throw ''Docker Engine ist nicht erreichbar.''');
+      CmdFile.Add('    }');
+      CmdFile.Add('');
+      CmdFile.Add('    docker compose version');
+      CmdFile.Add('    if ($LASTEXITCODE -ne 0) {');
+      CmdFile.Add('        throw ''Docker Compose ist nicht verfügbar.''');
+      CmdFile.Add('    }');
+      CmdFile.Add('');
+      CmdFile.Add('    docker compose -f $ComposeFile config --quiet');
+      CmdFile.Add('    if ($LASTEXITCODE -ne 0) {');
+      CmdFile.Add('        throw ''Die Compose-Konfiguration ist ungültig.''');
+      CmdFile.Add('    }');
+      CmdFile.Add('');
+      CmdFile.Add('    docker compose --progress plain -f $ComposeFile up -d');
+      CmdFile.Add('    if ($LASTEXITCODE -ne 0) {');
+      CmdFile.Add('        throw "Containerstart fehlgeschlagen. ExitCode: $LASTEXITCODE"');
+      CmdFile.Add('    }');
+      CmdFile.Add('');
+      CmdFile.Add('    try {');
+      CmdFile.Add('        docker image prune -f');
+      CmdFile.Add('        if ($LASTEXITCODE -ne 0) {');
+      CmdFile.Add('            Write-Warning "Image-Bereinigung fehlgeschlagen: $LASTEXITCODE"');
+      CmdFile.Add('        }');
+      CmdFile.Add('    } catch {');
+      CmdFile.Add('        Write-Warning $_.Exception.Message');
+      CmdFile.Add('    }');
+      CmdFile.Add('');
+      CmdFile.Add('    Write-Host ''Container gestartet. Paperless benötigt möglicherweise noch Zeit.''');
+      CmdFile.Add('    Write-Host ''Adresse: http://localhost:8001''');
+      CmdFile.Add('    exit 0');
       CmdFile.Add('} catch {');
-      CmdFile.Add('  Write-Host $_.Exception.Message -ForegroundColor Red');
-      CmdFile.Add('  exit 1');
+      CmdFile.Add('    Write-Host $_.Exception.Message -ForegroundColor Red');
+      CmdFile.Add('    exit 1');
       CmdFile.Add('}');
-      CmdFile.Add('exit 0');
       CmdFile.SaveToFile(CmdTargetPath, TEncoding.UTF8);
       MarkSetupScriptHidden(CmdTargetPath);
     finally
@@ -861,8 +903,8 @@ begin
   end;
 end;
 
-// Detect whether a Paperless container exists and whether it is running.
-// Erkennen, ob ein Paperless-Container existiert und ob er läuft.
+// Ermittelt Existenz und Laufstatus über Compose-Projekt- und Service-Labels.
+// Andere Paperless-Installationen auf derselben Docker Engine zählen damit nicht als PG18-Installation.
 procedure TSetupFrm.CheckPaperlessContainerStatus;
 var
   ComposePath: string;
@@ -875,18 +917,16 @@ begin
 
   // Check whether docker-compose.yml exists.
   // Prüfen, ob docker-compose.yml existiert.
-  ComposePath := IncludeTrailingPathDelimiter(GetEnvironmentVariable('USERPROFILE')) +
-                 'Paperless Backup Programm\docker-compose.yml';
+  ComposePath := IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + DockerComposeFileName;
   if not FileExists(ComposePath) then
     Exit;
 
   Output := TStringList.Create;
   try
-    // Check whether a container with "paperless" in its name exists.
-    // Prüfen, ob ein Container mit "paperless" im Namen existiert.
+    // Ausschließlich den Paperless-Dienst des PG18-Composeprojekts berücksichtigen.
     if RunCommandAndCapture(
          'docker',
-         ['ps', '-a', '--filter', 'name=paperless', '--format', '{{.Names}}'],
+         ['ps', '-a', '--filter', 'label=com.docker.compose.project=' + ComposeProjectName, '--filter', 'label=com.docker.compose.service=paperless', '--format', '{{.Names}}'],
          Output
        ) and (Trim(Output.Text) <> '') then
       PaperlessContainerExists := True;
@@ -896,7 +936,7 @@ begin
     Output.Clear;
     if RunCommandAndCapture(
          'docker',
-         ['ps', '--filter', 'name=paperless', '--filter', 'status=running', '--format', '{{.Names}}'],
+         ['ps', '--filter', 'label=com.docker.compose.project=' + ComposeProjectName, '--filter', 'label=com.docker.compose.service=paperless', '--filter', 'status=running', '--format', '{{.Names}}'],
          Output
        ) and (Trim(Output.Text) <> '') then
       PaperlessContainerRunning := True;
@@ -905,8 +945,8 @@ begin
   end;
 end;
 
-// Start a command hidden and capture its console output.
-// Einen Befehl versteckt starten und seine Konsolenausgabe erfassen.
+// Startet einen Prozess verdeckt und sammelt dessen stdout/stderr gemeinsam über eine Pipe.
+// True bestätigt abgeschlossene Ausgabeerfassung; der native Exitcode wird hier nicht ausgewertet.
 function TSetupFrm.RunCommandAndCapture(const ExeName: string; const Params: array of string; Output: TStrings): Boolean;
 const
   CommandTimeoutMs = 120000;
@@ -1012,11 +1052,10 @@ begin
   end;
 end;
 
-// Write the Docker image versions that were used for a backup.
 // Die Docker-Image-Versionen schreiben, die für ein Backup verwendet wurden.
 procedure TSetupFrm.WriteImageVersion(const TargetPath: string);
 var
-  Ini: TIniFile;
+  Ini: TAppSettingsIni;
   Txt: TStringList;
   Keys, Versions: array[0..6] of string;
   I: Integer;
@@ -1034,12 +1073,12 @@ begin
   IniPath := IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + SettingsFileName;
   if not FileExists(IniPath) then Exit;
 
-  Ini := TIniFile.Create(IniPath);
+  Ini := TAppSettingsIni.Create(IniPath);
   Txt := TStringList.Create;
   try
     Keys[0] := 'Paperless-Version';
     Keys[1] := 'Postgres-Version';
-    Keys[2] := 'Redis-Version';
+    Keys[2] := IniKeyRedisVersion;
     Keys[3] := 'Gotenberg-Version';
     Keys[4] := 'Tika-Version';
     Keys[5] := 'Alpine-Version';
