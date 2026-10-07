@@ -1,18 +1,24 @@
 ﻿// --------------------------------------------------------------
-// Original author: Ralf-Peter Kleinert - 2025
-// Ursprünglicher Autor: Ralf-Peter Kleinert - 2025
-// Alias: #ComputerRalle / DIGITAL-easy
-// Künstlername: #ComputerRalle / DIGITAL-easy
-// Project: Paperless Backup Program / Paperless Backup Programm
-// Projekt: Paperless Backup Program / Paperless Backup Programm
+// Paperless Backup Program / Paperless Backup Programm
+//
+// Copyright (C) 2025-2026 Ralf-Peter Kleinert (#ComputerRalle / DIGITAL-easy)
 // Website: https://ralf-peter-kleinert.de
-// Webseite: https://ralf-peter-kleinert.de
-// YouTube: https://www.youtube.com/@ralf-peter-kleinert
-// YouTube-Kanal: https://www.youtube.com/@ralf-peter-kleinert
-// Copyright (C) 2026 Ralf-Peter Kleinert / ComputerRalle
-// Urheberrecht (C) 2026 Ralf-Peter Kleinert / ComputerRalle
-// GNU General Public License v3 - see LICENSE.txt in the repository
-// GNU General Public License v3 - siehe LICENSE.txt im Repository
+// Website: https://computerralle.de
+// YouTube: https://www.youtube.com/@ComputerRalle
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see <https://www.fsf.org/licenses/>
+// or check LICENSE.txt in this repository.
 // --------------------------------------------------------------
 
 // Erzeugt PowerShell-Skripte für Backup, Restore, Neustart und Aufgabenplanung. Die Cmd-Namen sind historisch; alle erzeugten Dateien sind PS1 für powershell.exe.
