@@ -5,8 +5,8 @@
         <FrameworkType>VCL</FrameworkType>
         <Base>True</Base>
         <Config Condition="'$(Config)'==''">Debug</Config>
-        <Platform Condition="'$(Platform)'==''">Win32</Platform>
-        <TargetedPlatforms>1</TargetedPlatforms>
+        <Platform Condition="'$(Platform)'==''">Win64</Platform>
+        <TargetedPlatforms>3</TargetedPlatforms>
         <AppType>Application</AppType>
         <MainSource>PaperlessBackupProgramm.dpr</MainSource>
         <ProjectName Condition="'$(ProjectName)'==''">PaperlessBackupProgramm</ProjectName>
@@ -35,6 +35,12 @@
         <Cfg_1>true</Cfg_1>
         <Base>true</Base>
     </PropertyGroup>
+    <PropertyGroup Condition="('$(Platform)'=='Win64' and '$(Cfg_1)'=='true') or '$(Cfg_1_Win64)'!=''">
+        <Cfg_1_Win64>true</Cfg_1_Win64>
+        <CfgParent>Cfg_1</CfgParent>
+        <Cfg_1>true</Cfg_1>
+        <Base>true</Base>
+    </PropertyGroup>
     <PropertyGroup Condition="'$(Config)'=='Release' or '$(Cfg_2)'!=''">
         <Cfg_2>true</Cfg_2>
         <CfgParent>Base</CfgParent>
@@ -42,6 +48,12 @@
     </PropertyGroup>
     <PropertyGroup Condition="('$(Platform)'=='Win32' and '$(Cfg_2)'=='true') or '$(Cfg_2_Win32)'!=''">
         <Cfg_2_Win32>true</Cfg_2_Win32>
+        <CfgParent>Cfg_2</CfgParent>
+        <Cfg_2>true</Cfg_2>
+        <Base>true</Base>
+    </PropertyGroup>
+    <PropertyGroup Condition="('$(Platform)'=='Win64' and '$(Cfg_2)'=='true') or '$(Cfg_2_Win64)'!=''">
+        <Cfg_2_Win64>true</Cfg_2_Win64>
         <CfgParent>Cfg_2</CfgParent>
         <Cfg_2>true</Cfg_2>
         <Base>true</Base>
@@ -72,6 +84,12 @@
     </PropertyGroup>
     <PropertyGroup Condition="'$(Base_Win64)'!=''">
         <DCC_UsePackage>RaizeComponentsVcl;vclwinx;DataSnapServer;fmx;lmdrtbar;vclie;DbxCommonDriver;bindengine;IndyIPCommon;VCLRESTComponents;DBXMSSQLDriver;FireDACCommonODBC;emsclient;appanalytics;IndyProtocols;vclx;dbxcds;vcledge;ngvalidators;FmxTeeUI;EasyListviewD;DBXFirebirdDriver;vclribbon;FireDACSqliteDriver;DbxClientDriver;lmdrtdesign;lmdrtsearchdb;soapmidas;TeeUI;dbexpress;Python;PowerPDFDR;lmdrtchart;inet;P4DEnvironmentProject;lmdrtrtfdb;vcltouch;PythonVcl;AsyncProDR;ipstudiowin;lmdrtplugin;FireDACDBXDriver;fmxdae;lmdrtsearch;SysToolsDR;CustomIPTransport;FireDACMSSQLDriver;lmdrtthemes;EssentialsDR;lmdrtide;lmdrtfx;IndySystem;lmdrtl;lmdrtinspector;ibxbindings;lmdrtshell;vclFireDAC;FireDACCommon;DataSnapServerMidas;FireDACODBCDriver;emsserverresource;bindcompdbx;lmdrtdocking;lmdrtdialog;rtl;FireDACMySQLDriver;DBXSqliteDriver;TMSVCLUIPackPkgExDXE14;VirtualTreesDR;DBXSybaseASEDriver;lmdrteldb;vclimg;DataSnapFireDAC;inetdbxpress;FireDAC;TMSVCLUIPackPkgXlsDXE14;xmlrtl;P4DEnvironment;ibxpress;dsnap;lmdrtprint;FireDACDb2Driver;DBXOracleDriver;DBXInformixDriver;vclib;fmxobj;bindcompvclsmp;DataSnapNativeClient;lmdrtscript;DatasnapConnectorsFreePascal;SVGIconImageList;adsd11Alexandriastudio;QRWRunD11;lmdrtgrid;emshosting;lmdrtscriptimp;FireDACCommonDriver;RadiantShapesFmx_Design;MPCommonLibD;IndyIPClient;bindcompvclwinx;emsedge;bindcompfmx;SysToolsDBDR;TMSVCLUIPackPkgDXE14;inetdb;GraphQLHttp;lmdrtsys;ngcommon;ibmonitor;nghtml;FireDACASADriver;Tee;SVGIconImageListFMX;vclactnband;fmxFireDAC;lmdrtspell;officeXPrt;FireDACInfxDriver;lmdrtelcore;BatLibraryFMX;DBXMySQLDriver;P4DPyPackage;VclSmp;DataSnapCommon;BatControls;AWSSDK;fcstudiowin;fmxase;DBXOdbcDriver;dbrtl;FireDACOracleDriver;TeeDB;GraphQLCore;FireDACMSAccDriver;DataSnapIndy10ServerTransport;lmdrtcore;lmdrtstorage;DataSnapConnectors;vcldsnap;DBXInterBaseDriver;FireDACMongoDBDriver;ngvldtctrls;PngComponentsD;RadiantShapesFmx;FireDACTDataDriver;ipstudiowinclient;lmdrtrtf;lmdrtsyntax;vcldb;ngdragdrop;ngdialogs;StyledComponents;lz;bindcomp;lmdrtweb;lmdrtelpro;IndyCore;RESTBackendComponents;lmdrttools;AWSSDKFMX;FireDACADSDriver;RaizeComponentsVclDb;AWSSDKVCL;RESTComponents;IndyIPServer;vcl;dsnapxml;adortl;dsnapcon;DataSnapClient;DataSnapProviderClient;DBXDb2Driver;lmdrttoolsdb;QRDBASE_DXE11W64;emsclientfiredac;FireDACPgDriver;FireDACDSDriver;tethering;bindcompvcl;lmdrtchartdb;CloudService;DBXSybaseASADriver;lmdrtrtlx;FMXTee;PythonFmx;soaprtl;soapserver;FireDACIBDriver;$(DCC_UsePackage)</DCC_UsePackage>
+        <DCC_Namespace>Winapi;System.Win;Data.Win;Datasnap.Win;Web.Win;Soap.Win;Xml.Win;$(DCC_Namespace)</DCC_Namespace>
+        <BT_BuildType>Debug</BT_BuildType>
+        <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
+        <VerInfo_Keys>CompanyName=;FileDescription=$(MSBuildProjectName);FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
+        <VerInfo_Locale>1033</VerInfo_Locale>
+        <Manifest_File>$(BDS)\bin\default_app.manifest</Manifest_File>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_1)'!=''">
         <DCC_Define>DEBUG;$(DCC_Define)</DCC_Define>
@@ -98,6 +116,16 @@
         <DCC_ExeOutput>C:\Users\konta\Documents\ComputerRalle Entwicklungen\paperless-backup-program\Win32\Debug\</DCC_ExeOutput>
         <DCC_Define>Release;$(DCC_Define)</DCC_Define>
     </PropertyGroup>
+    <PropertyGroup Condition="'$(Cfg_1_Win64)'!=''">
+        <AppDPIAwarenessMode>PerMonitorV2</AppDPIAwarenessMode>
+        <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
+        <VerInfo_MajorVer>5</VerInfo_MajorVer>
+        <VerInfo_MinorVer>26</VerInfo_MinorVer>
+        <VerInfo_Release>10</VerInfo_Release>
+        <VerInfo_Build>102</VerInfo_Build>
+        <VerInfo_Locale>1031</VerInfo_Locale>
+        <VerInfo_Keys>CompanyName=DIGITAL-easy ComputerRalle;FileDescription=$(MSBuildProjectName);FileVersion=5.26.10.102;InternalName=Paperless Backup Programm;LegalCopyright=Copyright (C) 2026 Ralf-Peter Kleinert / ComputerRalle;LegalTrademarks=Paperless Backup Programm;OriginalFilename=Paperless Backup Program;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=5.26.10.102;Comments=Kein Gewähr auf Funktionalität. Verwednung auf eigene Gefahr. Entwicklung unter GNU General Public License v3 gestellt.</VerInfo_Keys>
+    </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_2)'!=''">
         <DCC_LocalDebugSymbols>false</DCC_LocalDebugSymbols>
         <DCC_Define>RELEASE;$(DCC_Define)</DCC_Define>
@@ -113,6 +141,9 @@
         <VerInfo_Build>104</VerInfo_Build>
         <VerInfo_Locale>1031</VerInfo_Locale>
         <VerInfo_Keys>CompanyName=Ralf-Peter Kleinert DIGITAL-easy ComputerRalle;FileDescription=$(MSBuildProjectName);FileVersion=4.25.10.104;InternalName=PaperlessBackupProgram;LegalCopyright=Copyright (C) 2026 Ralf-Peter Kleinert / ComputerRalle;LegalTrademarks=Paperless Backup Programm;OriginalFilename=Paperless Backup Program;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=4.25.10.100;Comments=</VerInfo_Keys>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Cfg_2_Win64)'!=''">
+        <AppDPIAwarenessMode>PerMonitorV2</AppDPIAwarenessMode>
     </PropertyGroup>
     <ItemGroup>
         <DelphiCompile Include="$(MainSource)">
@@ -152,10 +183,7 @@
                 <Source>
                     <Source Name="MainSource">PaperlessBackupProgramm.dpr</Source>
                 </Source>
-                <Excluded_Packages>
-                    <Excluded_Packages Name="$(BDSBIN)\dcloffice2k370.bpl">Microsoft Office 2000 Beispiele für gekapselte Komponenten für Automatisierungsserver</Excluded_Packages>
-                    <Excluded_Packages Name="$(BDSBIN)\dclofficexp370.bpl">Microsoft Office XP Beispiele für gekapselte Komponenten für Automation Server</Excluded_Packages>
-                </Excluded_Packages>
+                <Excluded_Packages/>
             </Delphi.Personality>
             <Deployment Version="5">
                 <DeployFile LocalName="Win32\Debug\PaperlessBackupProgramm.exe" Configuration="Debug" Class="ProjectOutput"/>
@@ -1113,7 +1141,7 @@
             </Deployment>
             <Platforms>
                 <Platform value="Win32">True</Platform>
-                <Platform value="Win64">False</Platform>
+                <Platform value="Win64">True</Platform>
             </Platforms>
             <ModelSupport>False</ModelSupport>
         </BorlandProject>
