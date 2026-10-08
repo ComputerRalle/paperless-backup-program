@@ -683,7 +683,7 @@ end;
 // Je nach Modus entsteht das Installations-/Updateskript oder ein Neustart. Diese Methode kann echte Docker-Aktionen anstoßen.
 procedure TSetupFrm.CreateDockerComposeFile;
 var
-  ComposePath, ComposeContent, ScriptFolder, ScriptPath: string;
+  ComposePath, ComposeContent: string;
   PaperlessSecretKey: string;
   CmdFile: TStringList;
   Ini: TAppSettingsIni;
@@ -743,25 +743,7 @@ begin
   Versions.Tika := tika_version;
   Versions.Alpine := alpine_version;
   Versions.Busybox := busybox_version;
-  // Create the harmless template once; preserve existing user scripts.
-  // Harmlose Vorlage einmalig erstellen; vorhandene Benutzerskripte erhalten.
-  begin
-    ScriptFolder := IncludeTrailingPathDelimiter(AppDataFolder) + PaperlessScriptsFolderName;
-    if not System.SysUtils.DirectoryExists(ScriptFolder) then
-      if not ForceDirectories(ScriptFolder) then
-        raise Exception.Create('Skriptordner konnte nicht erstellt werden: ' + ScriptFolder);
-    ScriptPath := IncludeTrailingPathDelimiter(ScriptFolder) + PaperlessPreConsumeScriptName;
-    if not FileExists(ScriptPath) then
-    begin
-      // Use Linux LF line endings and no BOM before the shebang.
-      // Linux-LF-Zeilenumbrüche und keine BOM vor der Shebang-Zeile verwenden.
-      TFile.WriteAllBytes(ScriptPath, TEncoding.UTF8.GetBytes(
-        '#!/bin/sh' + #10 +
-        '# Pre-consume hook. Add commands before exit 0.' + #10 +
-        '# Hook vor Verarbeitung. Befehle vor exit 0 einfuegen.' + #10 +
-        'exit 0' + #10));
-    end;
-  end;
+  EnsurePaperlessScripts(AppDataFolder);
   ComposeContent := CreateDockerComposeContent(Versions, PaperlessInput, PaperlessSecretKey,
     TrashRetentionDays);
 

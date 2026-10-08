@@ -124,11 +124,52 @@ function DefaultInstallationFolder: string;
 function InstallationPathIniFile: string;
 function LoadInstallationFolder: string;
 procedure SaveInstallationFolder(const Folder: string);
+procedure EnsurePaperlessScripts(const RuntimeFolder: string);
 function NoticeReminderDue(const InstallationDate, LastAccepted, Today: TDateTime): Boolean;
 
 implementation
 
 uses System.SysUtils, System.IOUtils, Winapi.Windows;
+
+// Create only missing hook files in the confirmed runtime folder; preserve user content.
+// Nur fehlende Hook-Dateien im bestätigten Laufzeitordner anlegen; Benutzerinhalte erhalten.
+procedure EnsurePaperlessScripts(const RuntimeFolder: string);
+var
+  ScriptFolder, ScriptPath: string;
+begin
+  // Never create a missing installation folder before path selection.
+  // Vor der Pfadwahl niemals einen fehlenden Installationsordner anlegen.
+  if not System.SysUtils.DirectoryExists(RuntimeFolder) then Exit;
+  ScriptFolder := IncludeTrailingPathDelimiter(RuntimeFolder) + PaperlessScriptsFolderName;
+  if not System.SysUtils.DirectoryExists(ScriptFolder) then
+    if not ForceDirectories(ScriptFolder) then
+      raise Exception.Create('Skriptordner konnte nicht erstellt werden: ' + ScriptFolder);
+  ScriptPath := IncludeTrailingPathDelimiter(ScriptFolder) + PaperlessPreConsumeScriptName;
+  if not FileExists(ScriptPath) then
+  begin
+    // Use Linux LF line endings and no BOM before the shebang.
+    // Linux-LF-Zeilenumbrüche und keine BOM vor der Shebang-Zeile verwenden.
+    // Record hook execution using the user-supplied bilingual template.
+    // Hook-Ausführung mit der vorgegebenen zweisprachigen Vorlage protokollieren.
+    TFile.WriteAllBytes(ScriptPath, TEncoding.UTF8.GetBytes(
+      '#!/bin/sh' + #10 +
+      '# Pre-consume hook. Add commands before exit 0.' + #10 +
+      '# Hook vor Verarbeitung. Befehle vor exit 0 einfuegen.' + #10 +
+      '#' + #10 +
+      '# Wird im Ordner Paperless Backup Programm PG18/scripts die Datei script-test.log mit einem Datumseintrag angelegt,' + #10 +
+      '# nachdem ein Dokument in Paperless importiert wurde, funktioniert die Verarbeitung des scripts' + #10 +
+      '# das master_pre_consume.sh script kann direkt als script für gewünschte Verarbeitungen verwendet werden' + #10 +
+      '# oder es können von diesem script weitere, merhrere scripte aufgerufen werden ' + #10 +
+      '#####################################################################################################################' + #10 +
+      '# If the file script-test.log is created with a timestamp in the Paperless Backup Programm PG18/scripts folder' + #10 +
+      '# after a document has been imported into Paperless, the script processing is working' + #10 +
+      '# The master_pre_consume.sh script can be used directly for desired processing,' + #10 +
+      '# or additional, multiple scripts can be called from this script' + #10 +
+      'date -u >> /usr/src/paperless/scripts/script-test.log' + #10 +
+      '' + #10 +
+      'exit 0' + #10));
+  end;
+end;
 
 // Prüft feste Kalendertage ab Installation: Tag 30, 60, 90 usw. Uhrzeitanteile des Installationsdatums werden ignoriert.
 // Eine Bestätigung innerhalb des aktuellen Intervalls verhindert Wiederholungen. Versäumte Intervalle ergeben einen Hinweis; der nächste Termin bleibt fest.

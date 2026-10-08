@@ -1565,6 +1565,9 @@ begin
     if not System.SysUtils.DirectoryExists(AppDataFolder) then System.SysUtils.ForceDirectories(AppDataFolder);
     InitLogger(AppDataFolder);
     LogInfo('Application started.');
+    // Repair missing scripts at startup after the installation path is confirmed.
+    // Fehlende Skripte beim Start nach bestätigtem Installationspfad ergänzen.
+    EnsurePaperlessScripts(AppDataFolder);
   end;
   // Initialize runtime state.
   // Den Laufzeitzustand initialisieren.
