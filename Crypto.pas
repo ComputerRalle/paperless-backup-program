@@ -362,7 +362,7 @@ var
   Alg: BCRYPT_ALG_HANDLE;
   Hash: BCRYPT_HASH_HANDLE;
   HashObject: TBytes;
-  ObjectLength, HashLength, ResultSize: ULONG;
+  ObjectLength, HashLength: ULONG;
 begin
   Alg := nil;
   Hash := nil;

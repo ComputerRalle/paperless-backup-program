@@ -255,7 +255,8 @@ var
   OwnerHandle: HWND;
   PromptTop, ButtonTop, CancelButtonWidth: Integer;
 begin
-  Result := False;
+  // Each normal exit assigns its result; cancellation returns False explicitly.
+  // Jeder normale Ausgang setzt sein Ergebnis; Abbruch liefert ausdrücklich False.
   Password := '';
 
   repeat

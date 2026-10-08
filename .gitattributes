@@ -1,0 +1,7 @@
+# RAD Studio source and project files use CRLF in the working tree.
+*.pas text eol=crlf
+*.dfm text eol=crlf
+*.dpr text eol=crlf
+*.dproj text eol=crlf
+*.inc text eol=crlf
+*.dpk text eol=crlf

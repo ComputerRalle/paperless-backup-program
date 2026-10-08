@@ -106,22 +106,26 @@ uses
 // Ein erzeugtes Setup-PowerShell-Skript als versteckt markieren.
 procedure MarkSetupScriptHidden(const ScriptPath: string);
 var
-  Attributes: Integer;
+  // Preserve all other Windows attributes when changing hidden/read-only flags.
+  // Alle anderen Windows-Attribute beim Ändern von Hidden/ReadOnly erhalten.
+  Attributes: DWORD;
 begin
   if (ScriptPath.Trim = '') or not FileExists(ScriptPath) then Exit;
-  Attributes := FileGetAttr(ScriptPath);
-  if Attributes <> -1 then
-    FileSetAttr(ScriptPath, Attributes or faHidden);
+  Attributes := Winapi.Windows.GetFileAttributes(PChar(ScriptPath));
+  if Attributes <> INVALID_FILE_ATTRIBUTES then
+    Winapi.Windows.SetFileAttributes(PChar(ScriptPath), Attributes or FILE_ATTRIBUTE_HIDDEN);
 end;
 // Ein vorhandenes erzeugtes Setup-Skript löschen, bevor es neu geschrieben wird.
 procedure PrepareSetupScriptWrite(const ScriptPath: string);
 var
-  Attributes: Integer;
+  // Preserve all other Windows attributes when changing hidden/read-only flags.
+  // Alle anderen Windows-Attribute beim Ändern von Hidden/ReadOnly erhalten.
+  Attributes: DWORD;
 begin
   if (ScriptPath.Trim = '') or not FileExists(ScriptPath) then Exit;
-  Attributes := FileGetAttr(ScriptPath);
-  if Attributes <> -1 then
-    FileSetAttr(ScriptPath, Attributes and not faHidden and not faReadOnly);
+  Attributes := Winapi.Windows.GetFileAttributes(PChar(ScriptPath));
+  if Attributes <> INVALID_FILE_ATTRIBUTES then
+    Winapi.Windows.SetFileAttributes(PChar(ScriptPath), Attributes and not FILE_ATTRIBUTE_HIDDEN and not FILE_ATTRIBUTE_READONLY);
   DeleteFile(ScriptPath);
 end;
 // Einen Paperless Secret Key pro Installation erzeugen.
@@ -425,7 +429,6 @@ end;
 // Die erste Paperless-Einrichtung starten, nachdem der Benutzer bestätigt hat.
 procedure TSetupFrm.InstallPaperlessBtnClick(Sender: TObject);
 var
-  InstallErfolgreich: Boolean;
   ExitCode: Cardinal;
   Ini:TAppSettingsIni;
 begin

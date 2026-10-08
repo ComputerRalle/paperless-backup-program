@@ -56,7 +56,7 @@ procedure CreateBackupScheduleCmdScript(
 implementation
 
 uses
-  System.Classes, System.SysUtils;
+  System.Classes, System.SysUtils, Winapi.Windows;
 
 // Einen Wert sicher als einfach gequotete PowerShell-Zeichenkette schreiben.
 function PsQuote(const Value: string): string;
@@ -100,19 +100,21 @@ end;
 // Eine vorhandene Zieldatei wird vor dem Schreiben von Hidden/ReadOnly befreit und entfernt.
 procedure SavePsScript(const Lines: TStringList; const TargetPath: string);
 var
-  Attributes: Integer;
+  // Preserve all other Windows attributes when changing hidden/read-only flags.
+  // Alle anderen Windows-Attribute beim Ändern von Hidden/ReadOnly erhalten.
+  Attributes: DWORD;
 begin
   if FileExists(TargetPath) then
   begin
-    Attributes := FileGetAttr(TargetPath);
-    if Attributes <> -1 then
-      FileSetAttr(TargetPath, Attributes and not faHidden and not faReadOnly);
-    DeleteFile(TargetPath);
+    Attributes := Winapi.Windows.GetFileAttributes(PChar(TargetPath));
+    if Attributes <> INVALID_FILE_ATTRIBUTES then
+      Winapi.Windows.SetFileAttributes(PChar(TargetPath), Attributes and not FILE_ATTRIBUTE_HIDDEN and not FILE_ATTRIBUTE_READONLY);
+    System.SysUtils.DeleteFile(TargetPath);
   end;
   Lines.SaveToFile(TargetPath, TEncoding.UTF8);
-  Attributes := FileGetAttr(TargetPath);
-  if Attributes <> -1 then
-    FileSetAttr(TargetPath, Attributes or faHidden);
+  Attributes := Winapi.Windows.GetFileAttributes(PChar(TargetPath));
+  if Attributes <> INVALID_FILE_ATTRIBUTES then
+    Winapi.Windows.SetFileAttributes(PChar(TargetPath), Attributes or FILE_ATTRIBUTE_HIDDEN);
 end;
 
 // Befehle hinzufügen, die ein Docker-Volume in den Backup-Ordner archivieren.

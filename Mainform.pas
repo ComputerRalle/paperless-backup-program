@@ -293,23 +293,27 @@ implementation
 // Eine erzeugte Skriptdatei im Windows-Dateisystem als versteckt markieren.
 procedure MarkGeneratedScriptHidden(const ScriptPath: string);
 var
-  Attributes: Integer;
+  // Preserve all other Windows attributes when changing hidden/read-only flags.
+  // Alle anderen Windows-Attribute beim Ändern von Hidden/ReadOnly erhalten.
+  Attributes: DWORD;
 begin
   if (ScriptPath.Trim = '') or not FileExists(ScriptPath) then Exit;
-  Attributes := FileGetAttr(ScriptPath);
-  if Attributes <> -1 then
-    FileSetAttr(ScriptPath, Attributes or faHidden);
+  Attributes := Winapi.Windows.GetFileAttributes(PChar(ScriptPath));
+  if Attributes <> INVALID_FILE_ATTRIBUTES then
+    Winapi.Windows.SetFileAttributes(PChar(ScriptPath), Attributes or FILE_ATTRIBUTE_HIDDEN);
 end;
 // Ein erzeugtes Einmal-Skript nach seinem Lauf löschen.
 procedure DeleteGeneratedScriptFile(const ScriptPath: string);
 var
-  Attributes: Integer;
+  // Preserve all other Windows attributes when changing hidden/read-only flags.
+  // Alle anderen Windows-Attribute beim Ändern von Hidden/ReadOnly erhalten.
+  Attributes: DWORD;
 begin
   if (ScriptPath.Trim = '') or not FileExists(ScriptPath) then Exit;
   try
-    Attributes := FileGetAttr(ScriptPath);
-    if Attributes <> -1 then
-      FileSetAttr(ScriptPath, Attributes and not faReadOnly);
+    Attributes := Winapi.Windows.GetFileAttributes(PChar(ScriptPath));
+    if Attributes <> INVALID_FILE_ATTRIBUTES then
+      Winapi.Windows.SetFileAttributes(PChar(ScriptPath), Attributes and not FILE_ATTRIBUTE_READONLY);
     if not DeleteFile(ScriptPath) then
       LogWarning('Generated script could not be deleted: ' + ScriptPath);
   except
@@ -379,7 +383,7 @@ var
   FileInfo: TSearchRec;
 begin
   Result := 0;
-  if not DirectoryExists(FolderPath) then Exit;
+  if not System.SysUtils.DirectoryExists(FolderPath) then Exit;
   for FilePath in TDirectory.GetFiles(FolderPath) do
   begin
     if FindFirst(FilePath, faAnyFile, FileInfo) = 0 then
@@ -486,7 +490,6 @@ var
   Sl: TStringList;
   ProgramVersion: String;
   VersionInIni: String;
-  test1, test2 : String;
 begin
   ProgramVersion := GetExeVersion;
   LogInfo('Checking program update. Current version: ' + ProgramVersion);
@@ -1189,7 +1192,7 @@ var
 begin
   Result := False;
   FRestoreLegacyNames := False;
-  if not DirectoryExists(BackupFolder) then
+  if not System.SysUtils.DirectoryExists(BackupFolder) then
   begin
     CenteredShowMessage('Der gewählte Backup-Ordner existiert nicht.');
     LogWarning('Restore precheck failed. Backup folder does not exist: ' + BackupFolder);
@@ -1295,7 +1298,7 @@ begin
   IsBackup := True;
 
   DefaultFolder := IncludeTrailingPathDelimiter(GetEnvironmentVariable('USERPROFILE')) + 'Desktop\' + PaperlessBackupFolderName;
-  if not DirectoryExists(DefaultFolder) then ForceDirectories(DefaultFolder);
+  if not System.SysUtils.DirectoryExists(DefaultFolder) then System.SysUtils.ForceDirectories(DefaultFolder);
 
   // Migrate the old backup target text file into the INI file.
   // Die alte Textdatei mit dem Backup-Ziel in die INI-Datei migrieren.
@@ -1431,7 +1434,7 @@ begin
     Exit;
   end;
 
-  if not DirectoryExists(BackupPath) then ForceDirectories(BackupPath);
+  if not System.SysUtils.DirectoryExists(BackupPath) then System.SysUtils.ForceDirectories(BackupPath);
   EncryptEmailEnvForBackup(BackupPath);
   CmdTargetPath := IncludeTrailingPathDelimiter(ComposePath) + 'paperless-backup.ps1';
   Volumes.Data := Volume_data;
@@ -1559,7 +1562,7 @@ begin
   // Vor der ersten Pfadwahl weder Laufzeitordner noch Log anlegen.
   if InstallationPathReady then
   begin
-    if not DirectoryExists(AppDataFolder) then ForceDirectories(AppDataFolder);
+    if not System.SysUtils.DirectoryExists(AppDataFolder) then System.SysUtils.ForceDirectories(AppDataFolder);
     InitLogger(AppDataFolder);
     LogInfo('Application started.');
   end;
@@ -1619,7 +1622,7 @@ begin
   PaperlessInput := IncludeTrailingPathDelimiter(GetEnvironmentVariable('USERPROFILE')) + 'Desktop\' + PaperlessInputFolderName;
   if InstallationPathReady then
   begin
-    if not DirectoryExists(PaperlessInput) then ForceDirectories(PaperlessInput);
+    if not System.SysUtils.DirectoryExists(PaperlessInput) then System.SysUtils.ForceDirectories(PaperlessInput);
     SaveEmptyEnvFile();
   end;
 
@@ -1687,7 +1690,7 @@ begin
       Application.Terminate;
       Exit;
     end;
-    if not DirectoryExists(PaperlessInput) then ForceDirectories(PaperlessInput);
+    if not System.SysUtils.DirectoryExists(PaperlessInput) then System.SysUtils.ForceDirectories(PaperlessInput);
   end;
   TextFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + ComposePathFileName;
   if FileExists(TextFilePath) then
@@ -1715,7 +1718,7 @@ begin
   IsBackup := True;
 
   DefaultFolder := IncludeTrailingPathDelimiter(GetEnvironmentVariable('USERPROFILE')) + 'Desktop\' + PaperlessBackupFolderName;
-  if not DirectoryExists(DefaultFolder) then ForceDirectories(DefaultFolder);
+  if not System.SysUtils.DirectoryExists(DefaultFolder) then System.SysUtils.ForceDirectories(DefaultFolder);
 
   // Migrate the old backup target text file into the INI file.
   // Die alte Textdatei mit dem Backup-Ziel in die INI-Datei migrieren.
@@ -2465,7 +2468,7 @@ begin
   finally
     Ini.Free;
   end;
-  if (ComposePathFromIni <> '') and DirectoryExists(ComposePathFromIni) then
+  if (ComposePathFromIni <> '') and System.SysUtils.DirectoryExists(ComposePathFromIni) then
     ComposePathFromIni := IncludeTrailingPathDelimiter(ComposePathFromIni) + DockerComposeFileName;
   // Stop when the compose path is missing.
   // Abbrechen, wenn der Compose-Pfad fehlt.
@@ -2506,7 +2509,7 @@ begin
     finally
       Ini.Free;
     end;
-    if (ComposePath <> '') and DirectoryExists(ComposePath) then
+    if (ComposePath <> '') and System.SysUtils.DirectoryExists(ComposePath) then
       ComposePath := IncludeTrailingPathDelimiter(ComposePath) + DockerComposeFileName;
     if ComposePath = '' then
     begin
@@ -2748,7 +2751,7 @@ begin
 
   // Make sure the app data folder exists.
   // Sicherstellen, dass der AppData-Ordner existiert.
-  if not DirectoryExists(AppDataFolder) then
+  if not System.SysUtils.DirectoryExists(AppDataFolder) then
   begin
     CenteredShowMessage('Der angegebene AppData-Ordner existiert nicht.');
     Exit;
@@ -2819,7 +2822,7 @@ begin
 
   // Make sure the app data folder exists.
   // Sicherstellen, dass der AppData-Ordner existiert.
-  if not DirectoryExists(AppDataFolder) then
+  if not System.SysUtils.DirectoryExists(AppDataFolder) then
   begin
     CenteredShowMessage('Der angegebene AppData-Ordner existiert nicht.');
     Exit;
@@ -2917,7 +2920,7 @@ begin
 
   // Make sure the app data folder exists.
   // Sicherstellen, dass der AppData-Ordner existiert.
-  if not DirectoryExists(AppDataFolder) then
+  if not System.SysUtils.DirectoryExists(AppDataFolder) then
   begin
     CenteredShowMessage('Der angegebene AppData-Ordner existiert nicht.');
     Exit;
@@ -3067,7 +3070,7 @@ begin
   // Delete old backup folders when a retention limit is set.
   // Alte Backup-Ordner löschen, wenn eine Aufbewahrungsgrenze gesetzt ist.
   MaxBackupFolders := KeepBackupsSpE.Value;
-  if (MaxBackupFolders > 0) and DirectoryExists(BackupPath) then
+  if (MaxBackupFolders > 0) and System.SysUtils.DirectoryExists(BackupPath) then
   begin
     ValidBackupFolderList := TList<string>.Create;
     try
@@ -3180,7 +3183,7 @@ begin
   Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
     LastBackupFolder := Ini.ReadString('Pfade', 'BackupZiel', '').Trim;
-    if (LastBackupFolder <> '') and DirectoryExists(LastBackupFolder) then
+    if (LastBackupFolder <> '') and System.SysUtils.DirectoryExists(LastBackupFolder) then
       RestoreDefaultFolder := LastBackupFolder;
   finally
     Ini.Free;
@@ -3678,7 +3681,7 @@ begin
 
   // Scheduling is allowed only when compose file and backup target exist.
   // Zeitplanung ist nur erlaubt, wenn Compose-Datei und Backup-Ziel existieren.
-  if FileExists(ComposePathFromIni) and DirectoryExists(BackupTargetFromIni) then
+  if FileExists(ComposePathFromIni) and System.SysUtils.DirectoryExists(BackupTargetFromIni) then
   begin
     // Enable scheduling controls.
     // Zeitplan-Steuerelemente aktivieren.
