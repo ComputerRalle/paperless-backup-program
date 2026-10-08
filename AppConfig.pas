@@ -61,6 +61,10 @@ const
   ContainerVolumeInfoFileName = 'ContainerUndVolumesInfo.txt';
   ImageVersionsFileName = 'image_versionen.txt';
   PaperlessSecretKeyFileName = 'paperless_secret_key.txt';
+  // Fixed entry point for pre-consumption hooks.
+  // Fester Einstiegspunkt für Skripte vor der Verarbeitung.
+  PaperlessScriptsFolderName = 'scripts';
+  PaperlessPreConsumeScriptName = 'master_pre_consume.sh';
   UpdateIniFileName = 'update.ini';
   ApplicationLogFileName = 'PaperlessBackupProgram.log';
 

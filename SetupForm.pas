@@ -680,7 +680,7 @@ end;
 // Je nach Modus entsteht das Installations-/Updateskript oder ein Neustart. Diese Methode kann echte Docker-Aktionen anstoßen.
 procedure TSetupFrm.CreateDockerComposeFile;
 var
-  ComposePath, ComposeContent: string;
+  ComposePath, ComposeContent, ScriptFolder, ScriptPath: string;
   PaperlessSecretKey: string;
   CmdFile: TStringList;
   Ini: TAppSettingsIni;
@@ -740,7 +740,27 @@ begin
   Versions.Tika := tika_version;
   Versions.Alpine := alpine_version;
   Versions.Busybox := busybox_version;
-  ComposeContent := CreateDockerComposeContent(Versions, PaperlessInput, PaperlessSecretKey, TrashRetentionDays);
+  // Create the harmless template once; preserve existing user scripts.
+  // Harmlose Vorlage einmalig erstellen; vorhandene Benutzerskripte erhalten.
+  begin
+    ScriptFolder := IncludeTrailingPathDelimiter(AppDataFolder) + PaperlessScriptsFolderName;
+    if not System.SysUtils.DirectoryExists(ScriptFolder) then
+      if not ForceDirectories(ScriptFolder) then
+        raise Exception.Create('Skriptordner konnte nicht erstellt werden: ' + ScriptFolder);
+    ScriptPath := IncludeTrailingPathDelimiter(ScriptFolder) + PaperlessPreConsumeScriptName;
+    if not FileExists(ScriptPath) then
+    begin
+      // Use Linux LF line endings and no BOM before the shebang.
+      // Linux-LF-Zeilenumbrüche und keine BOM vor der Shebang-Zeile verwenden.
+      TFile.WriteAllBytes(ScriptPath, TEncoding.UTF8.GetBytes(
+        '#!/bin/sh' + #10 +
+        '# Pre-consume hook. Add commands before exit 0.' + #10 +
+        '# Hook vor Verarbeitung. Befehle vor exit 0 einfuegen.' + #10 +
+        'exit 0' + #10));
+    end;
+  end;
+  ComposeContent := CreateDockerComposeContent(Versions, PaperlessInput, PaperlessSecretKey,
+    TrashRetentionDays);
 
   // Write docker-compose.yml.
   // docker-compose.yml schreiben.
@@ -792,6 +812,13 @@ begin
       CmdFile.Add('        throw ''Die Compose-Konfiguration ist ungültig.''');
       CmdFile.Add('    }');
       CmdFile.Add('');
+      // Set and verify Linux permissions in a temporary container before application startup.
+      // Linux-Rechte vor dem Anwendungsstart in einem kurzlebigen Container setzen und prüfen.
+      begin
+        CmdFile.Add('    docker compose -f $ComposeFile run --rm --no-deps -T --user 0 --entrypoint /bin/sh paperless -c "chmod 755 /usr/src/paperless/scripts/master_pre_consume.sh ' +
+          '&& test -x /usr/src/paperless/scripts/master_pre_consume.sh"');
+        CmdFile.Add('    if ($LASTEXITCODE -ne 0) { throw ''Skript-Ausfuehrungsrechte konnten nicht gesetzt werden.'' }');
+      end;
       CmdFile.Add('    docker compose --progress plain -f $ComposeFile up -d');
       CmdFile.Add('    if ($LASTEXITCODE -ne 0) {');
       CmdFile.Add('        throw "Containerstart fehlgeschlagen. ExitCode: $LASTEXITCODE"');
@@ -850,6 +877,11 @@ begin
         // Pull updated images here.
         // Hier aktualisierte Images herunterladen.
         CmdFile.Add('  Invoke-Step { docker compose --progress plain -f docker-compose.yml pull } "Fehler beim Herunterladen aktualisierter Images."');
+        // Reapply execution permissions after updates without replacing script contents.
+        // Ausführungsrechte nach Updates erneut setzen, ohne den Skriptinhalt zu ersetzen.
+          CmdFile.Add('  Invoke-Step { docker compose -f docker-compose.yml run --rm --no-deps -T --user 0 --entrypoint /bin/sh paperless -c "chmod 755 /usr/src/paperless/scripts/master_pre_consume.sh ' +
+          '&& test -x /usr/src/paperless/scripts/master_pre_consume.sh" } ' +
+            '"Skript-Ausfuehrungsrechte konnten nicht gesetzt werden."');
         CmdFile.Add('  Invoke-Step { docker compose --progress plain -f docker-compose.yml up -d } "Fehler beim Starten der Container."');
         CmdFile.Add('  Write-Host "Aktualisiere Django-Datenbankstruktur..."');
         CmdFile.Add('  docker compose -f docker-compose.yml exec -T paperless python3 manage.py migrate');

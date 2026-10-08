@@ -105,9 +105,14 @@ begin
     '      - media:/usr/src/paperless/media' + sLineBreak +
     '      - export:/usr/src/paperless/export' + sLineBreak +
     '      - ' + PaperlessInput + ':/usr/src/paperless/consume' + sLineBreak +
+    // Always mount the scripts folder relative to the selected installation directory.
+    // Den Skriptordner immer relativ zum gewählten Installationsverzeichnis einbinden.
+    '      - ./scripts:/usr/src/paperless/scripts' + sLineBreak +
     '    env_file:' + sLineBreak +
     '      - ./email-versand.env' + sLineBreak +
     '    environment:' + sLineBreak +
+    '      PAPERLESS_PRE_CONSUME_SCRIPT: /usr/src/paperless/scripts/' +
+      PaperlessPreConsumeScriptName + sLineBreak +
     '      PAPERLESS_REDIS: redis://broker:6379' + sLineBreak +
     '      PAPERLESS_DBHOST: db' + sLineBreak +
     '      PAPERLESS_DBNAME: paperless' + sLineBreak +
