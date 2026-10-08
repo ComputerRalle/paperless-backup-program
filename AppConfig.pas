@@ -84,7 +84,9 @@ const
 
   // Default Docker image versions.
   // Standardversionen der Docker-Images.
-  DefaultPaperlessVersion = '3.2.1';
+  // Shared target version for labels, new settings and Compose defaults.
+  // Gemeinsame Zielversion für Labels, neue Einstellungen und Compose-Vorgaben.
+  DefaultPaperlessVersion = '3.3.0';
   DefaultPostgresVersion = '18';
   DefaultRedisVersion = '9-alpine';
   // Follow the Gotenberg 8 release series instead of pinning a minor version.

@@ -1,4 +1,4 @@
-// VCL-Einstieg: Hauptformular zuerst erzeugen, damit es Besitzer und Bezugspunkt der Dialoge ist.
+﻿// VCL-Einstieg: Hauptformular zuerst erzeugen, damit es Besitzer und Bezugspunkt der Dialoge ist.
 program PaperlessBackupProgramm;
 
 uses
