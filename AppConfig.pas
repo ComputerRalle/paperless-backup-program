@@ -90,9 +90,9 @@ const
   // Follow the Gotenberg 8 release series instead of pinning a minor version.
   // Der Gotenberg-8-Versionsreihe folgen, statt eine Unterversion festzuschreiben.
   DefaultGotenbergVersion = '8';
-  // Use Tika's latest tag; images are downloaded during the existing pull workflow.
-  // Für Tika latest verwenden; Images werden im vorhandenen Pull-Ablauf geladen.
-  DefaultTikaVersion = 'latest';
+  // Pin Tika 3.2.3.0: Paperless uses /tika/form/text, which Tika 4 removed.
+  // Tika 3.2.3.0 festlegen: Paperless nutzt /tika/form/text, das in Tika 4 entfernt wurde.
+  DefaultTikaVersion = '3.2.3.0';
   DefaultAlpineVersion = '3';
   DefaultBusyboxVersion = '1';
   LegacyPaperlessSecretKey = 'aksjdfhs87H/(&986jlkhgiu87659zol';

@@ -78,8 +78,8 @@ begin
     '      POSTGRES_DB: paperless' + sLineBreak +
     '      POSTGRES_USER: paperless' + sLineBreak +
     '      POSTGRES_PASSWORD: paperless' + sLineBreak + sLineBreak +
-    // Forward selected image tags unchanged; defaults are Gotenberg 8 and Tika latest.
-    // Gewählte Image-Tags unverändert übernehmen; Vorgaben sind Gotenberg 8 und Tika latest.
+    // Forward selected image tags unchanged; defaults are Gotenberg 8 and Tika 3.2.3.0.
+    // Gewählte Image-Tags unverändert übernehmen; Vorgaben sind Gotenberg 8 und Tika 3.2.3.0.
     '  gotenberg:' + sLineBreak +
     '    image: gotenberg/gotenberg:' + Versions.Gotenberg + sLineBreak +
     '    restart: always' + sLineBreak +

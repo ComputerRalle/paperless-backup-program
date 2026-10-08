@@ -2019,8 +2019,8 @@ begin
     if postgres_version_edit.Text = '' then
     postgres_version_edit.Text := DefaultPostgresVersion;
 
-    // Preserve saved custom tags; missing values use Gotenberg 8 and Tika latest.
-    // Gespeicherte Tags behalten; fehlende Werte erhalten Gotenberg 8 und Tika latest.
+    // Preserve saved custom tags; missing values use Gotenberg 8 and Tika 3.2.3.0.
+    // Gespeicherte Tags behalten; fehlende Werte erhalten Gotenberg 8 und Tika 3.2.3.0.
     gotenberg_version_edit.Text := Ini.ReadString(IniSectionVersions, IniKeyGotenbergVersion, '');
     if gotenberg_version_edit.Text = '' then
     gotenberg_version_edit.Text := DefaultGotenbergVersion;

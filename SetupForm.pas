@@ -707,8 +707,8 @@ begin
     if MainformFrm.postgres_version_edit.Text = '' then
       MainformFrm.postgres_version_edit.Text := DefaultPostgresVersion;
 
-    // Compose respects custom tags; missing values use Gotenberg 8 and Tika latest.
-    // Compose berücksichtigt eigene Tags; fehlende Werte erhalten Gotenberg 8 und Tika latest.
+    // Compose respects custom tags; missing values use Gotenberg 8 and Tika 3.2.3.0.
+    // Compose berücksichtigt eigene Tags; fehlende Werte erhalten Gotenberg 8 und Tika 3.2.3.0.
     MainformFrm.gotenberg_version_edit.Text := Ini.ReadString(IniSectionVersions, IniKeyGotenbergVersion, '');
     if MainformFrm.gotenberg_version_edit.Text = '' then
       MainformFrm.gotenberg_version_edit.Text := DefaultGotenbergVersion;
