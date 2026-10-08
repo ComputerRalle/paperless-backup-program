@@ -19,7 +19,7 @@ uses
 begin
   Application.Initialize;
   Application.MainFormOnTaskbar := True;
-  TStyleManager.TrySetStyle('Windows11 Modern Dark');
+  TStyleManager.TrySetStyle('Windows Modern Dark SE');
   Application.CreateForm(TMainformFrm, MainformFrm);
   Application.CreateForm(TSetupFrm, SetupFrm);
   // Die Nachrichtenschleife zeigt das Hauptfenster; dessen OnShow kann Einrichtungsschritte auslösen.
