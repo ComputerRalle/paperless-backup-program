@@ -1,5 +1,12 @@
 ﻿# Paperless Backup Programm
 
+## Stand / Status – 08.10.2026
+
+Version **5.26.10.100 ist veröffentlicht**. Die feste Skriptanbindung unten ist eine spätere, noch unveröffentlichte Quellcodeänderung dieses Chats. Keine neue Versionsnummer festgelegt.
+
+Version **5.26.10.100 has been published**. The fixed script integration below is a later, unreleased source change from this chat. No new version number has been assigned.
+
+
 ## Download / Software herunterladen
 
 **[Software für Windows herunterladen / Download the Windows software](https://downloads.ralf-peter-kleinert.de/software/paperless-backup-programm.html)**
@@ -48,12 +55,12 @@ Open `PaperlessBackupProgramm.dproj` in Delphi and build the Win32 target.
 
 Oeffne `PaperlessBackupProgramm.dproj` in Delphi und kompiliere das Win32-Ziel.
 
-The application stores runtime settings in the user profile folder:
+Runtime settings use the PG18 folder below by default. A selected installation parent folder is respected; its Paperless Backup Programm PG18 subfolder is always used.
 
-Die Anwendung speichert Laufzeiteinstellungen im Benutzerprofil:
+Laufzeiteinstellungen verwenden standardmäßig den PG18-Ordner unten. Bei eigener Installationspfadwahl wird der feste Unterordner Paperless Backup Programm PG18 im gewählten übergeordneten Ordner verwendet.
 
 ```text
-%USERPROFILE%\Paperless Backup Programm
+%USERPROFILE%\Paperless Backup Programm PG18
 ```
 
 ## Important Notes / Wichtige Hinweise
@@ -135,3 +142,36 @@ For commercial use without the obligation to disclose source code, please contac
 
 Dieses Projekt steht unter der GNU General Public License v3. Siehe `LICENSE.txt`.
 Fuer kommerzielle Nutzung ohne Offenlegungspflicht kontaktieren Sie mich fuer eine separate Lizenz.
+
+
+## Skripte vor der Verarbeitung / Pre-consume scripts – unreleased
+
+Beim Erzeugen der Compose-Datei legt das Programm scripts im gewählten PG18-Installationsordner an. Eine fehlende master_pre_consume.sh wird als UTF-8 ohne BOM mit Linux-Zeilenumbrüchen angelegt:
+
+~~~sh
+#!/bin/sh
+exit 0
+~~~
+
+Die tatsächliche Vorlage enthält zusätzlich Kommentare. Ohne eigene Ergänzungen tut sie nichts. Vorhandene Skripte bleiben erhalten. Keine Aktivierungs-Checkbox.
+
+When generating Compose, the program creates scripts in the selected PG18 folder and a missing master_pre_consume.sh as a harmless template. Existing scripts are preserved; there is no activation checkbox.
+
+Der Dienst paperless erhält immer folgenden Mount und Hook (Ausschnitt):
+
+~~~yaml
+volumes:
+  - ./scripts:/usr/src/paperless/scripts
+environment:
+  PAPERLESS_PRE_CONSUME_SCRIPT: /usr/src/paperless/scripts/master_pre_consume.sh
+~~~
+
+./scripts folgt dem Compose-Verzeichnis. Installation/Update setzen mit einem kurzlebigen Container chmod 755 und prüfen test -x. Das Master kann eigene Logik enthalten oder weitere Skripte aufrufen. PDF-Entschlüsselung wird nicht mitgeliefert.
+
+The relative scripts path follows the Compose directory. Setup/update use a temporary container to set and check execution permissions. The master may implement its own logic or call other scripts. PDF decryption is not supplied.
+
+Vorhandene Installationen: Projekt neu erstellen, neue EXE einsetzen und Einstellungen mit bestätigtem Neustart/Update speichern. Der bestehende Ablauf kann Docker-Images aktualisieren. scripts gehört nicht zu den bisherigen Backup-/Restorearchiven; eigene Skripte separat sichern.
+
+For existing installations, rebuild the project, deploy the new EXE and save settings with restart/update confirmed. This workflow may update Docker images. scripts is outside existing backup/restore archives; back up custom scripts separately.
+
+Isolierter Win32-Build und Generatorprüfungen erfolgreich; echte GUI-/Docker-Ausführung steht aus. / Isolated Win32 build and generator checks passed; actual GUI/Docker execution remains untested.
