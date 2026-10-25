@@ -144,6 +144,9 @@ end;
 // Speichert den fertig erzeugten Compose-Text als UTF-8; startet weder Docker noch eine Installation.
 procedure SaveDockerComposeFile(const TargetPath, Content: string);
 begin
+  // Preserve the existing Compose configuration for custom editing.
+  // Bestehende Compose-Konfiguration für eigene Bearbeitung erhalten.
+  if CustomFileProtected(TargetPath) then Exit;
   TFile.WriteAllText(TargetPath, Content, TEncoding.UTF8);
 end;
 

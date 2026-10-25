@@ -175,3 +175,25 @@ Vorhandene Installationen: Projekt neu erstellen, neue EXE einsetzen und Einstel
 For existing installations, rebuild the project, deploy the new EXE and save settings with restart/update confirmed. This workflow may update Docker images. scripts is outside existing backup/restore archives; back up custom scripts separately.
 
 Isolierter Win32-Build und Generatorprüfungen erfolgreich; echte GUI-/Docker-Ausführung steht aus. / Isolated Win32 build and generator checks passed; actual GUI/Docker execution remains untested.
+
+## Eigene Bearbeitungen schützen – Stand 25.10.2026
+
+Im Tab **Einstellungen** sitzt unter Paperless-Version und rechts neben Tika-Version die Checkbox **„Scripte und compose.yml für eigene Bearbeitung sperren“** (`MainformFrm`, `SettingsPan`, `ProtectCustomFilesCB`). Sie ist standardmäßig ausgeschaltet und unabhängig von der Versionsfreigabe. Die Auswahl wird mit **Einstellungen Speichern** dauerhaft übernommen und beim nächsten Start geladen.
+
+Beim Aktivieren erklärt ein Ja/Nein-Warnfenster die Verantwortung für die eigene Dateipflege. Vorhandene `docker-compose.yml` und vom Programm erzeugte PowerShell-Skripte werden bei gespeichertem Schutz weder überschrieben noch als Einmalskripte nach dem Lauf gelöscht. Fehlende Dateien können weiterhin angelegt werden. Eigene Dateien unter `scripts` bleiben wie bisher erhalten. Es gibt keine Umleitung in einen anderen Arbeitsordner.
+
+Backup, Wiederherstellung und Updates führen weiterhin die vorhandenen Dateien aus. Deshalb müssen Pfade, Backupziele, Wiederherstellungsquellen, Imageversionen und weitere Angaben darin selbst gepflegt werden. Änderungen in der Oberfläche werden nicht automatisch in geschützte Dateien eingetragen. Nach eigenen Änderungen **Einstellungen Speichern** anklicken und den Neustart bestätigen; der vorhandene Installations-/Updateablauf verwendet die Dateien und kann weiterhin Dockeraktionen und Image-Downloads ausführen.
+
+Beim Entfernen des Häkchens erscheint vorab eine zweite Ja/Nein-Warnung mit dem vollständigen Sicherungsordner. **Nein** lässt den Haken gesetzt. **Ja** kopiert zuerst:
+
+- vorhandene `.ps1`, `.cmd`, `.bat` und `.sh` im Installationsordner;
+- `docker-compose.yml` und eine gegebenenfalls vorhandene `compose.yml`;
+- sämtliche Dateien unter `scripts`, einschließlich der Unterordnerstruktur und Hilfsdateien.
+
+Ziel ist `<Installationsordner>\Eigene Bearbeitungen Backup\yyyy-mm-dd_hh-nn-ss`, beispielsweise `2026-10-25_14-30-00`. Es gibt keine ID und keinen zusätzlichen Namenszusatz. Vorhandene Sicherungen werden nicht überschrieben. Existiert derselbe Zeitstempel bereits, bleibt der Schutz erhalten; erneut versuchen. Quellen werden nur kopiert, Dateiinhalte nicht neu codiert. Andere Dateien wie Einstellungen.ini und die separate Maildatei gehören nicht zu dieser Sicherung; diese ersetzt kein Paperless-Datenbackup und keine bisherige Backup-/Restorefunktion.
+
+Nach erfolgreichem Kopieren nennt eine Meldung den tatsächlichen Sicherungsordner. Erst **Einstellungen Speichern** übernimmt die aufgehobene Sperre. Bei Kopierfehler wird der Haken wieder gesetzt; eine Fehlermeldung erscheint und eine teilweise angelegte Sicherung bleibt erhalten. Der vorbeugende Hinweis auf Kopierfehler wurde auf Benutzerwunsch aus beiden Warnfenstern entfernt; die Fehlerbehandlung bleibt bestehen. Laden gespeicherter Einstellungen und Nein im Aktivierungsfenster erzeugen keine Sicherung und keine erneute Aktivierungswarnung.
+
+Prüfstand: Codepfade, Ereignisbindung, Dateiformate und Diffs statisch geprüft. Die lokale Delphi-13-Ausgabe unterstützt keinen Kommandozeilenbuild; IDE-Build erforderlich. Kein GUI-, tatsächlicher Delphi-Dateikopier- oder Dockerlauf durch diesen Chat. Keine Veröffentlichung und keine neue Programmversion bestätigt.
+
+English: The saved settings checkbox preserves existing Compose and generated PowerShell files for manual maintenance. Disabling it requires confirmation and copies root scripts, Compose and the complete scripts file tree into a timestamp-only backup directory before unlocking can be saved. Failures keep protection enabled. Existing files still control backup, restore and update behavior. Static checks only; build and runtime verification in Delphi remain required.

@@ -71,6 +71,9 @@ const
   // INI sections and keys.
   // INI-Abschnitte und Schlüssel.
   IniSectionVersions = 'Versionen';
+  // Saved protection applies to existing generated files, not to creation of missing files.
+  // Gespeicherter Schutz gilt für vorhandene erzeugte Dateien, nicht für fehlende Dateien.
+  IniKeyProtectCustomFiles = 'Eigene Skripte und Compose schuetzen';
   IniSectionSecurity = 'Sicherheit';
   IniKeyPaperlessVersion = 'Paperless-Version';
   IniKeyPostgresVersion = 'Postgres-Version';
@@ -127,11 +130,79 @@ function InstallationPathIniFile: string;
 function LoadInstallationFolder: string;
 procedure SaveInstallationFolder(const Folder: string);
 procedure EnsurePaperlessScripts(const RuntimeFolder: string);
+function BackupCustomFiles(const RuntimeFolder: string): string;
+function CustomFileProtected(const TargetPath: string): Boolean;
 function NoticeReminderDue(const InstallationDate, LastAccepted, Today: TDateTime): Boolean;
 
 implementation
 
 uses System.SysUtils, System.IOUtils, Winapi.Windows;
+
+// Save each set separately so later unlocks never overwrite earlier custom edits.
+// Jeden Stand separat sichern, damit späteres Entsperren ältere Bearbeitungen nicht überschreibt.
+function BackupCustomFiles(const RuntimeFolder: string): string;
+var
+  SourcePath, TargetPath, RelativePath, ScriptsFolder, Extension: string;
+begin
+  if not System.SysUtils.DirectoryExists(RuntimeFolder) then
+    raise Exception.Create('Der Installationsordner für die Sicherung fehlt.');
+  // Use only local date and time; the user requested no GUID or extra suffix.
+  // Nur lokales Datum und Uhrzeit verwenden; Benutzer wünscht keine GUID oder weiteren Zusatz.
+  Result := IncludeTrailingPathDelimiter(RuntimeFolder) + 'Eigene Bearbeitungen Backup' +
+    PathDelim + FormatDateTime('yyyy-mm-dd_hh-nn-ss', Now);
+  // Never merge into an existing backup created in the same second.
+  // Niemals in eine bereits in derselben Sekunde angelegte Sicherung kopieren.
+  if System.SysUtils.DirectoryExists(Result) then
+    raise Exception.Create('Dieser Sicherungsordner existiert bereits. Bitte erneut versuchen.');
+  TDirectory.CreateDirectory(Result);
+  // Copy generated Windows scripts and Compose from the installation root.
+  // Erzeugte Windows-Skripte und Compose aus dem Installationsordner kopieren.
+  // Enumerate only the root here, so previous backup folders are not copied recursively.
+  // Hier nur den Stamm auflisten, damit frühere Sicherungsordner nicht rekursiv mitkopiert werden.
+  for SourcePath in TDirectory.GetFiles(RuntimeFolder) do
+  begin
+    Extension := ExtractFileExt(SourcePath);
+    if SameText(Extension, '.ps1') or SameText(Extension, '.cmd') or
+       SameText(Extension, '.bat') or SameText(Extension, '.sh') or
+       SameText(ExtractFileName(SourcePath), DockerComposeFileName) or
+       SameText(ExtractFileName(SourcePath), 'compose.yml') then
+      TFile.Copy(SourcePath, IncludeTrailingPathDelimiter(Result) + ExtractFileName(SourcePath), False);
+  end;
+  // Keep the complete custom scripts tree, including helper files and subfolders.
+  // Den gesamten eigenen Skriptbaum einschließlich Hilfsdateien und Unterordnern erhalten.
+  ScriptsFolder := IncludeTrailingPathDelimiter(RuntimeFolder) + PaperlessScriptsFolderName;
+  if System.SysUtils.DirectoryExists(ScriptsFolder) then
+  begin
+    TDirectory.CreateDirectory(IncludeTrailingPathDelimiter(Result) + PaperlessScriptsFolderName);
+    for SourcePath in TDirectory.GetFiles(ScriptsFolder, '*', TSearchOption.soAllDirectories) do
+    begin
+      RelativePath := Copy(SourcePath, Length(IncludeTrailingPathDelimiter(RuntimeFolder)) + 1, MaxInt);
+      TargetPath := IncludeTrailingPathDelimiter(Result) + RelativePath;
+      TDirectory.CreateDirectory(ExtractFilePath(TargetPath));
+      // Copy bytes without text conversion and never replace a destination file.
+      // Bytes ohne Textkonvertierung kopieren und keine vorhandene Zieldatei ersetzen.
+      TFile.Copy(SourcePath, TargetPath, False);
+    end;
+  end;
+end;
+
+// Preserve existing generated files when custom editing protection is saved.
+// Vorhandene erzeugte Dateien bei gespeicherter Bearbeitungssperre erhalten.
+function CustomFileProtected(const TargetPath: string): Boolean;
+var
+  Ini: TAppSettingsIni;
+begin
+  Result := False;
+  // Read the saved value beside the target; UI changes take effect after settings are saved.
+  // Gespeicherten Wert neben dem Ziel lesen; UI-Änderungen gelten erst nach dem Speichern.
+  if not FileExists(TargetPath) then Exit;
+  Ini := TAppSettingsIni.Create(ExtractFilePath(TargetPath) + SettingsFileName);
+  try
+    Result := Ini.ReadBool('Einstellungen', IniKeyProtectCustomFiles, False);
+  finally
+    Ini.Free;
+  end;
+end;
 
 // Create only missing hook files in the confirmed runtime folder; preserve user content.
 // Nur fehlende Hook-Dateien im bestätigten Laufzeitordner anlegen; Benutzerinhalte erhalten.

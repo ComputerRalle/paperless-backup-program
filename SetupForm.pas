@@ -763,6 +763,10 @@ begin
     // Create and save the PowerShell script that starts docker-compose.yml.
     // Das PowerShell-Skript erstellen und speichern, das docker-compose.yml startet.
     CmdTargetPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'starte_paperless.ps1';
+    // Reuse protected installation scripts; execution below remains unchanged.
+    // Geschützte Installationsskripte weiterverwenden; Ausführung darunter bleibt unverändert.
+    if not CustomFileProtected(CmdTargetPath) then
+    begin
     PrepareSetupScriptWrite(CmdTargetPath);
     CmdFile := TStringList.Create;
     try
@@ -830,6 +834,7 @@ begin
     finally
       CmdFile.Free;
     end;
+    end;
     MainformFrm.StartAndMonitorCmdScript;
   end;
 
@@ -841,7 +846,9 @@ begin
     // Create and save the PowerShell script for the Docker restart.
     // Das PowerShell-Skript für den Docker-Neustart erstellen und speichern.
     CmdTargetPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'update_paperless.ps1';
-    if not FileExists(CmdTargetPath) OR IsUpdate = True then
+    // Keep existing custom scripts; missing files can still be created.
+    // Vorhandene eigene Skripte erhalten; fehlende Dateien weiterhin anlegen.
+    if not CustomFileProtected(CmdTargetPath) then
     begin
       PrepareSetupScriptWrite(CmdTargetPath);
       CmdFile := TStringList.Create;

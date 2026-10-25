@@ -56,7 +56,7 @@ procedure CreateBackupScheduleCmdScript(
 implementation
 
 uses
-  System.Classes, System.SysUtils, Winapi.Windows;
+  System.Classes, System.SysUtils, Winapi.Windows, AppConfig;
 
 // Einen Wert sicher als einfach gequotete PowerShell-Zeichenkette schreiben.
 function PsQuote(const Value: string): string;
@@ -96,14 +96,19 @@ begin
   Lines.Add('exit 0');
 end;
 
-// Speichert PS1 als UTF-8 mit BOM für Windows PowerShell und markiert sie anschließend als versteckt.
-// Eine vorhandene Zieldatei wird vor dem Schreiben von Hidden/ReadOnly befreit und entfernt.
+// Save unprotected PS1 as UTF-8 with BOM and mark them hidden; protected files stay unchanged.
+// Ungeschützte PS1 als UTF-8 mit BOM speichern und verstecken; geschützte Dateien unverändert erhalten.
+// Only unprotected existing targets have Hidden/ReadOnly cleared before replacement.
+// Nur bei ungeschützten vorhandenen Zielen vor dem Ersetzen Hidden/ReadOnly entfernen.
 procedure SavePsScript(const Lines: TStringList; const TargetPath: string);
 var
   // Preserve all other Windows attributes when changing hidden/read-only flags.
   // Alle anderen Windows-Attribute beim Ändern von Hidden/ReadOnly erhalten.
   Attributes: DWORD;
 begin
+  // Do not replace user-edited scripts while protection is enabled.
+  // Selbst bearbeitete Skripte bei aktiviertem Schutz nicht ersetzen.
+  if CustomFileProtected(TargetPath) then Exit;
   if FileExists(TargetPath) then
   begin
     Attributes := Winapi.Windows.GetFileAttributes(PChar(TargetPath));
@@ -171,6 +176,26 @@ begin
   Lines.Add('');
 end;
 
+// Keep the UTF-8 dump bytes outside the PowerShell text pipeline.
+// UTF-8-Dumpbytes außerhalb der PowerShell-Textpipeline unverändert kopieren.
+procedure AddUtf8DatabaseDump(const Lines: TStringList);
+begin
+  // Use a unique container-local file outside the database volume.
+  // Eindeutige temporäre Datei im Container außerhalb des Datenbankvolumes verwenden.
+  Lines.Add('  $ContainerDumpFile = "/tmp/paperless-backup-" + [Guid]::NewGuid().ToString("N") + ".sql"');
+  Lines.Add('  try {');
+  // pg_dump writes UTF-8 directly; docker cp preserves bytes without an Out-File BOM.
+  // pg_dump schreibt UTF-8 direkt; docker cp erhält die Bytes ohne Out-File-BOM.
+  Lines.Add('    Invoke-DockerStep { docker exec $DatabaseContainer pg_dump -U paperless --encoding=UTF8 -f $ContainerDumpFile paperless } "Fehler beim Erstellen des UTF-8-PostgreSQL-Dumps im Container."');
+  Lines.Add('    Invoke-DockerStep { docker cp ("${DatabaseContainer}:" + $ContainerDumpFile) $DumpFile } "Fehler beim Kopieren des PostgreSQL-Dumps in den Backupordner."');
+  // Always attempt cleanup; a cleanup warning must not hide the original dump/copy error.
+  // Aufräumen immer versuchen; eine Warnung darf den ursprünglichen Dump-/Kopierfehler nicht verdecken.
+  Lines.Add('  } finally {');
+  Lines.Add('    docker exec $DatabaseContainer rm -f $ContainerDumpFile');
+  Lines.Add('    if ($LASTEXITCODE -ne 0) { Write-Warning "Temporäre SQL-Datei im Container konnte nicht entfernt werden (ExitCode $LASTEXITCODE): $ContainerDumpFile" }');
+  Lines.Add('  }');
+end;
+
 // Erzeugt SQL-Dump vor compose down, danach Archive einschließlich DB-Volume und den anschließenden Neustart.
 // Image-/Secret-Key-Metadaten ergänzt die Delphi-Erfolgsauswertung. Bei Abbruch nach down ist kein garantierter Neustart vorgesehen.
 procedure CreateManualBackupCmdScript(
@@ -181,6 +206,9 @@ var
 begin
   Lines := TStringList.Create;
   try
+    // Decode native console output as UTF-8 in Windows PowerShell 5.1.
+    // Native Konsolenausgaben in Windows PowerShell 5.1 als UTF-8 lesen.
+    Lines.Add('[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)');
     AddPsHeader(Lines);
     Lines.Add('try {');
     Lines.Add('  Write-Host "PowerShell Backup-Skript wird gestartet... Bitte warten"');
@@ -192,8 +220,7 @@ begin
     Lines.Add('  if (-not (Test-Path -LiteralPath $BackupDir)) { New-Item -ItemType Directory -Path $BackupDir | Out-Null }');
     Lines.Add('  $DumpFile = Join-Path $BackupDir ($DatabaseContainer + "_backup.sql")');
     Lines.Add('  Write-Host "PostgreSQL-Dump wird erstellt..."');
-    Lines.Add('  docker exec $DatabaseContainer pg_dump -U paperless paperless | Out-File -FilePath $DumpFile -Encoding utf8');
-    Lines.Add('  if ($LASTEXITCODE -ne 0) { throw "Fehler beim PostgreSQL-Dump. Abbruch. (ExitCode $LASTEXITCODE)" }');
+    AddUtf8DatabaseDump(Lines);
     Lines.Add('  Write-Host "Stoppe Docker-Container..."');
     Lines.Add('  Invoke-DockerStep { docker compose down } "Fehler beim Stoppen der Container. Abbruch."');
     Lines.Add('');
@@ -212,8 +239,10 @@ begin
     Lines.Add('  Write-Host "-----------------------------------------"');
     Lines.Add('  Write-Host "Backup abgeschlossen: $(Get-Date)"');
     Lines.Add('  Write-Host "Dateien gespeichert in: $BackupDir"');
-    Lines.Add('  Add-Content -LiteralPath $BackupLog -Value ("Backup abgeschlossen: " + (Get-Date))');
-    Lines.Add('  Add-Content -LiteralPath $BackupLog -Value ("Backup-Ziel: " + $BackupDir)');
+    // Write new log entries as UTF-8; existing legacy log bytes are not converted.
+    // Neue Logeinträge als UTF-8 schreiben; vorhandene alte Logbytes werden nicht konvertiert.
+    Lines.Add('  Add-Content -LiteralPath $BackupLog -Encoding UTF8 -Value ("Backup abgeschlossen: " + (Get-Date))');
+    Lines.Add('  Add-Content -LiteralPath $BackupLog -Encoding UTF8 -Value ("Backup-Ziel: " + $BackupDir)');
     Lines.Add('  Write-Host "Systeme starten. Fenster wird gleich geschlossen ..."');
     Lines.Add('  Wait-Countdown 10');
     AddPsFooter(Lines);
@@ -233,6 +262,9 @@ var
 begin
   Lines := TStringList.Create;
   try
+    // Decode native console output as UTF-8 in Windows PowerShell 5.1.
+    // Native Konsolenausgaben in Windows PowerShell 5.1 als UTF-8 lesen.
+    Lines.Add('[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)');
     AddPsHeader(Lines);
     Lines.Add('try {');
     Lines.Add(Format('  $ComposeDir = %s', [PsQuote(ExtractFilePath(ComposePath))]));
@@ -244,8 +276,7 @@ begin
     Lines.Add('  if (-not (Test-Path -LiteralPath $BackupDir)) { New-Item -ItemType Directory -Path $BackupDir | Out-Null }');
     AddBestEffortDjangoMigration(Lines);
     Lines.Add('  $DumpFile = Join-Path $BackupDir ($DatabaseContainer + "_backup.sql")');
-    Lines.Add('  docker exec $DatabaseContainer pg_dump -U paperless paperless | Out-File -FilePath $DumpFile -Encoding utf8');
-    Lines.Add('  if ($LASTEXITCODE -ne 0) { throw "Fehler beim PostgreSQL-Dump. Abbruch. (ExitCode $LASTEXITCODE)" }');
+    AddUtf8DatabaseDump(Lines);
     Lines.Add('  Invoke-DockerStep { docker compose down } "Fehler beim Stoppen der Container."');
     AddVolumeBackup(Lines, Volumes.Data, 'data');
     AddVolumeBackup(Lines, Volumes.Media, 'media');
@@ -254,8 +285,10 @@ begin
     Lines.Add('  Invoke-DockerStep { docker compose up -d } "Fehler beim Starten der Container."');
     Lines.Add('  Invoke-DockerStep { docker volume prune -f } "Fehler beim Bereinigen nicht verwendeter Volumes."');
     AddDanglingImagePrune(Lines);
-    Lines.Add('  Add-Content -LiteralPath $PlannedLog -Value ("Backup abgeschlossen: " + (Get-Date))');
-    Lines.Add('  Add-Content -LiteralPath $PlannedLog -Value ("Backup-Ziel: " + $BackupDir)');
+    // Write new log entries as UTF-8; existing legacy log bytes are not converted.
+    // Neue Logeinträge als UTF-8 schreiben; vorhandene alte Logbytes werden nicht konvertiert.
+    Lines.Add('  Add-Content -LiteralPath $PlannedLog -Encoding UTF8 -Value ("Backup abgeschlossen: " + (Get-Date))');
+    Lines.Add('  Add-Content -LiteralPath $PlannedLog -Encoding UTF8 -Value ("Backup-Ziel: " + $BackupDir)');
     AddPsFooter(Lines);
     SavePsScript(Lines, TargetPath);
   finally

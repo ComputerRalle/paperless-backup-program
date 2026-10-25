@@ -160,6 +160,9 @@ type
     // DFM: checked and disabled initially, above the backup confirmation.
     // DFM: anfangs angehakt und inaktiv, oberhalb der Backup-Bestätigung.
     OnlyPaperlessVersionCB: TCheckBox;
+    // Settings panel: preserve existing scripts/Compose independently of version edit permission.
+    // Einstellungen: vorhandene Skripte/Compose unabhängig von der Versionsfreigabe schützen.
+    ProtectCustomFilesCB: TCheckBox;
     NetHTTPClient1: TNetHTTPClient;
     ProgramUpdateLbl: TLabel;
     ProgressBar1: TProgressBar;
@@ -213,6 +216,7 @@ type
     procedure FormClose(Sender: TObject; var Action: TCloseAction);
     procedure StaticText1Click(Sender: TObject);
     procedure CheckBox1Click(Sender: TObject);
+    procedure ProtectCustomFilesCBClick(Sender: TObject);
     procedure WriteStandardVersionAfterInstallation();
 
     procedure LoadUpdateIniFile();
@@ -222,6 +226,9 @@ type
 
   private
     FRestoreLegacyNames: Boolean;
+    // Suppress OnClick recursion during loading, cancellation and failure recovery.
+    // OnClick-Rekursion beim Laden, Abbrechen und Zurücksetzen nach Fehlern unterdrücken.
+    FLoadingCustomFileProtection: Boolean;
     procedure CreateBackupScript(const ComposePath: string);
     function PowerShellQuote(const Value: string): string;
     function PrepareScriptOutputLog: string;
@@ -310,6 +317,9 @@ var
   Attributes: DWORD;
 begin
   if (ScriptPath.Trim = '') or not FileExists(ScriptPath) then Exit;
+  // Keep protected scripts for custom editing and later runs.
+  // Geschützte Skripte für eigene Bearbeitung und spätere Läufe erhalten.
+  if CustomFileProtected(ScriptPath) then Exit;
   try
     Attributes := Winapi.Windows.GetFileAttributes(PChar(ScriptPath));
     if Attributes <> INVALID_FILE_ATTRIBUTES then
@@ -1246,6 +1256,108 @@ begin
   ShellExecute(0, 'open', BuyMeACoffeeUrl, nil, nil, SW_SHOWNORMAL);
 end;
 
+// Confirm enabling manual maintenance; on disabling, confirm and finish a backup first.
+// Eigene Dateipflege beim Aktivieren bestätigen; beim Deaktivieren zuerst bestätigen und sichern.
+procedure TMainformFrm.ProtectCustomFilesCBClick(Sender: TObject);
+var
+  BackupFolder: string;
+begin
+  // Ignore programmatic changes while restoring saved or rejected selections.
+  // Programmatische Änderungen beim Laden oder Zurücksetzen der Auswahl ignorieren.
+  if FLoadingCustomFileProtection then Exit;
+  if not ProtectCustomFilesCB.Checked then
+  begin
+    // Explain the backup destination before unlocking or copying custom files.
+    // Sicherungsziel vor dem Entsperren oder Kopieren eigener Dateien erläutern.
+    if CenteredMessageDlg(
+      'Beim Entfernen des Häkchens werden die vorhandenen Scripte und die Compose-Dateien ' +
+      'mit Ihren Änderungen sowie der gesamte Ordner scripts gesichert.' +
+      sLineBreak + sLineBreak +
+      'Das Backup wird in einem eigenen Unterordner dieses Ordners abgelegt:' + sLineBreak +
+      IncludeTrailingPathDelimiter(AppDataFolder) + 'Eigene Bearbeitungen Backup' +
+      sLineBreak + sLineBreak +
+      'Ältere Sicherungen bleiben erhalten.' +
+      sLineBreak + sLineBreak +
+      'Nach erfolgreicher Sicherung und „Einstellungen Speichern“ kann das Programm die ' +
+      'Dateien wieder überschreiben.' + sLineBreak + sLineBreak +
+      'Möchten Sie die Dateien sichern und die Sperre aufheben?',
+      mtWarning, [mbYes, mbNo], 0) <> mrYes then
+    begin
+      FLoadingCustomFileProtection := True;
+      try
+        ProtectCustomFilesCB.Checked := True;
+      finally
+        FLoadingCustomFileProtection := False;
+      end;
+      Exit;
+    end;
+    try
+      // Finish the copy before saving settings can permit overwriting files.
+      // Kopieren abschließen, bevor gespeicherte Einstellungen Überschreiben erlauben.
+      BackupFolder := BackupCustomFiles(AppDataFolder);
+    except
+      on E: Exception do
+      begin
+        // Keep protection on after any copy failure; retain partial backups for inspection.
+        // Nach jedem Kopierfehler Schutz erhalten; Teilsicherungen zur Prüfung behalten.
+        FLoadingCustomFileProtection := True;
+        try
+          ProtectCustomFilesCB.Checked := True;
+        finally
+          FLoadingCustomFileProtection := False;
+        end;
+        CenteredMessageDlg('Die eigenen Bearbeitungen konnten nicht vollständig gesichert werden.' +
+          sLineBreak + 'Die Sperre bleibt aktiviert.' + sLineBreak + sLineBreak + E.Message,
+          mtError, [mbOK], 0);
+        Exit;
+      end;
+    end;
+    // Copying itself does not persist the unlocked state or start Docker.
+    // Das Kopieren speichert die Freigabe noch nicht und startet Docker nicht.
+    CenteredMessageDlg('Skripte und Compose-Datei wurden gesichert unter:' + sLineBreak +
+      BackupFolder + sLineBreak + sLineBreak +
+      'Mit „Einstellungen Speichern“ übernehmen Sie die aufgehobene Sperre.',
+      mtInformation, [mbOK], 0);
+    Exit;
+  end;
+  if CenteredMessageDlg(
+    'Mit dieser Sperre übernimmt das Programm die Pflege vorhandener Skripte und ' +
+    'der docker-compose.yml nicht mehr.' + sLineBreak + sLineBreak +
+    'Sie müssen darin alle Angaben selbst aktuell halten: insbesondere Pfade, ' +
+    'Backupziele, Wiederherstellungsquellen, Imageversionen und weitere Einstellungen.' +
+    sLineBreak + sLineBreak +
+    'Backup, Wiederherstellung und Updates führen die vorhandenen Dateien weiterhin aus. ' +
+    'Änderungen in den Programmeinstellungen werden nicht automatisch in diese Dateien übernommen. ' +
+    'Veraltete oder falsche Angaben können zu fehlgeschlagenen Backups, einer falschen ' +
+    'Wiederherstellung oder Datenverlust führen.' + sLineBreak + sLineBreak +
+    'Fehlende Dateien werden weiterhin angelegt. Geschützte Einmalskripte bleiben nach ' +
+    'der Ausführung erhalten.' + sLineBreak + sLineBreak +
+    'Beim Entfernen des Hakens werden zuerst die vorhandenen Skripte, die Compose-Datei ' +
+    'und alle Dateien im Ordner scripts einschließlich der Unterordner gesichert. ' +
+    'Die Sicherung liegt im Installationsordner unter „Eigene Bearbeitungen Backup“. ' +
+    'Jeder Sicherungsstand erhält einen eigenen Unterordner; ältere Sicherungen bleiben erhalten.' +
+    sLineBreak + sLineBreak +
+    'Nach erfolgreicher Sicherung und „Einstellungen Speichern“ kann das Programm Ihre ' +
+    'eigenen Bearbeitungen wieder überschreiben.' + sLineBreak + sLineBreak +
+    'Wenn Sie die Scripte und die Compose-Datei selbst geändert haben, gehen Sie in die ' +
+    'Einstellungen und klicken Sie auf „Einstellungen Speichern“. Bestätigen Sie anschließend ' +
+    'den Neustart. Paperless wird dann mit den manuell in den Dateien eingepflegten Änderungen ' +
+    'neu gestartet.' + sLineBreak + sLineBreak +
+    'Möchten Sie die Sperre aktivieren und die Pflege selbst übernehmen?' + sLineBreak +
+    'Die Auswahl wird mit „Einstellungen Speichern“ dauerhaft übernommen.',
+    mtWarning, [mbYes, mbNo], 0) <> mrYes then
+  begin
+    // Declining activation is not an unlock and must not create a backup.
+    // Abgelehnte Aktivierung ist kein Entsperren und erzeugt keine Sicherung.
+    FLoadingCustomFileProtection := True;
+    try
+      ProtectCustomFilesCB.Checked := False;
+    finally
+      FLoadingCustomFileProtection := False;
+    end;
+  end;
+end;
+
 // Manuelle Bearbeitung der Docker-Image-Versionen aktivieren oder deaktivieren.
 procedure TMainformFrm.CheckBox1Click(Sender: TObject);
 var
@@ -1996,6 +2108,14 @@ begin
       TrashRetentionDays := 365;
     end;
     PapierkorbAufbewahrungEdit.Text := IntToStr(TrashRetentionDays);
+    // Restore the saved checkmark without showing the activation warning at startup.
+    // Gespeicherten Haken beim Start ohne erneute Aktivierungswarnung laden.
+    FLoadingCustomFileProtection := True;
+    try
+      ProtectCustomFilesCB.Checked := Ini.ReadBool('Einstellungen', IniKeyProtectCustomFiles, False);
+    finally
+      FLoadingCustomFileProtection := False;
+    end;
    finally
     Ini.Free;
    end;
@@ -2669,6 +2789,9 @@ begin
     // Section 1: Save general settings.
     // Abschnitt 1: Allgemeine Einstellungen speichern.
     // --------------------------------------------------------------
+    // Save protection before Compose and script generation can run.
+    // Schutz vor einer möglichen Compose- und Skripterzeugung speichern.
+    Ini.WriteBool('Einstellungen', IniKeyProtectCustomFiles, ProtectCustomFilesCB.Checked);
     Ini.WriteInteger('Einstellungen', 'Papierkorb Aufbewahrungszeit in Tagen',
       StrToIntDef(PapierkorbAufbewahrungEdit.Text, 0));
     Ini.UpdateFile; // Write immediately.
