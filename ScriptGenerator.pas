@@ -42,7 +42,7 @@ procedure CreateManualBackupCmdScript(
 
 procedure CreatePlannedBackupCmdScript(
   const TargetPath, ComposePath, BackupBasePath, AppDataFolder, DatabaseContainerName: string;
-  const Volumes: TDockerVolumeNames);
+  const Volumes: TDockerVolumeNames; MaxBackupFolders: Integer);
 
 procedure CreateRestoreCmdScript(
   const TargetPath, ComposePath, BackupFolder, DatabaseContainerName: string;
@@ -267,10 +267,10 @@ begin
 end;
 
 // Erzeugt das direkt von der Aufgabenplanung ausgeführte Backup: SQL-Dump sowie data-, media- und export-Archive.
-// Kein physisches DB-Volume-Archiv und keine Imageversions-Metadaten. Retention wird nicht pro PS-Lauf ausgeführt.
+// Kein physisches DB-Volume-Archiv und keine Imageversions-Metadaten.
 procedure CreatePlannedBackupCmdScript(
   const TargetPath, ComposePath, BackupBasePath, AppDataFolder, DatabaseContainerName: string;
-  const Volumes: TDockerVolumeNames);
+  const Volumes: TDockerVolumeNames; MaxBackupFolders: Integer);
 var
   Lines: TStringList;
 begin
@@ -304,6 +304,21 @@ begin
     // Neue Logeinträge als UTF-8 schreiben; vorhandene alte Logbytes werden nicht konvertiert.
     Lines.Add('  Add-Content -LiteralPath $PlannedLog -Encoding UTF8 -Value ("Backup abgeschlossen: " + (Get-Date))');
     Lines.Add('  Add-Content -LiteralPath $PlannedLog -Encoding UTF8 -Value ("Backup-Ziel: " + $BackupDir)');
+    // Apply retention only after a successful backup; preserve the current folder.
+    // Aufbewahrung erst nach erfolgreichem Backup anwenden; aktuellen Ordner erhalten.
+    Lines.Add(Format('  $MaxBackupFolders = %d', [MaxBackupFolders]));
+    Lines.Add('  if ($MaxBackupFolders -gt 0) {');
+    Lines.Add('    try {');
+    Lines.Add('      $folders = @(Get-ChildItem -LiteralPath $BackupBase -Directory -ErrorAction Stop | Where-Object {');
+    Lines.Add('        $date = [datetime]::MinValue');
+    Lines.Add('        -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -and [datetime]::TryParseExact($_.Name, ''yyyy-MM-dd_HH-mm-ss'', [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::None, [ref]$date)');
+    Lines.Add('      } | Sort-Object Name -Descending)');
+    Lines.Add('      $folders | Select-Object -Skip $MaxBackupFolders | Where-Object { $_.FullName -ne $BackupDir } | ForEach-Object {');
+    Lines.Add('        try { Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction Stop }');
+    Lines.Add('        catch { Write-Warning ("Aufräumen fehlgeschlagen: " + $_.Exception.Message) }');
+    Lines.Add('      }');
+    Lines.Add('    } catch { Write-Warning ("Aufräumen fehlgeschlagen: " + $_.Exception.Message) }');
+    Lines.Add('  }');
     AddPsFooter(Lines);
     SavePsScript(Lines, TargetPath);
   finally

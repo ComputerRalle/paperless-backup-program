@@ -229,6 +229,8 @@ type
     // Suppress OnClick recursion during loading, cancellation and failure recovery.
     // OnClick-Rekursion beim Laden, Abbrechen und Zurücksetzen nach Fehlern unterdrücken.
     FLoadingCustomFileProtection: Boolean;
+    FRetentionUpdateRequested: Boolean;
+    FRetentionUpdateSucceeded: Boolean;
     procedure CreateBackupScript(const ComposePath: string);
     function PowerShellQuote(const Value: string): string;
     function PrepareScriptOutputLog: string;
@@ -2425,6 +2427,8 @@ end;
 procedure TMainformFrm.SaveRetentionBtnClick(Sender: TObject);
 var
   Ini: TAppSettingsIni;
+  ComposeFile, ComposeDir, PlannedScript, BackupBase: string;
+  Volumes: TDockerVolumeNames;
 begin
   HideWelcomeLabel;
   Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
@@ -2432,11 +2436,57 @@ begin
     // Save the retention setting.
     // Die Aufbewahrungseinstellung speichern.
     Ini.WriteInteger('Zeitplan', 'BackupsBehalten', KeepBackupsSpE.Value);
+    ComposeFile := Ini.ReadString('Pfade', 'DockerComposePfad', '').Trim;
+    BackupBase := Ini.ReadString('Pfade', 'BackupZiel', '').Trim;
     // Write immediately.
     // Sofort schreiben.
     Ini.UpdateFile;
   finally
     Ini.Free;
+  end;
+  // Reuse the settings save action, including its restart confirmation.
+  // Die Einstellungen-Speichern-Funktion mit ihrer Neustartfrage verwenden.
+  FRetentionUpdateRequested := True;
+  FRetentionUpdateSucceeded := False;
+  try
+    SaveSettingsBtnClick(SaveSettingsBtn);
+  finally
+    FRetentionUpdateRequested := False;
+  end;
+  ReadContainerNamesFromFile;
+  // Update only the existing planned script, without running retention here.
+  // Nur das vorhandene geplante Skript aktualisieren, ohne hier aufzuräumen.
+  if (ComposeFile <> '') and System.SysUtils.DirectoryExists(ComposeFile) then
+    ComposeFile := IncludeTrailingPathDelimiter(ComposeFile) + DockerComposeFileName;
+  if (ComposeFile <> '') and FileExists(ComposeFile) then
+  begin
+    ComposeDir := ExtractFilePath(ComposeFile);
+    PlannedScript := IncludeTrailingPathDelimiter(ComposeDir) + 'paperless-backup-geplant.ps1';
+    if FileExists(PlannedScript) then
+    begin
+      if CustomFileProtected(PlannedScript) then
+        CenteredShowMessage('Die Anzahl wurde gespeichert. Das geschützte geplante Backup-Skript wurde nicht geändert. Bitte passen Sie die Anzahl dort selbst an.')
+      else if (PaperlessDBName.Trim = '') or (Volume_data.Trim = '') or
+              (Volume_media.Trim = '') or (Volume_export.Trim = '') then
+        CenteredShowMessage('Die Anzahl wurde gespeichert. Das geplante Backup-Skript konnte nicht aktualisiert werden, da Container- oder Volumenamen fehlen. Bitte führen Sie zuerst ein reguläres Backup durch.')
+      else
+      begin
+        if BackupBase = '' then
+          BackupBase := IncludeTrailingPathDelimiter(GetEnvironmentVariable('USERPROFILE')) + 'Desktop\FallbackBackup\'
+        else
+          BackupBase := IncludeTrailingPathDelimiter(BackupBase);
+        Volumes.Data := Volume_data;
+        Volumes.DbData := Volume_db_data;
+        Volumes.ExportData := Volume_export;
+        Volumes.Media := Volume_media;
+        try
+          CreatePlannedBackupCmdScript(PlannedScript, ComposeDir, BackupBase, AppDataFolder, PaperlessDBName, Volumes, KeepBackupsSpE.Value);
+        except
+          on E: Exception do
+            CenteredShowMessage('Die Anzahl wurde gespeichert. Das geplante Backup-Skript konnte nicht aktualisiert werden: ' + E.Message);
+        end;
+      end;
+    end;
   end;
   // Show confirmation only after the settings were saved successfully.
   // Bestätigung erst nach erfolgreichem Speichern der Einstellungen anzeigen.
@@ -2446,6 +2496,13 @@ begin
   if KeepBackupsSpE.Value = 0 then
   AllBackupsAreRetainedLbl.Visible := True else
   AllBackupsAreRetainedLbl.Visible := False;
+  if FRetentionUpdateSucceeded and not ApplicationClosing and not Application.Terminated then
+  begin
+    TabControl1.TabIndex := 2;
+    TabControl1Change(TabControl1);
+    RetentionSavedLbl.Visible := True;
+  end;
+  FRetentionUpdateSucceeded := False;
 end;
 
 // Enable or disable all controls that belong to automatic backups.
@@ -3179,7 +3236,7 @@ begin
 end;
 
 // Erzeugt das geplante PS1-Skript aus gespeicherten Einstellungen und führt die lokale Aufbewahrungsbereinigung aus.
-// Die Bereinigung erfolgt beim Generieren, nicht automatisch bei jedem Lauf der Windows-Aufgabe.
+// Zusätzlich bereinigt das geplante Skript nach erfolgreichem Lauf.
 procedure TMainformFrm.CreateBackupPlanScript(const ComposePath: string);
 var
   BackupFolderList: TArray<string>;
@@ -3251,7 +3308,7 @@ begin
   Volumes.DbData := Volume_db_data;
   Volumes.ExportData := Volume_export;
   Volumes.Media := Volume_media;
-  CreatePlannedBackupCmdScript(CmdTargetPath, ComposePath, BackupPath, AppDataFolder, PaperlessDBName, Volumes);
+  CreatePlannedBackupCmdScript(CmdTargetPath, ComposePath, BackupPath, AppDataFolder, PaperlessDBName, Volumes, KeepBackupsSpE.Value);
   // Delete old backup folders when a retention limit is set.
   // Alte Backup-Ordner löschen, wenn eine Aufbewahrungsgrenze gesetzt ist.
   MaxBackupFolders := KeepBackupsSpE.Value;
@@ -3625,6 +3682,8 @@ begin
         CloseHandle(ProcessInfo.hThread);
         if ExitCode = 0 then
         begin
+          if FRetentionUpdateRequested then
+            FRetentionUpdateSucceeded := True;
           if IsRestoreApplyingSettings then
             FinishScriptProgress('Wiederherstellung abgeschlossen.', True)
           else

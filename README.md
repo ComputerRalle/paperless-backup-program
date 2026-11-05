@@ -79,10 +79,12 @@ Laufzeiteinstellungen verwenden standardmäßig den PG18-Ordner unten. Bei eigen
 - Diese Einstellungsdatei behalten, wenn eine bestehende Paperless-Installation weiterverwendet wird.
 - Existing installations without a saved key import the key from `docker-compose.yml` when available.
 - Bestehende Installationen ohne gespeicherten Key importieren den Key aus `docker-compose.yml`, wenn er vorhanden ist.
-- Each successful backup stores the active Paperless secret key in `paperless_secret_key.txt`.
-- Jedes erfolgreiche Backup speichert den aktiven Paperless Secret Key in `paperless_secret_key.txt`.
-- Restore imports the secret key from `paperless_secret_key.txt`; older backups without this file use the legacy key.
-- Die Wiederherstellung importiert den Secret Key aus `paperless_secret_key.txt`; aeltere Backups ohne diese Datei verwenden den Legacy-Key.
+- Manual and scheduled backups attempt to save the running Paperless container’s key in `paperless_secret_key.txt`. If this fails, the backup continues with a warning.
+- Manuelle und geplante Backups versuchen, den Schlüssel des laufenden Paperless-Containers in `paperless_secret_key.txt` zu sichern. Bei einem Fehler läuft das Backup mit einer Warnung weiter.
+- Restore reads the backup key; a missing or empty key uses the legacy key. A protected Compose file remains unchanged and its key takes precedence.
+- Die Wiederherstellung liest den Backup-Schlüssel; bei fehlendem oder leerem Schlüssel wird der Legacy-Schlüssel verwendet. Eine geschützte Compose-Datei bleibt unverändert und ihr Schlüssel hat Vorrang.
+- Backup archives are not encrypted by the Paperless secret key; protect the backup location separately.
+- Die Backup-Archive werden nicht durch den Paperless Secret Key verschlüsselt; den Backup-Speicherort gesondert schützen.
 - Keep this backup file private because it contains sensitive installation data.
 - Diese Backup-Datei privat halten, da sie sensible Installationsdaten enthaelt.
 - Mail settings are encrypted in backups with a user-provided password using Windows CNG (`bcrypt.dll`), PBKDF2-HMAC-SHA256, AES-256-CBC, and HMAC-SHA256.
