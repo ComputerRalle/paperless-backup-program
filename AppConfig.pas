@@ -186,8 +186,8 @@ begin
   end;
 end;
 
-// Preserve existing generated files when custom editing protection is saved.
-// Vorhandene erzeugte Dateien bei gespeicherter Bearbeitungssperre erhalten.
+// Preserve only existing Compose files when custom editing protection is saved.
+// Nur vorhandene Compose-Dateien bei gespeicherter Bearbeitungssperre erhalten.
 function CustomFileProtected(const TargetPath: string): Boolean;
 var
   Ini: TAppSettingsIni;
@@ -196,6 +196,8 @@ begin
   // Read the saved value beside the target; UI changes take effect after settings are saved.
   // Gespeicherten Wert neben dem Ziel lesen; UI-Änderungen gelten erst nach dem Speichern.
   if not FileExists(TargetPath) then Exit;
+  if not SameText(ExtractFileName(TargetPath), DockerComposeFileName) and
+     not SameText(ExtractFileName(TargetPath), 'compose.yml') then Exit;
   Ini := TAppSettingsIni.Create(ExtractFilePath(TargetPath) + SettingsFileName);
   try
     Result := Ini.ReadBool('Einstellungen', IniKeyProtectCustomFiles, False);

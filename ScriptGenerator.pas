@@ -96,19 +96,16 @@ begin
   Lines.Add('exit 0');
 end;
 
-// Save unprotected PS1 as UTF-8 with BOM and mark them hidden; protected files stay unchanged.
-// Ungeschützte PS1 als UTF-8 mit BOM speichern und verstecken; geschützte Dateien unverändert erhalten.
-// Only unprotected existing targets have Hidden/ReadOnly cleared before replacement.
-// Nur bei ungeschützten vorhandenen Zielen vor dem Ersetzen Hidden/ReadOnly entfernen.
+// Save PS1 as UTF-8 with BOM and mark them hidden.
+// PS1 als UTF-8 mit BOM speichern und verstecken.
+// Clear Hidden/ReadOnly on existing targets before replacement.
+// Bei vorhandenen Zielen vor dem Ersetzen Hidden/ReadOnly entfernen.
 procedure SavePsScript(const Lines: TStringList; const TargetPath: string);
 var
   // Preserve all other Windows attributes when changing hidden/read-only flags.
   // Alle anderen Windows-Attribute beim Ändern von Hidden/ReadOnly erhalten.
   Attributes: DWORD;
 begin
-  // Do not replace user-edited scripts while protection is enabled.
-  // Selbst bearbeitete Skripte bei aktiviertem Schutz nicht ersetzen.
-  if CustomFileProtected(TargetPath) then Exit;
   if FileExists(TargetPath) then
   begin
     Attributes := Winapi.Windows.GetFileAttributes(PChar(TargetPath));
@@ -496,7 +493,9 @@ begin
     Lines.Add('      ''SUN'' { ''Sunday'' }');
     Lines.Add('    }');
     Lines.Add('  }');
-    Lines.Add('  $Action = New-ScheduledTaskAction -Execute ''powershell.exe'' -Argument (''-NoProfile -ExecutionPolicy Bypass -File "'' + $BackupScriptPath + ''"'')');
+    // Hide the PowerShell window when the scheduled task starts.
+    // Das PowerShell-Fenster beim Start der geplanten Aufgabe ausblenden.
+    Lines.Add('  $Action = New-ScheduledTaskAction -Execute ''powershell.exe'' -Argument (''-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "'' + $BackupScriptPath + ''"'')');
     Lines.Add('  $Trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek $DaysOfWeek -At $StartTime');
     Lines.Add('  Register-ScheduledTask -TaskName ''PaperlessBackup'' -Action $Action -Trigger $Trigger -Force | Out-Null');
     Lines.Add('  Write-Host "=== Fertig ==="');

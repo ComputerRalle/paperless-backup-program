@@ -319,9 +319,6 @@ var
   Attributes: DWORD;
 begin
   if (ScriptPath.Trim = '') or not FileExists(ScriptPath) then Exit;
-  // Keep protected scripts for custom editing and later runs.
-  // Geschützte Skripte für eigene Bearbeitung und spätere Läufe erhalten.
-  if CustomFileProtected(ScriptPath) then Exit;
   try
     Attributes := Winapi.Windows.GetFileAttributes(PChar(ScriptPath));
     if Attributes <> INVALID_FILE_ATTRIBUTES then
@@ -1331,8 +1328,8 @@ begin
     // Explain the backup destination before unlocking or copying custom files.
     // Sicherungsziel vor dem Entsperren oder Kopieren eigener Dateien erläutern.
     if CenteredMessageDlg(
-      'Beim Entfernen des Häkchens werden die vorhandenen Scripte und die Compose-Dateien ' +
-      'mit Ihren Änderungen sowie der gesamte Ordner scripts gesichert.' +
+      'Beim Aufheben des Compose-Schutzes werden vorhandene Compose-Dateien, ' +
+      'Skriptdateien im Installationsordner und der Ordner scripts gesichert.' +
       sLineBreak + sLineBreak +
       'Das Backup wird in einem eigenen Unterordner dieses Ordners abgelegt:' + sLineBreak +
       IncludeTrailingPathDelimiter(AppDataFolder) + 'Eigene Bearbeitungen Backup' +
@@ -1340,8 +1337,8 @@ begin
       'Ältere Sicherungen bleiben erhalten.' +
       sLineBreak + sLineBreak +
       'Nach erfolgreicher Sicherung und „Einstellungen Speichern“ kann das Programm die ' +
-      'Dateien wieder überschreiben.' + sLineBreak + sLineBreak +
-      'Möchten Sie die Dateien sichern und die Sperre aufheben?',
+      'Compose-Datei wieder überschreiben.' + sLineBreak + sLineBreak +
+      'Möchten Sie die Dateien sichern und den Compose-Schutz aufheben?',
       mtWarning, [mbYes, mbNo], 0) <> mrYes then
     begin
       FLoadingCustomFileProtection := True;
@@ -1375,37 +1372,22 @@ begin
     end;
     // Copying itself does not persist the unlocked state or start Docker.
     // Das Kopieren speichert die Freigabe noch nicht und startet Docker nicht.
-    CenteredMessageDlg('Skripte und Compose-Datei wurden gesichert unter:' + sLineBreak +
+    CenteredMessageDlg('Die vorhandenen Dateien wurden gesichert unter:' + sLineBreak +
       BackupFolder + sLineBreak + sLineBreak +
       'Mit „Einstellungen Speichern“ übernehmen Sie die aufgehobene Sperre.',
       mtInformation, [mbOK], 0);
     Exit;
   end;
   if CenteredMessageDlg(
-    'Mit dieser Sperre übernimmt das Programm die Pflege vorhandener Skripte und ' +
-    'der docker-compose.yml nicht mehr.' + sLineBreak + sLineBreak +
-    'Sie müssen darin alle Angaben selbst aktuell halten: insbesondere Pfade, ' +
-    'Backupziele, Wiederherstellungsquellen, Imageversionen und weitere Einstellungen.' +
+    'Eine vorhandene Compose-Datei wird vom Programm nicht mehr überschrieben. ' +
+    'Änderungen an Einstellungen und Imageversionen müssen Sie dort selbst eintragen.' +
     sLineBreak + sLineBreak +
-    'Backup, Wiederherstellung und Updates führen die vorhandenen Dateien weiterhin aus. ' +
-    'Änderungen in den Programmeinstellungen werden nicht automatisch in diese Dateien übernommen. ' +
-    'Veraltete oder falsche Angaben können zu fehlgeschlagenen Backups, einer falschen ' +
-    'Wiederherstellung oder Datenverlust führen.' + sLineBreak + sLineBreak +
-    'Fehlende Dateien werden weiterhin angelegt. Geschützte Einmalskripte bleiben nach ' +
-    'der Ausführung erhalten.' + sLineBreak + sLineBreak +
-    'Beim Entfernen des Hakens werden zuerst die vorhandenen Skripte, die Compose-Datei ' +
-    'und alle Dateien im Ordner scripts einschließlich der Unterordner gesichert. ' +
-    'Die Sicherung liegt im Installationsordner unter „Eigene Bearbeitungen Backup“. ' +
-    'Jeder Sicherungsstand erhält einen eigenen Unterordner; ältere Sicherungen bleiben erhalten.' +
-    sLineBreak + sLineBreak +
-    'Nach erfolgreicher Sicherung und „Einstellungen Speichern“ kann das Programm Ihre ' +
-    'eigenen Bearbeitungen wieder überschreiben.' + sLineBreak + sLineBreak +
-    'Wenn Sie die Scripte und die Compose-Datei selbst geändert haben, gehen Sie in die ' +
-    'Einstellungen und klicken Sie auf „Einstellungen Speichern“. Bestätigen Sie anschließend ' +
-    'den Neustart. Paperless wird dann mit den manuell in den Dateien eingepflegten Änderungen ' +
-    'neu gestartet.' + sLineBreak + sLineBreak +
-    'Möchten Sie die Sperre aktivieren und die Pflege selbst übernehmen?' + sLineBreak +
-    'Die Auswahl wird mit „Einstellungen Speichern“ dauerhaft übernommen.',
+    'Vom Programm erzeugte Skripte werden weiterhin aktualisiert. Vorhandene eigene ' +
+    'Dateien im Ordner scripts bleiben wie bisher erhalten.' + sLineBreak + sLineBreak +
+    'Beim Entfernen der Sperre werden Compose-Dateien, Skripte im Installationsordner ' +
+    'und der Ordner scripts zunächst gesichert. Die Auswahl wird mit ' +
+    '„Einstellungen Speichern“ übernommen.' + sLineBreak + sLineBreak +
+    'Möchten Sie die Compose-Datei für eigene Bearbeitung sperren?',
     mtWarning, [mbYes, mbNo], 0) <> mrYes then
   begin
     // Declining activation is not an unlock and must not create a backup.
@@ -2464,9 +2446,7 @@ begin
     PlannedScript := IncludeTrailingPathDelimiter(ComposeDir) + 'paperless-backup-geplant.ps1';
     if FileExists(PlannedScript) then
     begin
-      if CustomFileProtected(PlannedScript) then
-        CenteredShowMessage('Die Anzahl wurde gespeichert. Das geschützte geplante Backup-Skript wurde nicht geändert. Bitte passen Sie die Anzahl dort selbst an.')
-      else if (PaperlessDBName.Trim = '') or (Volume_data.Trim = '') or
+      if (PaperlessDBName.Trim = '') or (Volume_data.Trim = '') or
               (Volume_media.Trim = '') or (Volume_export.Trim = '') then
         CenteredShowMessage('Die Anzahl wurde gespeichert. Das geplante Backup-Skript konnte nicht aktualisiert werden, da Container- oder Volumenamen fehlen. Bitte führen Sie zuerst ein reguläres Backup durch.')
       else

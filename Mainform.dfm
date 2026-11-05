@@ -138543,9 +138543,9 @@ object MainformFrm: TMainformFrm
           Width = 696
           Height = 54
           Caption = 
-            'Diese Aufbewahrungrichtlinie gilt aktuell f'#252'r manuelle Backups. ' +
-            'Automatische Backups werden '#13'immer aufbewahrt. Ich arbeite an de' +
-            'r Bereinigung und diese wird mit folgenen Updates '#13'ausgeliefert.'
+            'Diese Aufbewahrungsrichtlinie gilt f'#252'r manuelle und automatische Backups.'#13#10 +
+            'Bei 0 werden alle Backups aufbewahrt.'#13#10 +
+            'Achtung: Durch diese Richtlinie gel'#246'schte Backups sind verloren und k'#246'nnen nicht wiederhergestellt werden.'
         end
         object AllBackupsAreRetainedLbl: TLabel
           Left = 306
@@ -139018,7 +139018,7 @@ object MainformFrm: TMainformFrm
         Top = 382
         Width = 210
         Height = 65
-        Caption = 'Scripte und compose f'#252'r Bearbeitung sperren'
+        Caption = 'Compose-Datei vor '#220'berschreiben sch'#252'tzen'
         TabOrder = 13
         WordWrap = True
         OnClick = ProtectCustomFilesCBClick
