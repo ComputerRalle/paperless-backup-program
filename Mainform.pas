@@ -45,6 +45,7 @@ type
     Panel5: TPanel;
     Panel1: TPanel;
     BuyMeACoffeBtn: TButton;
+    ChangelogBtn: TButton;
     StaticText4: TStaticText;
     Panel7: TPanel;
     Label1: TLabel;
@@ -168,7 +169,6 @@ type
     ProgressBar1: TProgressBar;
     BusyWaitLbl: TLabel;
     Button1: TButton;
-    Label32: TLabel;
     procedure StartPaperlessBackupBtnClick(Sender: TObject);
     procedure OpenManualBtnClick(Sender: TObject);
     procedure BuyMeACoffeeBtnClick(Sender: TObject);
@@ -222,6 +222,7 @@ type
     procedure LoadUpdateIniFile();
     function GetExeVersion: string;
     procedure ProgramUpdateLblClick(Sender: TObject);
+    procedure ChangelogBtnClick(Sender: TObject);
     function VersionToInt(const V: string): string;
 
   private
@@ -249,7 +250,6 @@ type
     procedure BeginScriptBusyState;
     procedure EndScriptBusyState;
     procedure SaveAndDisableInteractiveControls(const ParentControl: TWinControl);
-    procedure HideWelcomeLabel;
     procedure EncryptEmailEnvForBackup(const TargetBackupPath: string);
     procedure RestoreEmailEnvFromBackup(const SourceBackupPath, TargetComposePath: string);
     function ValidateRestoreBackupFolder(const BackupFolder: string): Boolean;
@@ -289,7 +289,6 @@ var
   PaperlessUpdate: Boolean;
   IsRestoreApplyingSettings: Boolean;
   TrashRetentionDays: Integer;
-  CurrentTestedPaperlessVersion: String;
   ScriptBusy: Boolean;
   ScriptBusyTabIndex: Integer;
   ScriptBusyControlStates: TDictionary<TControl, Boolean>;
@@ -1158,12 +1157,6 @@ begin
       UpdateScriptProgress(CurrentStatusText);
   end;
 end;
-// Die Willkommensueberschrift nach der ersten Benutzeraktion ausblenden.
-procedure TMainformFrm.HideWelcomeLabel;
-begin
-  if Assigned(Label32) then
-    Label32.Visible := False;
-end;
 // email-versand.env für das aktuelle Backup verschlüsseln und eine vorbereitete lokale Kopie behalten.
 procedure TMainformFrm.EncryptEmailEnvForBackup(const TargetBackupPath: string);
 var
@@ -1310,7 +1303,6 @@ end;
 // Die Unterstützungsseite im Standardbrowser öffnen.
 procedure TMainformFrm.BuyMeACoffeeBtnClick(Sender: TObject);
 begin
-  HideWelcomeLabel;
   ShellExecute(0, 'open', BuyMeACoffeeUrl, nil, nil, SW_SHOWNORMAL);
 end;
 
@@ -1429,7 +1421,6 @@ var
   StoredPath: string;
   TextFilePath: string;
 begin
-  HideWelcomeLabel;
   if ComposePath.Trim = '' then
   begin
     CenteredShowMessage('Bitte zuerst den Paperless-Ordner auswählen.');
@@ -1764,14 +1755,13 @@ var
   TextFilePath: String;
 begin
   if ApplicationClosing or Application.Terminated then Exit;
-  CurrentTestedPaperlessVersion := 'v' + DefaultPaperlessVersion;
   Label38.Caption := 'Valkey-Version:';
-  Label3.Caption :=  'Zielversion: Paperless-ngx ' + CurrentTestedPaperlessVersion;
-  Label6.Caption :=  'Zielversion: Paperless-ngx ' + CurrentTestedPaperlessVersion;
-  Label9.Caption :=  'Zielversion: Paperless-ngx ' + CurrentTestedPaperlessVersion;
-  Label14.Caption := 'Zielversion: Paperless-ngx ' + CurrentTestedPaperlessVersion;
-  Label28.Caption := 'Zielversion: Paperless-ngx ' + CurrentTestedPaperlessVersion;
-  Label29.Caption := 'Zielversion: Paperless-ngx ' + CurrentTestedPaperlessVersion;
+  Label3.Caption := 'Paperles-ngx v3';
+  Label6.Caption := 'Paperles-ngx v3';
+  Label9.Caption := 'Paperles-ngx v3';
+  Label14.Caption := 'Paperles-ngx v3';
+  Label28.Caption := 'Paperles-ngx v3';
+  Label29.Caption := 'Paperles-ngx v3';
 
   AppDataFolder := LoadInstallationFolder;
 
@@ -2235,7 +2225,6 @@ procedure TMainformFrm.TabControl1Change(Sender: TObject);
 var
   Ini: TAppSettingsIni;
 begin
-  HideWelcomeLabel;
   if ScriptBusy then
   begin
     TabControl1.TabIndex := ScriptBusyTabIndex;
@@ -2412,7 +2401,6 @@ var
   ComposeFile, ComposeDir, PlannedScript, BackupBase: string;
   Volumes: TDockerVolumeNames;
 begin
-  HideWelcomeLabel;
   Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
     // Save the retention setting.
@@ -3036,7 +3024,6 @@ var
   EnvFilePath: string;
   SettingsSaved: Boolean;
 begin
-  HideWelcomeLabel;
   SettingsSaved := False;
   // Build the full path to the file.
   // Den vollständigen Pfad zur Datei erstellen.
@@ -3379,7 +3366,6 @@ var
   BackupSizeBytes: Int64;
   RestoreEstimateLogText: string;
 begin
-  HideWelcomeLabel;
   ClearRestoreProgressState;
   WriteComposeContainerAndVolumeInfo(ExtractFilePath(ComposePath));
   StartPaperlessBackupBtn.Enabled := False;
@@ -3483,7 +3469,6 @@ end;
 
 procedure TMainformFrm.OpenPaperlessBrowserLblClick(Sender: TObject);
 begin
-  HideWelcomeLabel;
   ShellExecute(0, 'open', PaperlessLocalUrlWithSlash, nil, nil, SW_SHOWNORMAL);
 end;
 // Create paperless-restore.ps1 for the selected backup folder.
@@ -3876,7 +3861,6 @@ end;
 // Die Einstellungsseite anzeigen, auf der Image-Versionen und Update-Einstellungen bearbeitet werden.
 procedure TMainformFrm.PaperlessUpdateBtnClick(Sender: TObject);
 begin
-  HideWelcomeLabel;
   TabControl1.TabIndex := 4;
   BackupRestorePan.Visible := False;
   BackupPlanPan.Visible := False;
@@ -4208,6 +4192,13 @@ procedure TMainformFrm.NewsletterLblClick(Sender: TObject);
 begin
   ShellExecute(0, 'open', NewsletterUrl, nil, nil, SW_SHOWNORMAL);
 end;
+// Den Changelog im Browser öffnen.
+procedure TMainformFrm.ChangelogBtnClick(Sender: TObject);
+begin
+  if NativeInt(ShellExecute(Handle, 'open', PChar(ChangelogUrl), nil, nil, SW_SHOWNORMAL)) <= 32 then
+    CenteredShowMessage('Der Changelog konnte nicht im Browser geöffnet werden.');
+end;
+
 // Die Programm-Downloadseite oeffnen, wenn ein Update verfügbar ist.
 procedure TMainformFrm.ProgramUpdateLblClick(Sender: TObject);
 begin

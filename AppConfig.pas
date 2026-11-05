@@ -123,6 +123,7 @@ const
   BlogUrl = 'https://blog.ralf-peter-kleinert.de';
   NewsletterUrl = 'https://dashboard.mailerlite.com/forms/1051644/128840345310988026/share';
   ProgramDownloadUrl = 'https://downloads.ralf-peter-kleinert.de/software/paperless-backup-programm.html';
+  ChangelogUrl = ProgramDownloadUrl + '#_Changelog';
 
 function InstallationFolderUnderParent(const ParentFolder: string): string;
 function DefaultInstallationFolder: string;

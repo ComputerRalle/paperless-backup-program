@@ -68,18 +68,23 @@ object MainformFrm: TMainformFrm
         ParentBackground = False
         ParentCtl3D = False
         TabOrder = 0
-        object Label32: TLabel
+        object ProgramUpdateLbl: TLabel
           Left = 30
-          Top = 17
-          Width = 605
-          Height = 32
-          Caption = 'Willkommen im Paperless Backup Programm'
+          Top = 24
+          Width = 250
+          Height = 18
+          Cursor = crHandPoint
+          Alignment = taCenter
+          AutoSize = False
+          Color = clBtnFace
           Font.Charset = DEFAULT_CHARSET
           Font.Color = clWindowText
-          Font.Height = -27
+          Font.Height = -15
           Font.Name = 'Verdana'
           Font.Style = []
+          ParentColor = False
           ParentFont = False
+          OnClick = ProgramUpdateLblClick
         end
       end
       object Panel3: TPanel
@@ -138027,21 +138032,14 @@ object MainformFrm: TMainformFrm
           ParentColor = False
           ParentFont = False
         end
-        object ProgramUpdateLbl: TLabel
-          Left = 576
-          Top = 191
-          Width = 5
-          Height = 18
-          Cursor = crHandPoint
-          Color = clBtnFace
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -15
-          Font.Name = 'Verdana'
-          Font.Style = []
-          ParentColor = False
-          ParentFont = False
-          OnClick = ProgramUpdateLblClick
+        object ChangelogBtn: TButton
+          Left = 575
+          Top = 168
+          Width = 250
+          Height = 60
+          Caption = 'Changelog '#246'ffnen'
+          TabOrder = 5
+          OnClick = ChangelogBtnClick
         end
         object BuyMeACoffeBtn: TButton
           AlignWithMargins = True
@@ -138124,6 +138122,8 @@ object MainformFrm: TMainformFrm
           Top = 21
           Width = 246
           Height = 16
+          Alignment = taRightJustify
+          AutoSize = False
           Caption = 'Getestet mit: Paperless-ngx v2.18.1 '
           Color = clWhite
           Font.Charset = DEFAULT_CHARSET
@@ -138404,6 +138404,8 @@ object MainformFrm: TMainformFrm
           Top = 21
           Width = 246
           Height = 16
+          Alignment = taRightJustify
+          AutoSize = False
           Caption = 'Getestet mit: Paperless-ngx v2.18.3 '
           Color = clWhite
           Font.Charset = DEFAULT_CHARSET
@@ -138483,6 +138485,8 @@ object MainformFrm: TMainformFrm
           Top = 21
           Width = 246
           Height = 16
+          Alignment = taRightJustify
+          AutoSize = False
           Caption = 'Getestet mit: Paperless-ngx v2.18.3 '
           Color = clWhite
           Font.Charset = DEFAULT_CHARSET
@@ -138689,6 +138693,8 @@ object MainformFrm: TMainformFrm
           Top = 21
           Width = 246
           Height = 16
+          Alignment = taRightJustify
+          AutoSize = False
           Caption = 'Getestet mit: Paperless-ngx v2.18.3 '
           Color = clWhite
           Font.Charset = DEFAULT_CHARSET
@@ -138888,6 +138894,8 @@ object MainformFrm: TMainformFrm
           Top = 21
           Width = 246
           Height = 16
+          Alignment = taRightJustify
+          AutoSize = False
           Caption = 'Getestet mit: Paperless-ngx v2.18.3 '
           Color = clWhite
           Font.Charset = DEFAULT_CHARSET
@@ -139197,6 +139205,8 @@ object MainformFrm: TMainformFrm
           Top = 21
           Width = 246
           Height = 16
+          Alignment = taRightJustify
+          AutoSize = False
           Caption = 'Getestet mit: Paperless-ngx v2.18.3 '
           Color = clWhite
           Font.Charset = DEFAULT_CHARSET
