@@ -67,10 +67,16 @@ begin
     'name: ' + ComposeProjectName + sLineBreak + sLineBreak +
     'services:' + sLineBreak +
     '  broker:' + sLineBreak +
+    '    #############################################################' + sLineBreak +
+    '    # Hier können Sie die Valkey-Versionsnummer eingeben' + sLineBreak +
     '    image: valkey/valkey:'+ Versions.Redis + sLineBreak +
+    '    #############################################################' + sLineBreak +
     '    restart: always' + sLineBreak + sLineBreak +
     '  db:' + sLineBreak +
+    '    #############################################################' + sLineBreak +
+    '    # Hier können Sie die PostgreSQL-Versionsnummer eingeben' + sLineBreak +
     '    image: postgres:' + Versions.Postgres + sLineBreak +
+    '    #############################################################' + sLineBreak +
     '    restart: always' + sLineBreak +
     '    volumes:' + sLineBreak +
     '      - db_data_18:/var/lib/postgresql' + sLineBreak +
@@ -81,17 +87,26 @@ begin
     // Forward selected image tags unchanged; defaults are Gotenberg 8 and Tika 3.2.3.0.
     // Gewählte Image-Tags unverändert übernehmen; Vorgaben sind Gotenberg 8 und Tika 3.2.3.0.
     '  gotenberg:' + sLineBreak +
+    '    #############################################################' + sLineBreak +
+    '    # Hier können Sie die Gotenberg-Versionsnummer eingeben' + sLineBreak +
     '    image: gotenberg/gotenberg:' + Versions.Gotenberg + sLineBreak +
+    '    #############################################################' + sLineBreak +
     '    restart: always' + sLineBreak +
     '    command:' + sLineBreak +
     '      - "gotenberg"' + sLineBreak +
     '      - "--chromium-disable-javascript=true"' + sLineBreak +
     '      - "--chromium-allow-list=file:///tmp/.*"' + sLineBreak + sLineBreak +
     '  tika:' + sLineBreak +
+    '    #############################################################' + sLineBreak +
+    '    # Hier können Sie die Tika-Versionsnummer eingeben' + sLineBreak +
     '    image: apache/tika:' + Versions.Tika + sLineBreak +
+    '    #############################################################' + sLineBreak +
     '    restart: always' + sLineBreak + sLineBreak +
     '  paperless:' + sLineBreak +
+    '    #############################################################' + sLineBreak +
+    '    # Hier können Sie die Paperless-Versionsnummer eingeben' + sLineBreak +
     '    image: ghcr.io/paperless-ngx/paperless-ngx:' + Versions.Paperless + sLineBreak +
+    '    #############################################################' + sLineBreak +
     '    depends_on:' + sLineBreak +
     '      - db' + sLineBreak +
     '      - broker' + sLineBreak +
