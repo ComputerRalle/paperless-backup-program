@@ -196,8 +196,21 @@ begin
   Lines.Add('  }');
 end;
 
+// Save the key configured in the running Paperless container.
+// Den Schlüssel aus dem laufenden Paperless-Container sichern.
+procedure AddActivePaperlessSecretKeyBackup(const Lines: TStringList);
+begin
+  Lines.Add('  try {');
+  Lines.Add('    $PaperlessContainer = @(docker compose ps -q paperless)');
+  Lines.Add('    if ($LASTEXITCODE -ne 0 -or $PaperlessContainer.Count -ne 1 -or [string]::IsNullOrWhiteSpace($PaperlessContainer[0])) { throw "Paperless-Container nicht gefunden." }');
+  Lines.Add('    $KeyLines = @(docker inspect --format ''{{range .Config.Env}}{{println .}}{{end}}'' $PaperlessContainer[0] | Where-Object { $_.StartsWith("PAPERLESS_SECRET_KEY=") })');
+  Lines.Add('    if ($LASTEXITCODE -ne 0 -or $KeyLines.Count -ne 1 -or $KeyLines[0].Length -le "PAPERLESS_SECRET_KEY=".Length) { throw "Secret Key nicht gefunden." }');
+  Lines.Add('    [IO.File]::WriteAllText((Join-Path $BackupDir ''paperless_secret_key.txt''), ($KeyLines[0] + [Environment]::NewLine), (New-Object System.Text.UTF8Encoding($true)))');
+  Lines.Add('  } catch { Write-Warning "Secret Key konnte nicht gesichert werden. Das Backup wird fortgesetzt." }');
+end;
+
 // Erzeugt SQL-Dump vor compose down, danach Archive einschließlich DB-Volume und den anschließenden Neustart.
-// Image-/Secret-Key-Metadaten ergänzt die Delphi-Erfolgsauswertung. Bei Abbruch nach down ist kein garantierter Neustart vorgesehen.
+// Imageversions-Metadaten ergänzt die Delphi-Erfolgsauswertung. Bei Abbruch nach down ist kein garantierter Neustart vorgesehen.
 procedure CreateManualBackupCmdScript(
   const TargetPath, ComposePath, BackupPath, AppDataFolder, DatabaseContainerName: string;
   const Volumes: TDockerVolumeNames);
@@ -218,6 +231,7 @@ begin
     Lines.Add(Format('  $BackupLog = %s', [PsQuote(IncludeTrailingPathDelimiter(AppDataFolder) + 'Backup.log')]));
     Lines.Add('  Set-Location -LiteralPath $ComposeDir');
     Lines.Add('  if (-not (Test-Path -LiteralPath $BackupDir)) { New-Item -ItemType Directory -Path $BackupDir | Out-Null }');
+    AddActivePaperlessSecretKeyBackup(Lines);
     Lines.Add('  $DumpFile = Join-Path $BackupDir ($DatabaseContainer + "_backup.sql")');
     Lines.Add('  Write-Host "PostgreSQL-Dump wird erstellt..."');
     AddUtf8DatabaseDump(Lines);
@@ -253,7 +267,7 @@ begin
 end;
 
 // Erzeugt das direkt von der Aufgabenplanung ausgeführte Backup: SQL-Dump sowie data-, media- und export-Archive.
-// Kein physisches DB-Volume-Archiv und keine Delphi-Metadatenerzeugung. Retention wird nicht pro PS-Lauf ausgeführt.
+// Kein physisches DB-Volume-Archiv und keine Imageversions-Metadaten. Retention wird nicht pro PS-Lauf ausgeführt.
 procedure CreatePlannedBackupCmdScript(
   const TargetPath, ComposePath, BackupBasePath, AppDataFolder, DatabaseContainerName: string;
   const Volumes: TDockerVolumeNames);
@@ -274,6 +288,7 @@ begin
     Lines.Add('  $BackupDir = Join-Path $BackupBase (Get-Date -Format "yyyy-MM-dd_HH-mm-ss")');
     Lines.Add('  Set-Location -LiteralPath $ComposeDir');
     Lines.Add('  if (-not (Test-Path -LiteralPath $BackupDir)) { New-Item -ItemType Directory -Path $BackupDir | Out-Null }');
+    AddActivePaperlessSecretKeyBackup(Lines);
     AddBestEffortDjangoMigration(Lines);
     Lines.Add('  $DumpFile = Join-Path $BackupDir ($DatabaseContainer + "_backup.sql")');
     AddUtf8DatabaseDump(Lines);

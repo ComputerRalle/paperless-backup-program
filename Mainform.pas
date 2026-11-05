@@ -451,47 +451,106 @@ begin
   else
     Result := Format('ca. %d Std. %d Min.', [Minutes div 60, Minutes mod 60]);
 end;
-// Den Wiederherstellungs-Key aus der Backup-Datei anwenden oder bei alten Backups den Legacy-Key nutzen.
+// Read only an unambiguous literal Compose key; do not interpret YAML or Compose interpolation.
+// Nur einen eindeutigen literalen Compose-Schlüssel lesen; keine YAML- oder Compose-Ausdrücke interpretieren.
+function ReadLiteralComposeSecretKey(const FileName: string): string;
+var
+  Lines: TStringList;
+  Line, RawLine, Value: string;
+  Count: Integer;
+begin
+  Result := '';
+  Count := 0;
+  Lines := TStringList.Create;
+  try
+    Lines.LoadFromFile(FileName, TEncoding.UTF8);
+    for RawLine in Lines do
+    begin
+      Line := Trim(RawLine);
+      if not Line.StartsWith('PAPERLESS_SECRET_KEY:') then Continue;
+      Inc(Count);
+      Value := Trim(Copy(Line, Length('PAPERLESS_SECRET_KEY:') + 1, MaxInt));
+      if (Length(Value) >= 2) and (Value[1] = '"') and (Value[Length(Value)] = '"') then
+        Value := Copy(Value, 2, Length(Value) - 2)
+      else if (Length(Value) >= 2) and (Value[1] = '''') and (Value[Length(Value)] = '''') then
+        Value := Copy(Value, 2, Length(Value) - 2);
+      if (Value = '') or (Pos('$', Value) > 0) or (Pos('#', Value) > 0) or
+         (Pos('"', Value) > 0) or (Pos('''', Value) > 0) or (Pos('\', Value) > 0) then Exit('');
+      Result := Value;
+    end;
+    if Count <> 1 then Result := '';
+  finally
+    Lines.Free;
+  end;
+end;
+
+// Prepare the restore key; protected Compose files remain authoritative.
+// Restore-Schlüssel vorbereiten; bei Dateischutz ist die Compose-Datei maßgeblich.
 function ApplyPaperlessSecretKeyForRestore(const BackupFolder: string): Boolean;
 var
   Ini: TAppSettingsIni;
-  SecretKey, SecretKeyFilePath, SettingsIniPath: string;
+  SecretKey, ComposeKey, SecretKeyFilePath, SettingsIniPath, ProtectedComposePath: string;
 begin
-  Result := True;
+  Result := False;
   SecretKeyFilePath := IncludeTrailingPathDelimiter(BackupFolder) + PaperlessSecretKeyFileName;
-  if not FileExists(SecretKeyFilePath) then
-  begin
-    SecretKey := LegacyPaperlessSecretKey;
-    LogWarning('No Paperless secret key backup file found. Legacy key will be used for restore.');
-  end
-  else
-  begin
-    SecretKey := ReadPaperlessSecretKeyFromBackupFile(SecretKeyFilePath);
-    if SecretKey = '' then
-    begin
-      Result := False;
-      LogWarning('Paperless secret key backup file exists but contains no readable key.');
-      Exit;
-    end;
-  end;
-  SettingsIniPath := IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName;
-  Ini := TAppSettingsIni.Create(SettingsIniPath);
   try
-    if SecretKey = LegacyPaperlessSecretKey then
+    if not FileExists(SecretKeyFilePath) then
     begin
-      Ini.WriteString(IniSectionSecurity, IniKeyLegacyPaperlessSecretKey, SecretKey);
-      Ini.DeleteKey(IniSectionSecurity, IniKeyPaperlessSecretKey);
+      SecretKey := LegacyPaperlessSecretKey;
+      LogWarning('No Paperless secret key backup file found. Legacy key selected.');
     end
     else
     begin
-      Ini.WriteString(IniSectionSecurity, IniKeyPaperlessSecretKey, SecretKey);
-      Ini.DeleteKey(IniSectionSecurity, IniKeyLegacyPaperlessSecretKey);
+      SecretKey := ReadPaperlessSecretKeyFromBackupFile(SecretKeyFilePath);
+      if SecretKey = '' then
+      begin
+        CenteredShowMessage('Die Schlüsseldatei im Backup ist leer oder enthält keinen lesbaren Schlüssel. Der Legacy-Schlüssel wird verwendet.');
+        SecretKey := LegacyPaperlessSecretKey;
+      end;
     end;
-    Ini.UpdateFile;
-  finally
-    Ini.Free;
+    ProtectedComposePath := IncludeTrailingPathDelimiter(AppDataFolder) + DockerComposeFileName;
+    if CustomFileProtected(ProtectedComposePath) then
+    begin
+      ComposeKey := ReadLiteralComposeSecretKey(ProtectedComposePath);
+      if ComposeKey = '' then
+      begin
+        CenteredShowMessage('Der Schlüssel der geschützten Compose-Datei konnte nicht eindeutig gelesen werden. Die Datei bleibt unverändert; die Wiederherstellung wird fortgesetzt.');
+        Exit;
+      end;
+      if ComposeKey <> '' then
+      begin
+        if ComposeKey <> SecretKey then
+          CenteredShowMessage('Der Schlüssel im Backup unterscheidet sich vom Schlüssel der geschützten Compose-Datei. Der Schlüssel der Compose-Datei wird verwendet.');
+        SecretKey := ComposeKey;
+      end;
+    end;
+    SettingsIniPath := IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName;
+    Ini := TAppSettingsIni.Create(SettingsIniPath);
+    try
+      if SecretKey = LegacyPaperlessSecretKey then
+      begin
+        Ini.WriteString(IniSectionSecurity, IniKeyLegacyPaperlessSecretKey, SecretKey);
+        Ini.DeleteKey(IniSectionSecurity, IniKeyPaperlessSecretKey);
+      end
+      else
+      begin
+        Ini.WriteString(IniSectionSecurity, IniKeyPaperlessSecretKey, SecretKey);
+        Ini.DeleteKey(IniSectionSecurity, IniKeyLegacyPaperlessSecretKey);
+      end;
+      Ini.UpdateFile;
+    finally
+      Ini.Free;
+    end;
+    Result := True;
+    LogInfo('Paperless secret key prepared for restore.');
+  except
+    on E: Exception do
+    begin
+      LogWarning('Paperless secret key preparation failed.');
+      CenteredShowMessage('Der Schlüssel konnte nicht gelesen oder gespeichert werden. Die Wiederherstellung wird mit der vorhandenen Konfiguration fortgesetzt.');
+      Result := False;
+    end;
   end;
-  LogInfo('Paperless secret key prepared for restore.');
 end;
 // update.ini vom Webserver laden und anzeigen, ob ein Programmupdate verfügbar ist.
 procedure TMainformFrm.LoadUpdateIniFile();

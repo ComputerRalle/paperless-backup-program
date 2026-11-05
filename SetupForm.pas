@@ -183,6 +183,10 @@ begin
     Result := StoredKey;
     Exit;
   end;
+  // During restore, the selected legacy key must take precedence over the old Compose value.
+  // Beim Restore hat der gewählte Legacy-Schlüssel Vorrang vor dem alten Compose-Wert.
+  if ShouldWriteNewCompose and (LegacyStoredKey <> '') then
+    Exit(LegacyStoredKey);
   ComposeKey := ReadPaperlessSecretKeyFromCompose(ComposePath);
   if ComposeKey <> '' then
   begin
@@ -1127,7 +1131,6 @@ begin
     // Write the version file into the backup subfolder.
     // Die Versionsdatei in den Backup-Unterordner schreiben.
     Txt.SaveToFile(IncludeTrailingPathDelimiter(FinalPath) + ImageVersionsFileName, TEncoding.UTF8);
-    WritePaperlessSecretKeyBackup(FinalPath, Ini);
   finally
     Ini.Free;
     Txt.Free;
