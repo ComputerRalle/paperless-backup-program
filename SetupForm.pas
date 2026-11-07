@@ -829,7 +829,7 @@ begin
       CmdFile.Add('    Write-Host ''Adresse: http://localhost:8001''');
       CmdFile.Add('    exit 0');
       CmdFile.Add('} catch {');
-      CmdFile.Add('    Write-Host $_.Exception.Message -ForegroundColor Red');
+      CmdFile.Add('    Write-Host (''PAPERLESS_FEHLER: '' + $_.Exception.Message) -ForegroundColor Red');
       CmdFile.Add('    exit 1');
       CmdFile.Add('}');
       CmdFile.SaveToFile(CmdTargetPath, TEncoding.UTF8);
@@ -896,7 +896,7 @@ begin
         CmdFile.Add('  Write-Host "Systeme starten. Fenster wird gleich geschlossen ..."');
         CmdFile.Add('  Wait-Countdown 10');
         CmdFile.Add('} catch {');
-        CmdFile.Add('  Write-Host $_.Exception.Message -ForegroundColor Red');
+        CmdFile.Add('  Write-Host (''PAPERLESS_FEHLER: '' + $_.Exception.Message) -ForegroundColor Red');
         CmdFile.Add('  exit 1');
         CmdFile.Add('}');
         CmdFile.Add('exit 0');

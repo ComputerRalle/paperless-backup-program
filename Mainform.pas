@@ -241,6 +241,7 @@ type
     function PrepareScriptOutputLog: string;
     function BuildPowerShellCommand(const ScriptPath, OutputLogPath: string): string;
     function ReadLastScriptOutputLine(const OutputLogPath, FallbackText: string): string;
+    function ScriptFailureMessage(const OutputLogPath: string; ExitCode: DWORD): string;
     function ShortenScriptStatusText(const StatusText: string): string;
     function BuildInstallationStatusText(const StatusText: string): string;
     function EstimateInstallationProgressPercent(const StatusText: string; const CurrentPosition: Integer): Integer;
@@ -920,6 +921,45 @@ begin
   finally
     Lines.Free;
   end;
+end;
+// Show only known, non-sensitive failure descriptions from the script marker.
+// Nur bekannte, nicht vertrauliche Fehlerbeschreibungen aus der Skriptmarkierung anzeigen.
+function TMainformFrm.ScriptFailureMessage(const OutputLogPath: string; ExitCode: DWORD): string;
+const
+  Marker = 'PAPERLESS_FEHLER: ';
+  KnownErrors: array[0..29] of string = (
+    'Fehler beim Sichern von data', 'Fehler beim Sichern von db_data',
+    'Fehler beim Sichern von export', 'Fehler beim Sichern von media',
+    'Fehler beim Wiederherstellen von data', 'Fehler beim Wiederherstellen von media',
+    'Fehler beim Wiederherstellen von export', 'Fehler beim Erstellen des UTF-8-PostgreSQL-Dumps im Container.',
+    'Fehler beim Kopieren des PostgreSQL-Dumps in den Backupordner.', 'Fehler beim Stoppen der Container.',
+    'Fehler beim Starten der Container.', 'Fehler beim Starten von Datenbank und Broker.',
+    'Fehler beim Zuruecksetzen des public Schemas.', 'Fehler beim Wiederherstellen der PostgreSQL-Datenbank.',
+    'Migrationsstand konnte nicht gelesen werden.', 'Erforderlicher Migrationsstand nicht erreicht. Paperless bleibt gestoppt.',
+    'Unbekannter Paperless-Migrationsstand. Abbruch.', 'Migration auf die Zielversion fehlgeschlagen.',
+    'Fehler beim Bereinigen nicht verwendeter Volumes.', 'Fehler beim Bereinigen nicht verwendeter Docker-Images.',
+    'Docker Engine ist nicht erreichbar.', 'Docker Compose ist nicht verfügbar.',
+    'Die Compose-Konfiguration ist ungültig.', 'Benötigte Datei fehlt:',
+    'Containerstart fehlgeschlagen.', 'Skript-Ausfuehrungsrechte konnten nicht gesetzt werden.',
+    'Fehler beim Herunterladen aktualisierter Images.', 'Fehler beim Aktualisieren der PostgreSQL Collation Version.',
+    'PostgreSQL wurde innerhalb von 120 Sekunden nicht bereit.', 'Fehler: Datenbank-Dump fehlt:');
+var
+  Line, Detail, Known: string;
+begin
+  Result := 'Der Vorgang ist fehlgeschlagen. Fehlercode: ' + IntToStr(ExitCode);
+  Line := ReadLastScriptOutputLine(OutputLogPath, '');
+  if not Line.StartsWith(Marker) then
+    Exit(Result + sLineBreak + 'Die genaue Ursache konnte nicht ermittelt werden.');
+  Detail := Copy(Line, Length(Marker) + 1, MaxInt);
+  for Known in KnownErrors do
+    if Detail.StartsWith(Known) then
+    begin
+      Result := Result + sLineBreak + sLineBreak + Known;
+      if IsBackup or IsUpdate or PaperlessUpdate or IsRestoreApplyingSettings then
+        Result := Result + sLineBreak + sLineBreak + 'Paperless ist möglicherweise gestoppt. Bitte prüfen Sie den Zustand der Container.';
+      Exit;
+    end;
+  Result := Result + sLineBreak + 'Die genaue Ursache konnte nicht sicher ermittelt werden.';
 end;
 // Shorten long script status texts for the label.
 // Lange Skriptstatus-Texte für das Label kuerzen.
@@ -3783,7 +3823,7 @@ begin
           else
           begin
             FinishScriptProgress('Vorgang fehlgeschlagen.', False);
-            CenteredShowMessage('Vorgang fehlgeschlagen. Fehlercode: ' + IntToStr(ExitCode));
+            CenteredShowMessage(ScriptFailureMessage(OutputLogPath, ExitCode));
           end;
           ClearRestoreProgressState;
         end;
@@ -3823,7 +3863,7 @@ begin
         else
         begin
           FinishScriptProgress('Paperless-Update fehlgeschlagen.', False);
-          CenteredShowMessage('Vorgang fehlgeschlagen. Fehlercode: ' + IntToStr(ExitCode));
+          CenteredShowMessage(ScriptFailureMessage(OutputLogPath, ExitCode));
           IsUpdate := False;
           PaperlessUpdate := False;
           IsRestoreApplyingSettings := False;
@@ -3917,7 +3957,7 @@ begin
           FinishScriptProgress('Neustart fehlgeschlagen.', False);
           // Show a failure message when the process returns an error.
           // Eine Fehlermeldung anzeigen, wenn der Prozess einen Fehler zurückgibt.
-          CenteredShowMessage('Der Vorgang ist fehlgeschlagen. Fehlercode: ' + IntToStr(ExitCode));
+          CenteredShowMessage(ScriptFailureMessage(OutputLogPath, ExitCode));
         end;
       end
       else
@@ -3961,7 +4001,7 @@ begin
           FinishScriptProgress('Neustart und Updatesuche fehlgeschlagen.', False);
           // Show a failure message when the process returns an error.
           // Eine Fehlermeldung anzeigen, wenn der Prozess einen Fehler zurückgibt.
-          CenteredShowMessage('Der Vorgang ist fehlgeschlagen. Fehlercode: ' + IntToStr(ExitCode));
+          CenteredShowMessage(ScriptFailureMessage(OutputLogPath, ExitCode));
         end;
       end
       else

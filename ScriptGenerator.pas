@@ -89,7 +89,7 @@ begin
   Lines.Add('');
   Lines.Add('} catch {');
   Lines.Add('  Write-Host ""');
-  Lines.Add('  Write-Host $_.Exception.Message -ForegroundColor Red');
+  Lines.Add('  Write-Host (''PAPERLESS_FEHLER: '' + $_.Exception.Message) -ForegroundColor Red');
   Lines.Add('  exit 1');
   Lines.Add('}');
   Lines.Add('');
