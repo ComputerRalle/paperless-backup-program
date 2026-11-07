@@ -486,30 +486,52 @@ end;
 
 // Prepare the restore key; protected Compose files remain authoritative.
 // Restore-Schlüssel vorbereiten; bei Dateischutz ist die Compose-Datei maßgeblich.
-function ApplyPaperlessSecretKeyForRestore(const BackupFolder: string): Boolean;
+function ApplyPaperlessSecretKeyForRestore(const BackupFolder: string; out Cancelled: Boolean): Boolean;
 var
   Ini: TAppSettingsIni;
   SecretKey, ComposeKey, SecretKeyFilePath, SettingsIniPath, ProtectedComposePath: string;
+  ProtectedCompose, KeyProblem: Boolean;
 begin
   Result := False;
+  Cancelled := False;
   SecretKeyFilePath := IncludeTrailingPathDelimiter(BackupFolder) + PaperlessSecretKeyFileName;
   try
-    if not FileExists(SecretKeyFilePath) then
+    ProtectedComposePath := IncludeTrailingPathDelimiter(AppDataFolder) + DockerComposeFileName;
+    ProtectedCompose := CustomFileProtected(ProtectedComposePath);
+    SecretKey := '';
+    KeyProblem := not FileExists(SecretKeyFilePath);
+    if not KeyProblem then
     begin
-      SecretKey := LegacyPaperlessSecretKey;
-      LogWarning('No Paperless secret key backup file found. Legacy key selected.');
-    end
-    else
-    begin
-      SecretKey := ReadPaperlessSecretKeyFromBackupFile(SecretKeyFilePath);
-      if SecretKey = '' then
-      begin
-        CenteredShowMessage('Die Schlüsseldatei im Backup ist leer oder enthält keinen lesbaren Schlüssel. Der Legacy-Schlüssel wird verwendet.');
-        SecretKey := LegacyPaperlessSecretKey;
+      try
+        SecretKey := ReadPaperlessSecretKeyFromBackupFile(SecretKeyFilePath);
+        KeyProblem := SecretKey = '';
+      except
+        KeyProblem := True;
       end;
     end;
-    ProtectedComposePath := IncludeTrailingPathDelimiter(AppDataFolder) + DockerComposeFileName;
-    if CustomFileProtected(ProtectedComposePath) then
+    if KeyProblem then
+    begin
+      LogWarning('Paperless secret key backup file is missing or cannot be read.');
+      if ProtectedCompose then
+      begin
+        if CenteredMessageDlg('Es gibt ein Problem mit der Schlüsseldatei. Das Backup kann dennoch wiederhergestellt werden.' +
+          sLineBreak + sLineBreak + 'Die Compose-Datei ist geschützt. Es gilt deren Schlüssel.' +
+          sLineBreak + 'Wollen Sie das Backup wiederherstellen?', mtWarning, [mbYes, mbNo], 0) <> mrYes then
+        begin
+          Cancelled := True;
+          Exit;
+        end;
+      end
+      else if CenteredMessageDlg('Es gibt ein Problem mit der Schlüsseldatei. Das Backup kann dennoch wiederhergestellt werden.' +
+        sLineBreak + sLineBreak + 'Wollen Sie das Backup mit dem Legacy-Schlüssel wiederherstellen?',
+        mtWarning, [mbYes, mbNo], 0) <> mrYes then
+      begin
+        Cancelled := True;
+        Exit;
+      end;
+      SecretKey := LegacyPaperlessSecretKey;
+    end;
+    if ProtectedCompose then
     begin
       ComposeKey := ReadLiteralComposeSecretKey(ProtectedComposePath);
       if ComposeKey = '' then
@@ -519,8 +541,13 @@ begin
       end;
       if ComposeKey <> '' then
       begin
-        if ComposeKey <> SecretKey then
-          CenteredShowMessage('Der Schlüssel im Backup unterscheidet sich vom Schlüssel der geschützten Compose-Datei. Der Schlüssel der Compose-Datei wird verwendet.');
+        if (not KeyProblem) and (ComposeKey <> SecretKey) then
+          if CenteredMessageDlg('Der Schlüssel aus dem Backup weicht vom Schlüssel der gesperrten Compose-Datei ab. Daher wird der Schlüssel aus der Compose-Datei verwendet.' +
+            sLineBreak + sLineBreak + 'Wollen Sie das Backup wiederherstellen?', mtWarning, [mbYes, mbNo], 0) <> mrYes then
+          begin
+            Cancelled := True;
+            Exit;
+          end;
         SecretKey := ComposeKey;
       end;
     end;
@@ -547,7 +574,10 @@ begin
     on E: Exception do
     begin
       LogWarning('Paperless secret key preparation failed.');
-      CenteredShowMessage('Der Schlüssel konnte nicht gelesen oder gespeichert werden. Die Wiederherstellung wird mit der vorhandenen Konfiguration fortgesetzt.');
+      if CenteredMessageDlg('Der Schlüssel konnte nicht vorbereitet werden. Die Wiederherstellung kann mit der vorhandenen Konfiguration fortgesetzt werden.' +
+        sLineBreak + sLineBreak + 'Wollen Sie das Backup dennoch wiederherstellen?',
+        mtWarning, [mbYes, mbNo], 0) <> mrYes then
+        Cancelled := True;
       Result := False;
     end;
   end;
@@ -3399,6 +3429,7 @@ var
   RestoreDefaultFolder: string;
   BackupSizeBytes: Int64;
   RestoreEstimateLogText: string;
+  KeyPreparationCancelled: Boolean;
 begin
   ClearRestoreProgressState;
   WriteComposeContainerAndVolumeInfo(ExtractFilePath(ComposePath));
@@ -3452,7 +3483,7 @@ begin
       Application.ProcessMessages;
       if ValidateRestoreBackupFolder(BackupFolder) then
       begin
-        if ApplyPaperlessSecretKeyForRestore(BackupFolder) then
+        if ApplyPaperlessSecretKeyForRestore(BackupFolder, KeyPreparationCancelled) then
         begin
           ShouldWriteNewCompose := True;
           try
@@ -3460,6 +3491,14 @@ begin
           finally
             ShouldWriteNewCompose := False;
           end;
+        end;
+        if KeyPreparationCancelled then
+        begin
+          ClearRestoreProgressState;
+          BackupWiederherProgNeuStartLbl.Caption := 'Wiederherstellung abgebrochen.';
+          StartPaperlessBackupBtn.Enabled := True;
+          RestorePaperlessBackupBtn.Enabled := True;
+          Exit;
         end;
         RestoreEmailEnvFromBackup(BackupFolder, ComposePath);
         SaveEmptyEnvFile;
