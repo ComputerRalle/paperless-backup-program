@@ -35,7 +35,7 @@ function CenteredSelectDirectory(const Caption: string; var Directory: string): 
 procedure CenteredShowMessage(const Msg: string);
 function CenteredMessageDlg(const Msg: string; DlgType: TMsgDlgType; Buttons: TMsgDlgButtons; HelpCtx: Longint): Integer;
 function CenteredMessageBox(const Text, Caption: string; Flags: Cardinal): Integer;
-function RequestPasswordDialog(const DialogCaption, Prompt: string; const ConfirmPassword: Boolean; out Password: string; const CancelButtonCaption: string = 'Abbrechen'): Boolean;
+function RequestPasswordDialog(const DialogCaption, Prompt: string; const ConfirmPassword: Boolean; out Password: string; const CancelButtonCaption: string = 'Abbrechen'): Integer;
 function RequestPasswordOrSkipDialog(const DialogCaption, Prompt, SkipButtonCaption: string; out Password: string): Integer;
 
 implementation
@@ -161,9 +161,15 @@ function CenteredMessageDlg(const Msg: string; DlgType: TMsgDlgType; Buttons: TM
 var
   Dialog: TForm;
   OwnerHandle: HWND;
+  DialogButtons: TMsgDlgButtons;
 begin
   OwnerHandle := ActiveFormHandle;
-  Dialog := CreateMessageDialog(Msg, DlgType, Buttons);
+  DialogButtons := Buttons;
+  // Allow closing decision dialogs without treating X as Yes or No.
+  // Entscheidungsdialoge mit X abbrechen, ohne Ja oder Nein auszuwählen.
+  if (mbYes in Buttons) and (mbNo in Buttons) and not (mbCancel in Buttons) then
+    Include(DialogButtons, mbCancel);
+  Dialog := CreateMessageDialog(Msg, DlgType, DialogButtons);
   try
     Dialog.HelpContext := HelpCtx;
     PrepareModalDialog(Dialog, OwnerHandle);
@@ -246,7 +252,7 @@ begin
 end;
 // Fragt ein maskiertes Passwort ab und prüft bei Bedarf die Wiederholung. Leere oder abweichende Angaben führen erneut zur Eingabe.
 // Bei Abbruch bleibt das Ergebnis False; der temporäre Dialog wird in jedem Fall freigegeben.
-function RequestPasswordDialog(const DialogCaption, Prompt: string; const ConfirmPassword: Boolean; out Password: string; const CancelButtonCaption: string): Boolean;
+function RequestPasswordDialog(const DialogCaption, Prompt: string; const ConfirmPassword: Boolean; out Password: string; const CancelButtonCaption: string): Integer;
 var
   Dialog: TForm;
   PromptLbl, PasswordLbl, ConfirmLbl: TLabel;
@@ -325,8 +331,8 @@ begin
       CancelBtn := TButton.Create(Dialog);
       CancelBtn.Parent := Dialog;
       CancelBtn.Caption := CancelButtonCaption;
-      CancelBtn.ModalResult := mrCancel;
-      CancelBtn.Cancel := True;
+      CancelBtn.ModalResult := mrIgnore;
+      CancelBtn.Cancel := False;
       if Length(CancelButtonCaption) > 16 then
         CancelButtonWidth := 260
       else
@@ -340,8 +346,9 @@ begin
       OwnerHandle := ActiveFormHandle;
       PrepareModalDialog(Dialog, OwnerHandle);
 
-      if Dialog.ShowModal <> mrOk then
-        Exit(False);
+      Result := Dialog.ShowModal;
+      if Result <> mrOk then
+        Exit;
 
       if Trim(PasswordEdit.Text) = '' then
       begin
@@ -359,7 +366,7 @@ begin
       end;
 
       Password := PasswordEdit.Text;
-      Result := True;
+      Result := mrOk;
       Exit;
     finally
       Dialog.Free;

@@ -232,6 +232,8 @@ type
     // OnClick-Rekursion beim Laden, Abbrechen und Zurücksetzen nach Fehlern unterdrücken.
     FLoadingCustomFileProtection: Boolean;
     FManualBackupSucceeded: Boolean;
+    FManualBackupCancelled: Boolean;
+    FRetentionRestartChoice: Integer;
     FRetentionUpdateRequested: Boolean;
     FRetentionUpdateSucceeded: Boolean;
     procedure CreateBackupScript(const ComposePath: string);
@@ -252,8 +254,8 @@ type
     procedure BeginScriptBusyState;
     procedure EndScriptBusyState;
     procedure SaveAndDisableInteractiveControls(const ParentControl: TWinControl);
-    procedure EncryptEmailEnvForBackup(const TargetBackupPath: string);
-    procedure RestoreEmailEnvFromBackup(const SourceBackupPath, TargetComposePath: string);
+    function EncryptEmailEnvForBackup(const TargetBackupPath: string): Boolean;
+    function RestoreEmailEnvFromBackup(const SourceBackupPath: string; out MailBytes: TBytes; out HasMail: Boolean): Boolean;
     function ValidateRestoreBackupFolder(const BackupFolder: string): Boolean;
   public
     procedure CancelPaperlessInstallation;
@@ -486,14 +488,14 @@ end;
 
 // Prepare the restore key; protected Compose files remain authoritative.
 // Restore-Schlüssel vorbereiten; bei Dateischutz ist die Compose-Datei maßgeblich.
-function ApplyPaperlessSecretKeyForRestore(const BackupFolder: string; out Cancelled: Boolean): Boolean;
+function ApplyPaperlessSecretKeyForRestore(const BackupFolder: string; out Cancelled: Boolean; out PreparedKey: string): Boolean;
 var
-  Ini: TAppSettingsIni;
-  SecretKey, ComposeKey, SecretKeyFilePath, SettingsIniPath, ProtectedComposePath: string;
+  SecretKey, ComposeKey, SecretKeyFilePath, ProtectedComposePath: string;
   ProtectedCompose, KeyProblem: Boolean;
 begin
   Result := False;
   Cancelled := False;
+  PreparedKey := '';
   SecretKeyFilePath := IncludeTrailingPathDelimiter(BackupFolder) + PaperlessSecretKeyFileName;
   try
     ProtectedComposePath := IncludeTrailingPathDelimiter(AppDataFolder) + DockerComposeFileName;
@@ -551,23 +553,7 @@ begin
         SecretKey := ComposeKey;
       end;
     end;
-    SettingsIniPath := IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName;
-    Ini := TAppSettingsIni.Create(SettingsIniPath);
-    try
-      if SecretKey = LegacyPaperlessSecretKey then
-      begin
-        Ini.WriteString(IniSectionSecurity, IniKeyLegacyPaperlessSecretKey, SecretKey);
-        Ini.DeleteKey(IniSectionSecurity, IniKeyPaperlessSecretKey);
-      end
-      else
-      begin
-        Ini.WriteString(IniSectionSecurity, IniKeyPaperlessSecretKey, SecretKey);
-        Ini.DeleteKey(IniSectionSecurity, IniKeyLegacyPaperlessSecretKey);
-      end;
-      Ini.UpdateFile;
-    finally
-      Ini.Free;
-    end;
+    PreparedKey := SecretKey;
     Result := True;
     LogInfo('Paperless secret key prepared for restore.');
   except
@@ -580,6 +566,27 @@ begin
         Cancelled := True;
       Result := False;
     end;
+  end;
+end;
+procedure SaveRestoreSecretKey(const SecretKey: string);
+var
+  Ini: TAppSettingsIni;
+begin
+  Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
+  try
+    if SecretKey = LegacyPaperlessSecretKey then
+    begin
+      Ini.WriteString(IniSectionSecurity, IniKeyLegacyPaperlessSecretKey, SecretKey);
+      Ini.DeleteKey(IniSectionSecurity, IniKeyPaperlessSecretKey);
+    end
+    else
+    begin
+      Ini.WriteString(IniSectionSecurity, IniKeyPaperlessSecretKey, SecretKey);
+      Ini.DeleteKey(IniSectionSecurity, IniKeyLegacyPaperlessSecretKey);
+    end;
+    Ini.UpdateFile;
+  finally
+    Ini.Free;
   end;
 end;
 // update.ini vom Webserver laden und anzeigen, ob ein Programmupdate verfügbar ist.
@@ -1190,24 +1197,30 @@ begin
   end;
 end;
 // email-versand.env für das aktuelle Backup verschlüsseln und eine vorbereitete lokale Kopie behalten.
-procedure TMainformFrm.EncryptEmailEnvForBackup(const TargetBackupPath: string);
+function TMainformFrm.EncryptEmailEnvForBackup(const TargetBackupPath: string): Boolean;
 var
   SourceEnvPath, TargetEncryptedPath, LocalEncryptedPath, Password: string;
+  PasswordResult: Integer;
 begin
+  Result := True;
   SourceEnvPath := IncludeTrailingPathDelimiter(AppDataFolder) + EmailEnvFileName;
   if not FileExists(SourceEnvPath) then
     Exit;
-  if not RequestPasswordDialog(
+  PasswordResult := RequestPasswordDialog(
     'Mail-Einstellungen verschlüsseln',
     'Die Datei email-versand.env enthält Mailkontodaten und wird für das Backup verschlüsselt.' + sLineBreak + sLineBreak +
     'Bitte bewahren Sie Ihr Passwort sicher auf, z.B. in KeePass. Wenn Sie das Passwort verlieren, kann die Mail-Einstellungsdatei nicht wiederhergestellt werden.',
     True,
     Password,
-    'Backup ohne Mail-Einstellungen durchführen') then
+    'Backup ohne Mail-Einstellungen durchführen');
+  if PasswordResult = mrIgnore then
   begin
     LogInfo('Encrypted email env backup skipped by user.');
     Exit;
   end;
+  if PasswordResult <> mrOk then Exit(False);
+  if not System.SysUtils.DirectoryExists(TargetBackupPath) then
+    System.SysUtils.ForceDirectories(TargetBackupPath);
   TargetEncryptedPath := IncludeTrailingPathDelimiter(TargetBackupPath) + EmailEnvEncryptedFileName;
   LocalEncryptedPath := IncludeTrailingPathDelimiter(AppDataFolder) + EmailEnvEncryptedFileName;
   try
@@ -1220,11 +1233,14 @@ begin
   end;
 end;
 // Verschluesselte Mail-Einstellungen aus dem Backup wiederherstellen, wenn der Benutzer das Passwort eingibt.
-procedure TMainformFrm.RestoreEmailEnvFromBackup(const SourceBackupPath, TargetComposePath: string);
+function TMainformFrm.RestoreEmailEnvFromBackup(const SourceBackupPath: string; out MailBytes: TBytes; out HasMail: Boolean): Boolean;
 var
-  SourceEncryptedPath, TargetEnvPath, Password: string;
+  SourceEncryptedPath, Password: string;
   PasswordResult: Integer;
 begin
+  Result := True;
+  HasMail := False;
+  MailBytes := nil;
   SourceEncryptedPath := IncludeTrailingPathDelimiter(SourceBackupPath) + EmailEnvEncryptedFileName;
   if not FileExists(SourceEncryptedPath) then
   begin
@@ -1245,13 +1261,12 @@ begin
   end;
   if PasswordResult <> mrOk then
   begin
-    CenteredShowMessage('Mail-Einstellungen wurden nicht wiederhergestellt.');
-    Exit;
+    CenteredShowMessage('Wiederherstellung abgebrochen.');
+    Exit(False);
   end;
-  TargetEnvPath := IncludeTrailingPathDelimiter(ExtractFilePath(TargetComposePath)) + EmailEnvFileName;
   try
-    DecryptFileWithPassword(SourceEncryptedPath, TargetEnvPath, Password);
-    LogInfo('Encrypted email env file restored.');
+    MailBytes := DecryptBytesWithPassword(TFile.ReadAllBytes(SourceEncryptedPath), Password);
+    HasMail := True;
   except
     on E: Exception do
     begin
@@ -1265,7 +1280,8 @@ begin
         CenteredShowMessage('Wiederherstellung wird ohne Mail-Einstellungen fortgesetzt.');
         Exit;
       end;
-      CenteredShowMessage('Mail-Einstellungen wurden nicht wiederhergestellt.');
+      CenteredShowMessage('Wiederherstellung abgebrochen.');
+      Result := False;
     end;
   end;
 end;
@@ -1466,6 +1482,7 @@ var
   Ini:TAppSettingsIni;
   StoredPath: string;
   TextFilePath: string;
+  PathChoice: Integer;
 begin
   if ComposePath.Trim = '' then
   begin
@@ -1527,9 +1544,17 @@ begin
 
   if LastBackupFolder <> '' then
   begin
-    if IsAutostart or
-       (CenteredMessageDlg('Es wurde folgender voreingestellter Pfad gefunden:' + sLineBreak + LastBackupFolder + sLineBreak + sLineBreak +
-                   'Soll das Backup hier gespeichert werden?', mtConfirmation, [mbYes, mbNo], 0) = mrYes) then
+    PathChoice := mrYes;
+    if not IsAutostart then
+      PathChoice := CenteredMessageDlg('Es wurde folgender voreingestellter Pfad gefunden:' + sLineBreak + LastBackupFolder + sLineBreak + sLineBreak +
+                   'Soll das Backup hier gespeichert werden?', mtConfirmation, [mbYes, mbNo], 0);
+    if (PathChoice <> mrYes) and (PathChoice <> mrNo) then
+    begin
+      StartPaperlessBackupBtn.Enabled := True;
+      RestorePaperlessBackupBtn.Enabled := True;
+      Exit;
+    end;
+    if PathChoice = mrYes then
     begin
       BackupPath := IncludeTrailingPathDelimiter(LastBackupFolder) + FormatDateTime('yyyy-mm-dd_hh-mm-ss', Now);
     end
@@ -1588,8 +1613,10 @@ begin
       end
       else
       begin
-        BackupPath := IncludeTrailingPathDelimiter(DefaultFolder) + FormatDateTime('yyyy-mm-dd_hh-mm-ss', Now);
-        CenteredShowMessage('Es wurde kein Ordner gewählt. Der Standardordner wird verwendet: ' + sLineBreak + BackupPath);
+        CenteredShowMessage('Es wurde kein Ordner gewählt. Backupvorgang abgebrochen.');
+        StartPaperlessBackupBtn.Enabled := True;
+        RestorePaperlessBackupBtn.Enabled := True;
+        Exit;
       end;
     finally
       FolderDialog.Free;
@@ -1606,7 +1633,8 @@ begin
   end;
 
   CreateBackupScript(ExtractFilePath(ComposePath));
-  CreateBackupPlanScript(ExtractFilePath(ComposePath), FManualBackupSucceeded);
+  if not FManualBackupCancelled then
+    CreateBackupPlanScript(ExtractFilePath(ComposePath), FManualBackupSucceeded);
   StartPaperlessBackupBtn.Enabled := True;
   RestorePaperlessBackupBtn.Enabled := True;
   // Delete the old marker file if it still exists.
@@ -1621,14 +1649,19 @@ var
   Volumes: TDockerVolumeNames;
 begin
   FManualBackupSucceeded := False;
+  FManualBackupCancelled := False;
   if ComposePath.Trim = '' then
   begin
     CenteredShowMessage('Fehler: Es wurde kein gültiger Compose-Pfad gewählt.');
     Exit;
   end;
 
+  if not EncryptEmailEnvForBackup(BackupPath) then
+  begin
+    FManualBackupCancelled := True;
+    Exit;
+  end;
   if not System.SysUtils.DirectoryExists(BackupPath) then System.SysUtils.ForceDirectories(BackupPath);
-  EncryptEmailEnvForBackup(BackupPath);
   CmdTargetPath := IncludeTrailingPathDelimiter(ComposePath) + 'paperless-backup.ps1';
   Volumes.Data := Volume_data;
   Volumes.DbData := Volume_db_data;
@@ -1660,17 +1693,20 @@ var
   Ini: TAppSettingsIni;
   Names: array[0..2] of string;
   Name: string;
+  PathChoice: Integer;
 begin
   Result := False;
   if ApplicationClosing or Application.Terminated then Exit;
   if InstallationPathReady then Exit(True);
   Folder := DefaultInstallationFolder;
-  if CenteredMessageDlg(
+  PathChoice := CenteredMessageDlg(
     'Das Paperless Backup Programm wird standardmäßig in Ihrem Benutzerverzeichnis installiert.' + #13#10 +
     'Dadurch sind die Programmdateien normalerweise vor dem Zugriff anderer Benutzer geschützt.' + #13#10 +
     'Administratoren können weiterhin darauf zugreifen.' + #13#10 + #13#10 +
     'Sie können auch einen anderen Installationspfad wählen.' + #13#10 + #13#10 +
-    'Möchten Sie den Installationspfad ändern?', mtConfirmation, [mbYes, mbNo], 0) = mrYes then
+    'Möchten Sie den Installationspfad ändern?', mtConfirmation, [mbYes, mbNo], 0);
+  if (PathChoice <> mrYes) and (PathChoice <> mrNo) then Exit;
+  if PathChoice = mrYes then
   begin
     Folder := ExtractFileDir(AppDataFolder);
     if not CenteredSelectDirectory('Übergeordneten Installationsordner auswählen', Folder) then Exit;
@@ -2449,6 +2485,10 @@ var
   ComposeFile, ComposeDir, PlannedScript, BackupBase: string;
   Volumes: TDockerVolumeNames;
 begin
+  FRetentionRestartChoice := CenteredMessageDlg(
+    'Paperless muss neu gestartet werden, um die Einstellungen zu übernehmen. Möchten Sie Paperless neu starten?',
+    mtConfirmation, [mbYes, mbNo], 0);
+  if (FRetentionRestartChoice <> mrYes) and (FRetentionRestartChoice <> mrNo) then Exit;
   Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
     // Save the retention setting.
@@ -2914,7 +2954,18 @@ end;
 procedure TMainformFrm.SaveSettingsBtnClick(Sender: TObject);
 var
   Ini: TAppSettingsIni;
+  RestartChoice: Integer;
 begin
+  RestartChoice := mrYes;
+  if FRetentionUpdateRequested then
+    RestartChoice := FRetentionRestartChoice
+  else if Sender <> nil then
+  begin
+    RestartChoice := CenteredMessageDlg(
+      'Paperless muss neu gestartet werden, um die Einstellungen zu übernehmen. ' +
+      'Möchten Sie Paperless neu starten?', mtConfirmation, [mbYes, mbNo], 0);
+    if (RestartChoice <> mrYes) and (RestartChoice <> mrNo) then Exit;
+  end;
   Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
     // --------------------------------------------------------------
@@ -2965,11 +3016,7 @@ begin
   // --------------------------------------------------------------
   // Run automatically when called after a restore; ask only for direct button clicks.
   // Nach einer Wiederherstellung automatisch ausführen; nur bei direktem Button-Klick nachfragen.
-  if (Sender = nil) or
-     (CenteredMessageDlg(
-       'Paperless muss neu gestartet werden, um die Einstellungen zu übernehmen. ' +
-       'Möchten Sie Paperless neu starten?',
-       mtConfirmation, [mbYes, mbNo], 0) = mrYes) then
+  if RestartChoice = mrYes then
   begin
     // Clear stale backup state before starting the settings update.
     // Vor dem Einstellungsupdate alten Backup-Zustand löschen, damit der Statustext stimmt.
@@ -3429,7 +3476,9 @@ var
   RestoreDefaultFolder: string;
   BackupSizeBytes: Int64;
   RestoreEstimateLogText: string;
-  KeyPreparationCancelled: Boolean;
+  KeyPreparationCancelled, KeyPrepared, HasRestoreMail: Boolean;
+  PreparedKey: string;
+  RestoreMailBytes: TBytes;
 begin
   ClearRestoreProgressState;
   WriteComposeContainerAndVolumeInfo(ExtractFilePath(ComposePath));
@@ -3483,15 +3532,9 @@ begin
       Application.ProcessMessages;
       if ValidateRestoreBackupFolder(BackupFolder) then
       begin
-        if ApplyPaperlessSecretKeyForRestore(BackupFolder, KeyPreparationCancelled) then
-        begin
-          ShouldWriteNewCompose := True;
-          try
-            CreateDockerComposeWithSetupForm;
-          finally
-            ShouldWriteNewCompose := False;
-          end;
-        end;
+        KeyPrepared := ApplyPaperlessSecretKeyForRestore(BackupFolder, KeyPreparationCancelled, PreparedKey);
+        if not KeyPreparationCancelled then
+          KeyPreparationCancelled := not RestoreEmailEnvFromBackup(BackupFolder, RestoreMailBytes, HasRestoreMail);
         if KeyPreparationCancelled then
         begin
           ClearRestoreProgressState;
@@ -3500,7 +3543,42 @@ begin
           RestorePaperlessBackupBtn.Enabled := True;
           Exit;
         end;
-        RestoreEmailEnvFromBackup(BackupFolder, ComposePath);
+        if KeyPrepared then
+        begin
+          try
+            SaveRestoreSecretKey(PreparedKey);
+          except
+            on E: Exception do
+            begin
+              LogWarning('Paperless secret key preparation failed.');
+              if CenteredMessageDlg('Der Schlüssel konnte nicht gespeichert werden. Die Wiederherstellung kann mit der vorhandenen Konfiguration fortgesetzt werden.' +
+                sLineBreak + sLineBreak + 'Wollen Sie das Backup dennoch wiederherstellen?',
+                mtWarning, [mbYes, mbNo], 0) <> mrYes then
+              begin
+                ClearRestoreProgressState;
+                BackupWiederherProgNeuStartLbl.Caption := 'Wiederherstellung abgebrochen.';
+                StartPaperlessBackupBtn.Enabled := True;
+                RestorePaperlessBackupBtn.Enabled := True;
+                Exit;
+              end;
+              KeyPrepared := False;
+            end;
+          end;
+        end;
+        if KeyPrepared then
+        begin
+          ShouldWriteNewCompose := True;
+          try
+            CreateDockerComposeWithSetupForm;
+          finally
+            ShouldWriteNewCompose := False;
+          end;
+        end;
+        if HasRestoreMail then
+        begin
+          TFile.WriteAllBytes(IncludeTrailingPathDelimiter(ExtractFilePath(ComposePath)) + EmailEnvFileName, RestoreMailBytes);
+          LogInfo('Encrypted email env file restored.');
+        end;
         SaveEmptyEnvFile;
         CreateRestoreScript(ComposePath, BackupFolder);
       end
