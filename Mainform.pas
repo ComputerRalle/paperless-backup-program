@@ -183,7 +183,7 @@ type
     procedure FormCreate(Sender: TObject);
     procedure SaveScheduleSettings;
     procedure CreateBackupPlanBtnClick(Sender: TObject);
-    procedure CreateBackupPlanScript(const ComposePath: string);
+    procedure CreateBackupPlanScript(const ComposePath: string; const CleanupAllowed: Boolean);
     procedure CreateRestartScript(const ComposePath: string);
     procedure StartBackupPlanScriptSilent;
     procedure LoadScheduleSettings;
@@ -217,6 +217,7 @@ type
     procedure StaticText1Click(Sender: TObject);
     procedure CheckBox1Click(Sender: TObject);
     procedure ProtectCustomFilesCBClick(Sender: TObject);
+    procedure UpdateComposeProtectionControls;
     procedure WriteStandardVersionAfterInstallation();
 
     procedure LoadUpdateIniFile();
@@ -230,6 +231,7 @@ type
     // Suppress OnClick recursion during loading, cancellation and failure recovery.
     // OnClick-Rekursion beim Laden, Abbrechen und Zurücksetzen nach Fehlern unterdrücken.
     FLoadingCustomFileProtection: Boolean;
+    FManualBackupSucceeded: Boolean;
     FRetentionUpdateRequested: Boolean;
     FRetentionUpdateSucceeded: Boolean;
     procedure CreateBackupScript(const ComposePath: string);
@@ -1306,6 +1308,15 @@ begin
   ShellExecute(0, 'open', BuyMeACoffeeUrl, nil, nil, SW_SHOWNORMAL);
 end;
 
+// Apply the Compose protection to the settings fields while keeping Save available.
+// Compose-Schutz auf die Einstellungsfelder anwenden; Speichern bleibt verfügbar.
+procedure TMainformFrm.UpdateComposeProtectionControls;
+begin
+  PapierkorbAufbewahrungEdit.Enabled := not ProtectCustomFilesCB.Checked;
+  CheckBox1.Enabled := not ProtectCustomFilesCB.Checked;
+  CheckBox1Click(nil);
+end;
+
 // Confirm enabling manual maintenance; on disabling, confirm and finish a backup first.
 // Eigene Dateipflege beim Aktivieren bestätigen; beim Deaktivieren zuerst bestätigen und sichern.
 procedure TMainformFrm.ProtectCustomFilesCBClick(Sender: TObject);
@@ -1339,6 +1350,7 @@ begin
       finally
         FLoadingCustomFileProtection := False;
       end;
+      UpdateComposeProtectionControls;
       Exit;
     end;
     try
@@ -1356,6 +1368,7 @@ begin
         finally
           FLoadingCustomFileProtection := False;
         end;
+        UpdateComposeProtectionControls;
         CenteredMessageDlg('Die eigenen Bearbeitungen konnten nicht vollständig gesichert werden.' +
           sLineBreak + 'Die Sperre bleibt aktiviert.' + sLineBreak + sLineBreak + E.Message,
           mtError, [mbOK], 0);
@@ -1368,6 +1381,7 @@ begin
       BackupFolder + sLineBreak + sLineBreak +
       'Mit „Einstellungen Speichern“ übernehmen Sie die aufgehobene Sperre.',
       mtInformation, [mbOK], 0);
+    UpdateComposeProtectionControls;
     Exit;
   end;
   if CenteredMessageDlg(
@@ -1391,6 +1405,7 @@ begin
       FLoadingCustomFileProtection := False;
     end;
   end;
+  UpdateComposeProtectionControls;
 end;
 
 // Manuelle Bearbeitung der Docker-Image-Versionen aktivieren oder deaktivieren.
@@ -1400,17 +1415,18 @@ var
 begin
   // Both checkboxes use this handler; confirmation is required for version editing.
   // Beide Checkboxen nutzen diesen Handler; die Bestätigung ist für Versionsänderungen erforderlich.
-  OnlyPaperlessVersionCB.Enabled := CheckBox1.Checked;
+  OnlyPaperlessVersionCB.Enabled := CheckBox1.Checked and not ProtectCustomFilesCB.Checked;
   // Checked restriction: edit only Paperless. Unchecked restriction: edit all seven versions.
   // Einschränkung angehakt: nur Paperless ändern. Einschränkung abgewählt: alle sieben Versionen ändern.
-  AllVersionsEnabled := CheckBox1.Checked and not OnlyPaperlessVersionCB.Checked;
+  AllVersionsEnabled := CheckBox1.Checked and not OnlyPaperlessVersionCB.Checked and
+    not ProtectCustomFilesCB.Checked;
   redis_version_edit.Enabled := AllVersionsEnabled;
   postgres_version_edit.Enabled := AllVersionsEnabled;
   gotenberg_version_edit.Enabled := AllVersionsEnabled;
   tika_version_edit.Enabled := AllVersionsEnabled;
   alpine_version_edit.Enabled := AllVersionsEnabled;
   busybox_version_edit.Enabled := AllVersionsEnabled;
-  paperless_version_edit.Enabled := CheckBox1.Checked;
+  paperless_version_edit.Enabled := CheckBox1.Checked and not ProtectCustomFilesCB.Checked;
 end;
 
 // Den Backup-Zielordner auswählen, speichern und die Backup-Skripte erstellen.
@@ -1560,7 +1576,7 @@ begin
   end;
 
   CreateBackupScript(ExtractFilePath(ComposePath));
-  CreateBackupPlanScript(ExtractFilePath(ComposePath));
+  CreateBackupPlanScript(ExtractFilePath(ComposePath), FManualBackupSucceeded);
   StartPaperlessBackupBtn.Enabled := True;
   RestorePaperlessBackupBtn.Enabled := True;
   // Delete the old marker file if it still exists.
@@ -1574,6 +1590,7 @@ procedure TMainformFrm.CreateBackupScript(const ComposePath: string);
 var
   Volumes: TDockerVolumeNames;
 begin
+  FManualBackupSucceeded := False;
   if ComposePath.Trim = '' then
   begin
     CenteredShowMessage('Fehler: Es wurde kein gültiger Compose-Pfad gewählt.');
@@ -2149,6 +2166,7 @@ begin
     finally
       FLoadingCustomFileProtection := False;
     end;
+    UpdateComposeProtectionControls;
    finally
     Ini.Free;
    end;
@@ -3204,7 +3222,7 @@ end;
 
 // Erzeugt das geplante PS1-Skript aus gespeicherten Einstellungen und führt die lokale Aufbewahrungsbereinigung aus.
 // Zusätzlich bereinigt das geplante Skript nach erfolgreichem Lauf.
-procedure TMainformFrm.CreateBackupPlanScript(const ComposePath: string);
+procedure TMainformFrm.CreateBackupPlanScript(const ComposePath: string; const CleanupAllowed: Boolean);
 var
   BackupFolderList: TArray<string>;
   ValidBackupFolderList: TList<string>;
@@ -3279,8 +3297,16 @@ begin
   // Delete old backup folders when a retention limit is set.
   // Alte Backup-Ordner löschen, wenn eine Aufbewahrungsgrenze gesetzt ist.
   MaxBackupFolders := KeepBackupsSpE.Value;
-  if (MaxBackupFolders > 0) and System.SysUtils.DirectoryExists(BackupPath) then
+  if CleanupAllowed and not ApplicationClosing and not Application.Terminated and
+     (MaxBackupFolders > 0) then
   begin
+    if not System.SysUtils.DirectoryExists(BackupPath) then
+    begin
+      LogWarning('Backup folder is unavailable for cleanup: ' + BackupPath);
+      CenteredMessageDlg('Der Backupordner ist für das Aufräumen nicht erreichbar:' +
+        sLineBreak + BackupPath, mtWarning, [mbOK], 0);
+      Exit;
+    end;
     ValidBackupFolderList := TList<string>.Create;
     try
       try
@@ -3302,13 +3328,21 @@ begin
               // Die ältesten Ordner löschen.
             except
               on E: Exception do
+              begin
                 LogWarning('Could not delete old planned backup folder "' + BackupFolderList[i] + '": ' + E.Message);
+                CenteredMessageDlg('Der alte Backupordner konnte nicht gelöscht werden:' + sLineBreak +
+                  BackupFolderList[i] + sLineBreak + E.Message, mtWarning, [mbOK], 0);
+              end;
             end;
           end;
         end;
       except
         on E: Exception do
+        begin
           LogWarning('Could not clean planned backup folders: ' + E.Message);
+          CenteredMessageDlg('Die Backupordner konnten nicht aufgeräumt werden:' + sLineBreak +
+            E.Message, mtWarning, [mbOK], 0);
+        end;
       end;
     finally
       ValidBackupFolderList.Free;
@@ -3548,7 +3582,8 @@ begin
         WaitForScriptWithProgress(ProcessInfo.hProcess, RunningStatus, OutputLogPath);
         // Check the exit code.
         // Den Exit-Code prüfen.
-        GetExitCodeProcess(ProcessInfo.hProcess, ExitCode);
+        if not GetExitCodeProcess(ProcessInfo.hProcess, ExitCode) then
+          ExitCode := High(DWORD);
         CloseHandle(ProcessInfo.hProcess);
         CloseHandle(ProcessInfo.hThread);
         Sleep(1000);
@@ -3599,6 +3634,7 @@ begin
           end
           else if IsBackup = True then
           begin
+            FManualBackupSucceeded := True;
             if not IsAutostart then
             begin
               CenteredMessageBox('Backup abgeschlossen. Sie können das Programm jetzt schließen.' + #13#10 +
