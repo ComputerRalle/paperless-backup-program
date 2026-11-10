@@ -139167,6 +139167,19 @@ object MainformFrm: TMainformFrm
           Height = 26
           TabOrder = 20
         end
+        object ExternalAuthRadioGroup: TRadioGroup
+          Left = 33
+          Top = 900
+          Width = 671
+          Height = 75
+          Caption = 'SSH-Anmeldung'
+          Columns = 2
+          ItemIndex = 0
+          Items.Strings = (
+            'SSH-Key'
+            'Passwort')
+          TabOrder = 21
+        end
       end
     end
     object HelpPan: TPanel

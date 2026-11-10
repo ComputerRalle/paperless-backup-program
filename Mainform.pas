@@ -30,7 +30,7 @@ uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, System.Math,
   Vcl.Graphics, Vcl.Imaging.pngimage, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, ShellAPI, Vcl.ComCtrls, Vcl.ExtCtrls, Vcl.Buttons,
   System.IOUtils, Vcl.FileCtrl, Vcl.Samples.Spin, System.IniFiles, DateUtils, SetupForm, System.Generics.Collections, System.Generics.Defaults, Vcl.Menus,
-  System.Net.URLClient, System.Net.HttpClient, System.Net.HttpClientComponent, ScriptGenerator, AppConfig, AppLogger, AppDialogs, Crypto;
+  System.Net.URLClient, System.Net.HttpClient, System.Net.HttpClientComponent, ScriptGenerator, AppConfig, AppLogger, AppDialogs, Crypto, ExternPaperless;
 
 type
   TMainformFrm = class(TForm)
@@ -131,6 +131,7 @@ type
     ExternalKeyEdit: TEdit;
     ExternalComposePathEdit: TEdit;
     ExternalComposeProjectEdit: TEdit;
+    ExternalAuthRadioGroup: TRadioGroup;
     Label26: TLabel;
     Panel15: TPanel;
     Label27: TLabel;
@@ -1979,6 +1980,9 @@ begin
     end;
     if not System.SysUtils.DirectoryExists(PaperlessInput) then System.SysUtils.ForceDirectories(PaperlessInput);
   end;
+  // Create the section after the installation path is ready.
+  // Den Abschnitt erst nach bestaetigtem Installationspfad anlegen.
+  EnsureExternalPaperlessSection(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   TextFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + ComposePathFileName;
   if FileExists(TextFilePath) then
   begin
