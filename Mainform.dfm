@@ -139231,6 +139231,7 @@ object MainformFrm: TMainformFrm
           Height = 60
           Caption = 'Serverdaten Speichern'
           Enabled = False
+          OnClick = SaveExternalServerBtnClick
           TabOrder = 24
         end
       end

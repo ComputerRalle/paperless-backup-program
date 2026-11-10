@@ -3,11 +3,73 @@
 interface
 
 procedure EnsureExternalPaperlessSection(const SettingsPath: string);
+function ReadServerSecret(const SettingsPath, SecretName: string): string;
+procedure WriteServerSecret(const SettingsPath, SecretName, Value: string);
 
 implementation
 
 uses
-  Winapi.Windows, System.SysUtils, System.Classes;
+  Winapi.Windows, Winapi.WinCred, System.SysUtils, System.Classes;
+
+const
+  ServerCredentialNotFound = 1168; // ERROR_NOT_FOUND
+
+// Credentials are scoped to the selected settings path and Windows user.
+// Zugangsdaten sind an den Einstellungspfad und Windows-Benutzer gebunden.
+function ServerSecretTarget(const SettingsPath, SecretName: string): string;
+begin
+  Result := 'PaperlessBackup/' + ExpandFileName(SettingsPath) + '/' + SecretName;
+end;
+
+function ReadServerSecret(const SettingsPath, SecretName: string): string;
+var
+  CredData: PCREDENTIAL;
+  Target: string;
+  ErrorCode: DWORD;
+begin
+  Result := '';
+  Target := ServerSecretTarget(SettingsPath, SecretName);
+  CredData := nil;
+  if not CredRead(PChar(Target), CRED_TYPE_GENERIC, 0, CredData) then
+  begin
+    ErrorCode := GetLastError;
+    if ErrorCode = ServerCredentialNotFound then Exit;
+    RaiseLastOSError(ErrorCode);
+  end;
+  try
+    if (CredData.CredentialBlobSize mod SizeOf(Char)) <> 0 then
+      raise Exception.Create('Gespeicherte Zugangsdaten haben ein ungueltiges Format.');
+    if CredData.CredentialBlobSize > 0 then
+      SetString(Result, PChar(CredData.CredentialBlob), CredData.CredentialBlobSize div SizeOf(Char));
+  finally
+    CredFree(CredData);
+  end;
+end;
+
+procedure WriteServerSecret(const SettingsPath, SecretName, Value: string);
+var
+  CredData: Winapi.WinCred.CREDENTIALW;
+  Target: string;
+  ErrorCode: DWORD;
+begin
+  Target := ServerSecretTarget(SettingsPath, SecretName);
+  if Value = '' then
+  begin
+    if not CredDelete(PChar(Target), CRED_TYPE_GENERIC, 0) then
+    begin
+      ErrorCode := GetLastError;
+      if ErrorCode <> ServerCredentialNotFound then RaiseLastOSError(ErrorCode);
+    end;
+    Exit;
+  end;
+  FillChar(CredData, SizeOf(CredData), 0);
+  CredData.&Type := CRED_TYPE_GENERIC;
+  CredData.TargetName := PChar(Target);
+  CredData.CredentialBlobSize := Length(Value) * SizeOf(Char);
+  CredData.CredentialBlob := PByte(PChar(Value));
+  CredData.Persist := CRED_PERSIST_LOCAL_MACHINE;
+  if not CredWrite(@CredData, 0) then RaiseLastOSError;
+end;
 
 // Add missing sections without changing any existing bytes or values.
 // Fehlende Abschnitte ergaenzen, ohne vorhandene Bytes oder Werte zu veraendern.

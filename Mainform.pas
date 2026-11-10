@@ -239,6 +239,7 @@ type
     procedure StaticText1Click(Sender: TObject);
     procedure CheckBox1Click(Sender: TObject);
     procedure ExternalAuthRadioGroupClick(Sender: TObject);
+    procedure SaveExternalServerBtnClick(Sender: TObject);
     procedure InstallationModeRadioGroupClick(Sender: TObject);
     procedure ProtectCustomFilesCBClick(Sender: TObject);
     procedure UpdateComposeProtectionControls;
@@ -265,6 +266,9 @@ type
     FRetentionUpdateRequested: Boolean;
     FRetentionUpdateSucceeded: Boolean;
     procedure LoadStoredInstallationMode;
+    procedure LoadExternalServerSettings;
+    procedure PrepareLocalAfterExternalStart;
+    function LocalInstallationAvailable: Boolean;
     procedure UpdateInstallationModeHeaders;
     procedure CaptureVersionSnapshot;
     function VersionsChanged: Boolean;
@@ -1580,6 +1584,65 @@ begin
     raise Exception.Create('Unbekannte Betriebsart in der Einstellungen.ini.');
 end;
 
+// Check the registered local installation without starting Docker.
+// Die registrierte lokale Installation ohne Dockerstart pruefen.
+function TMainformFrm.LocalInstallationAvailable: Boolean;
+var
+  Ini: TAppSettingsIni;
+  LocalCompose: string;
+begin
+  Result := False;
+  if not InstallationPathReady or not DirectoryExists(AppDataFolder) then Exit;
+  Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
+  try
+    if not SameText(Ini.ReadString('Einrichtung', 'Installation abgeschlossen', ''), 'Ja') then Exit;
+    LocalCompose := Ini.ReadString('Pfade', 'DockerComposePfad', '').Trim;
+    Result := (LocalCompose <> '') and FileExists(LocalCompose);
+  finally
+    Ini.Free;
+  end;
+end;
+
+// Prepare an existing local installation without starting Docker or running setup.
+// Eine vorhandene lokale Installation ohne Dockerstart oder Setup vorbereiten.
+procedure TMainformFrm.PrepareLocalAfterExternalStart;
+var
+  Ini: TAppSettingsIni;
+  LocalCompose, Installed: string;
+begin
+  if not InstallationPathReady or not DirectoryExists(AppDataFolder) then
+    raise Exception.Create('Der lokale Installationsordner ist nicht verfuegbar.');
+  Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
+  try
+    Installed := Ini.ReadString('Einrichtung', 'Installation abgeschlossen', '');
+    LocalCompose := Ini.ReadString('Pfade', 'DockerComposePfad', '').Trim;
+  finally
+    Ini.Free;
+  end;
+  if (Installed <> 'Ja') or
+     FileExists(IncludeTrailingPathDelimiter(AppDataFolder) + ComposePathFileName) or
+     FileExists(IncludeTrailingPathDelimiter(AppDataFolder) + BackupTargetFileName) or
+     FileExists(IncludeTrailingPathDelimiter(AppDataFolder) + InstallationCompletedFileName) then
+    raise Exception.Create('Die lokale Installation benoetigt eine gesonderte Startvorbereitung. Der Wechsel wurde abgebrochen.');
+  if (LocalCompose = '') or not FileExists(LocalCompose) then
+    raise Exception.Create('Die lokale Compose-Datei wurde nicht gefunden.');
+  InitLogger(AppDataFolder);
+  EnsurePaperlessScripts(AppDataFolder);
+  if not DirectoryExists(PaperlessInput) and not ForceDirectories(PaperlessInput) then
+    raise Exception.Create('Der lokale Eingabeordner konnte nicht angelegt werden.');
+  DefaultFolder := IncludeTrailingPathDelimiter(GetEnvironmentVariable('USERPROFILE')) + 'Desktop\' + PaperlessBackupFolderName;
+  if not DirectoryExists(DefaultFolder) and not ForceDirectories(DefaultFolder) then
+    raise Exception.Create('Der lokale Backupordner konnte nicht angelegt werden.');
+  SaveEmptyEnvFile;
+  ComposePath := LocalCompose;
+  NewComposePath := LocalCompose;
+  ComposeName := ExtractFileName(ExcludeTrailingPathDelimiter(ComposePath));
+  BackupTargetFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + BackupTargetFileName;
+  StartPaperlessBackupBtn.Enabled := True;
+  RestorePaperlessBackupBtn.Enabled := True;
+  BackupWiederherProgNeuStartLbl.Visible := False;
+end;
+
 procedure TMainformFrm.CaptureVersionSnapshot;
 begin
   FVersionSnapshot[0] := paperless_version_edit.Text;
@@ -1686,6 +1749,36 @@ begin
     Exit;
   end;
   if NewExternal = ExternalInstallationSelected then Exit;
+  // Refuse a local switch before asking to save or changing any profile data.
+  // Vor Speichern oder Profilwechsel eine fehlende lokale Installation abfangen.
+  if not NewExternal then
+  begin
+    try
+      if not LocalInstallationAvailable then
+      begin
+        FChangingInstallationMode := True;
+        try
+          InstallationModeRadioGroup.ItemIndex := 1;
+        finally
+          FChangingInstallationMode := False;
+        end;
+        CenteredMessageDlg('Es wurde keine vollstaendige lokale Installation mit Compose-Datei gefunden. Der Wechsel ist nicht moeglich.', mtWarning, [mbOK], 0);
+        Exit;
+      end;
+    except
+      on E: Exception do
+      begin
+        FChangingInstallationMode := True;
+        try
+          InstallationModeRadioGroup.ItemIndex := 1;
+        finally
+          FChangingInstallationMode := False;
+        end;
+        CenteredMessageDlg('Die lokale Installation konnte nicht geprueft werden: ' + E.Message, mtWarning, [mbOK], 0);
+        Exit;
+      end;
+    end;
+  end;
   OldValues[0] := paperless_version_edit.Text;
   OldValues[1] := redis_version_edit.Text;
   OldValues[2] := postgres_version_edit.Text;
@@ -1712,6 +1805,8 @@ begin
       end;
       if Choice = mrYes then SaveVersionsForMode(ExternalInstallationSelected);
     end;
+    if not NewExternal and FLocalStartupPending then
+      PrepareLocalAfterExternalStart;
     LoadVersionsForMode(NewExternal);
     Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
     try
@@ -1722,11 +1817,13 @@ begin
     end;
     ExternalInstallationSelected := NewExternal;
     LocalInstallationSelected := not NewExternal;
+    if LocalInstallationSelected then FLocalStartupPending := False;
     UpdateInstallationModeHeaders;
     ProtectCustomFilesCB.Enabled := LocalInstallationSelected and not FLocalStartupPending;
     PapierkorbAufbewahrungEdit.Enabled := LocalInstallationSelected and not ProtectCustomFilesCB.Checked;
     CheckBox1.Enabled := ExternalInstallationSelected or not ProtectCustomFilesCB.Checked;
     CheckBox1Click(nil);
+    CheckScheduleAllowed;
     SettingsSavedLbl.Visible := False;
     if LocalInstallationSelected and FLocalStartupPending then
       CenteredShowMessage('Bitte das Programm neu starten, um die lokale Installation vorzubereiten.');
@@ -1750,6 +1847,70 @@ begin
       end;
       CenteredShowMessage('Die Imageversionen konnten nicht gewechselt oder gespeichert werden: ' + E.Message);
     end;
+  end;
+end;
+
+// Read non-secret settings separately from the protected Windows credentials.
+// Allgemeine Serverdaten und geschuetzte Zugangsdaten getrennt laden.
+procedure TMainformFrm.LoadExternalServerSettings;
+var
+  Ini: TAppSettingsIni;
+  SettingsPath, PasswordValue, PassphraseValue, Auth: string;
+begin
+  SettingsPath := IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName;
+  SaveExternalServerBtn.Enabled := False;
+  Ini := TAppSettingsIni.Create(SettingsPath);
+  try
+    ExternalHostEdit.Text := Ini.ReadString('Paperless Extern', 'Host', '');
+    ExternalPortEdit.Text := Ini.ReadString('Paperless Extern', 'SSH-Port', '');
+    ExternalUserEdit.Text := Ini.ReadString('Paperless Extern', 'Benutzer', '');
+    ExternalKeyEdit.Text := Ini.ReadString('Paperless Extern', 'SSH-Key-Datei', '');
+    ExternalComposePathEdit.Text := Ini.ReadString('Paperless Extern', 'Compose-Datei', '');
+    ExternalComposeProjectEdit.Text := Ini.ReadString('Paperless Extern', 'Compose-Projekt', '');
+    Auth := Ini.ReadString('Paperless Extern', 'Anmeldung', 'Passwort');
+  finally
+    Ini.Free;
+  end;
+  if SameText(Auth, 'SSH-Key') then ExternalAuthRadioGroup.ItemIndex := 1
+  else if SameText(Auth, 'Passwort') then ExternalAuthRadioGroup.ItemIndex := 0
+  else raise Exception.Create('Unbekannte SSH-Anmeldeart in der Einstellungsdatei.');
+  ExternalAuthRadioGroupClick(nil);
+  PasswordValue := ReadServerSecret(SettingsPath, 'Passwort');
+  PassphraseValue := ReadServerSecret(SettingsPath, 'Passphrase');
+  ExternalPasswordEdit.Text := PasswordValue;
+  ExternalKeyPassphraseEdit.Text := PassphraseValue;
+  SaveExternalServerBtn.Enabled := True;
+end;
+
+// Save server settings without invoking the local settings or Docker workflows.
+// Serverdaten ohne lokale Einstellungen oder Dockerablaeufe speichern.
+procedure TMainformFrm.SaveExternalServerBtnClick(Sender: TObject);
+var
+  Ini: TAppSettingsIni;
+  SettingsPath, Auth: string;
+begin
+  SettingsPath := IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName;
+  if ExternalAuthRadioGroup.ItemIndex = 1 then Auth := 'SSH-Key'
+  else Auth := 'Passwort';
+  try
+    WriteServerSecret(SettingsPath, 'Passwort', ExternalPasswordEdit.Text);
+    WriteServerSecret(SettingsPath, 'Passphrase', ExternalKeyPassphraseEdit.Text);
+    Ini := TAppSettingsIni.Create(SettingsPath);
+    try
+      Ini.WriteString('Paperless Extern', 'Host', ExternalHostEdit.Text);
+      Ini.WriteString('Paperless Extern', 'SSH-Port', ExternalPortEdit.Text);
+      Ini.WriteString('Paperless Extern', 'Benutzer', ExternalUserEdit.Text);
+      Ini.WriteString('Paperless Extern', 'SSH-Key-Datei', ExternalKeyEdit.Text);
+      Ini.WriteString('Paperless Extern', 'Compose-Datei', ExternalComposePathEdit.Text);
+      Ini.WriteString('Paperless Extern', 'Compose-Projekt', ExternalComposeProjectEdit.Text);
+      Ini.WriteString('Paperless Extern', 'Anmeldung', Auth);
+    finally
+      Ini.Free;
+    end;
+    CenteredShowMessage('Serverdaten wurden gespeichert.');
+  except
+    on E: Exception do
+      CenteredShowMessage('Serverdaten konnten nicht vollstaendig gespeichert werden. Einzelne Angaben koennen bereits gespeichert sein. ' + E.Message);
   end;
 end;
 
@@ -2043,7 +2204,7 @@ begin
     ProbePath := IncludeTrailingPathDelimiter(Folder) + TGUID.NewGuid.ToString + '.tmp';
     TFile.WriteAllText(ProbePath, '', TEncoding.UTF8);
     TFile.Delete(ProbePath);
-    if not SameFileName(Folder, AppDataFolder) then
+    if LocalInstallationSelected and not SameFileName(Folder, AppDataFolder) then
     begin
       Names[0] := SettingsFileName;
       Names[1] := EmailEnvFileName;
@@ -2058,7 +2219,12 @@ begin
     end;
     Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(Folder) + SettingsFileName);
     try
-      Ini.WriteString('Pfade', 'DockerComposePfad', IncludeTrailingPathDelimiter(Folder) + DockerComposeFileName);
+      if LocalInstallationSelected then
+        Ini.WriteString('Pfade', 'DockerComposePfad', IncludeTrailingPathDelimiter(Folder) + DockerComposeFileName);
+      if ExternalInstallationSelected then
+        Ini.WriteString('Paperless Extern', 'Betriebsart', 'Extern')
+      else
+        Ini.WriteString('Paperless Extern', 'Betriebsart', 'Lokal');
       if NoticeAcceptedBeforeInstallation then
       begin
         Ini.WriteString('Einrichtung', 'Hinweis verstanden', 'Ja');
@@ -2078,8 +2244,11 @@ begin
     NoticeFilePath := IncludeTrailingPathDelimiter(Folder) + NoticeAcceptedFileName;
     InstallationCompletedFilePath := IncludeTrailingPathDelimiter(Folder) + InstallationCompletedFileName;
     CmdTargetPath := '';
-    InitLogger(Folder);
-    SaveEmptyEnvFile;
+    if LocalInstallationSelected then
+    begin
+      InitLogger(Folder);
+      SaveEmptyEnvFile;
+    end;
     Result := True;
   except
     on E: Exception do
@@ -2166,6 +2335,7 @@ var
   OldPath: string;
   StoredPath: string;
   TextFilePath: String;
+  FirstModeChoice: Integer;
 begin
   if ApplicationClosing or Application.Terminated then Exit;
   Label38.Caption := 'Valkey-Version:';
@@ -2177,6 +2347,32 @@ begin
   Label29.Caption := 'Paperles-ngx v3';
 
   AppDataFolder := LoadInstallationFolder;
+
+  // Choose the first operating mode before local setup or Docker checks.
+  // Die erste Betriebsart vor lokaler Einrichtung und Dockerpruefung auswaehlen.
+  if not InstallationPathReady then
+  begin
+    FirstModeChoice := CenteredMessageDlg(
+      'Soll Paperless lokal installiert werden?' + sLineBreak + sLineBreak +
+      'Ja: lokale Installation mit Docker Desktop.' + sLineBreak +
+      'Nein: vorhandene Paperless-Installation auf einem Server verwenden.',
+      mtConfirmation, [mbYes, mbNo, mbCancel], 0);
+    if (FirstModeChoice <> mrYes) and (FirstModeChoice <> mrNo) then
+    begin
+      Application.Terminate;
+      Exit;
+    end;
+    ExternalInstallationSelected := FirstModeChoice = mrNo;
+    LocalInstallationSelected := not ExternalInstallationSelected;
+    if ExternalInstallationSelected then
+    begin
+      InstallationModeRadioGroup.ItemIndex := 1;
+      FLocalStartupPending := True;
+    end
+    else
+      InstallationModeRadioGroup.ItemIndex := 0;
+    UpdateInstallationModeHeaders;
+  end;
 
   // Create the desktop consume folder if it does not exist.
   // Den Consume-Ordner auf dem Desktop erstellen, falls er nicht existiert.
@@ -2260,6 +2456,12 @@ begin
   // Create the section after the installation path is ready.
   // Den Abschnitt erst nach bestaetigtem Installationspfad anlegen.
   EnsureExternalPaperlessSection(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
+  try
+    LoadExternalServerSettings;
+  except
+    on E: Exception do
+      CenteredShowMessage('Serverdaten konnten nicht geladen werden. Speichern bleibt gesperrt. ' + E.Message);
+  end;
   if LocalInstallationSelected then
   begin
   TextFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + ComposePathFileName;
