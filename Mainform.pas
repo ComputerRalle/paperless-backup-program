@@ -116,6 +116,8 @@ type
     Label18: TLabel;
     SettingsPan: TPanel;
     SettingsScrollBox: TScrollBox;
+    InstallationModeRadioGroup: TRadioGroup;
+    ExternalServerDividerPan: TPanel;
     ExternalServerTitleLbl: TLabel;
     ExternalHostLbl: TLabel;
     ExternalPortLbl: TLabel;
@@ -132,6 +134,9 @@ type
     ExternalComposePathEdit: TEdit;
     ExternalComposeProjectEdit: TEdit;
     ExternalAuthRadioGroup: TRadioGroup;
+    ExternalKeyPassphraseLbl: TLabel;
+    ExternalKeyPassphraseEdit: TEdit;
+    SaveExternalServerBtn: TButton;
     Label26: TLabel;
     Panel15: TPanel;
     Label27: TLabel;
@@ -233,6 +238,8 @@ type
     procedure FormClose(Sender: TObject; var Action: TCloseAction);
     procedure StaticText1Click(Sender: TObject);
     procedure CheckBox1Click(Sender: TObject);
+    procedure ExternalAuthRadioGroupClick(Sender: TObject);
+    procedure InstallationModeRadioGroupClick(Sender: TObject);
     procedure ProtectCustomFilesCBClick(Sender: TObject);
     procedure UpdateComposeProtectionControls;
     procedure WriteStandardVersionAfterInstallation();
@@ -245,6 +252,10 @@ type
 
   private
     FRestoreLegacyNames: Boolean;
+    FVersionsReady: Boolean;
+    FLocalStartupPending: Boolean;
+    FChangingInstallationMode: Boolean;
+    FVersionSnapshot: array[0..6] of string;
     // Suppress OnClick recursion during loading, cancellation and failure recovery.
     // OnClick-Rekursion beim Laden, Abbrechen und Zurücksetzen nach Fehlern unterdrücken.
     FLoadingCustomFileProtection: Boolean;
@@ -253,6 +264,12 @@ type
     FRetentionRestartChoice: Integer;
     FRetentionUpdateRequested: Boolean;
     FRetentionUpdateSucceeded: Boolean;
+    procedure LoadStoredInstallationMode;
+    procedure UpdateInstallationModeHeaders;
+    procedure CaptureVersionSnapshot;
+    function VersionsChanged: Boolean;
+    procedure LoadVersionsForMode(ExternalMode: Boolean);
+    procedure SaveVersionsForMode(ExternalMode: Boolean);
     procedure CreateBackupScript(const ComposePath: string);
     function PowerShellQuote(const Value: string): string;
     function PrepareScriptOutputLog: string;
@@ -298,6 +315,7 @@ var
   Volume_data, Volume_db_data, Volume_export, Volume_media: String;
   NewComposePath: String;
   InstallationPathReady, NoticeAcceptedBeforeInstallation: Boolean;
+  LocalInstallationSelected, ExternalInstallationSelected: Boolean;
   ApplicationClosing: Boolean;
   ShouldWriteNewCompose: Boolean;
   IsAutostart: Boolean;
@@ -1426,6 +1444,11 @@ procedure TMainformFrm.ProtectCustomFilesCBClick(Sender: TObject);
 var
   BackupFolder: string;
 begin
+  if LocalInstallationSelected and FLocalStartupPending then
+  begin
+    CenteredShowMessage('Bitte das Programm neu starten, um die lokale Installation vorzubereiten.');
+    Exit;
+  end;
   // Ignore programmatic changes while restoring saved or rejected selections.
   // Programmatische Änderungen beim Laden oder Zurücksetzen der Auswahl ignorieren.
   if FLoadingCustomFileProtection then Exit;
@@ -1512,24 +1535,257 @@ begin
 end;
 
 // Manuelle Bearbeitung der Docker-Image-Versionen aktivieren oder deaktivieren.
+// Keep both selection flags consistent without changing either installation.
+// Beide Auswahlvariablen synchron halten, ohne Installationen zu veraendern.
+// Update the headers without changing the selected profile.
+// Die Kopfzeilen aktualisieren, ohne das Profil zu veraendern.
+procedure TMainformFrm.UpdateInstallationModeHeaders;
+var
+  HeaderText: string;
+begin
+  if ExternalInstallationSelected then
+    HeaderText := 'Paperless Backup Programm - Server'
+  else
+    HeaderText := 'Paperless Backup Programm - Lokal';
+  Label1.Caption := HeaderText;
+  Label8.Caption := HeaderText;
+  Label5.Caption := HeaderText;
+  Label2.Caption := HeaderText;
+  Label27.Caption := HeaderText;
+  Label25.Caption := HeaderText;
+end;
+
+// Load the selected profile before any installation-specific startup actions.
+// Das ausgewaehlte Profil vor installationsbezogenen Startaktionen laden.
+procedure TMainformFrm.LoadStoredInstallationMode;
+var
+  Ini: TAppSettingsIni;
+  Mode: string;
+begin
+  if SameText(ParamStr(1), '/geplant') then Exit;
+  Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
+  try
+    Mode := Ini.ReadString('Paperless Extern', 'Betriebsart', 'Lokal');
+  finally
+    Ini.Free;
+  end;
+  if SameText(Mode, 'Extern') then
+  begin
+    InstallationModeRadioGroup.ItemIndex := 1;
+    ExternalInstallationSelected := True;
+    LocalInstallationSelected := False;
+    FLocalStartupPending := True;
+  end
+  else if not SameText(Mode, 'Lokal') then
+    raise Exception.Create('Unbekannte Betriebsart in der Einstellungen.ini.');
+end;
+
+procedure TMainformFrm.CaptureVersionSnapshot;
+begin
+  FVersionSnapshot[0] := paperless_version_edit.Text;
+  FVersionSnapshot[1] := redis_version_edit.Text;
+  FVersionSnapshot[2] := postgres_version_edit.Text;
+  FVersionSnapshot[3] := gotenberg_version_edit.Text;
+  FVersionSnapshot[4] := tika_version_edit.Text;
+  FVersionSnapshot[5] := alpine_version_edit.Text;
+  FVersionSnapshot[6] := busybox_version_edit.Text;
+end;
+
+function TMainformFrm.VersionsChanged: Boolean;
+begin
+  Result := (FVersionSnapshot[0] <> paperless_version_edit.Text) or
+    (FVersionSnapshot[1] <> redis_version_edit.Text) or
+    (FVersionSnapshot[2] <> postgres_version_edit.Text) or
+    (FVersionSnapshot[3] <> gotenberg_version_edit.Text) or
+    (FVersionSnapshot[4] <> tika_version_edit.Text) or
+    (FVersionSnapshot[5] <> alpine_version_edit.Text) or
+    (FVersionSnapshot[6] <> busybox_version_edit.Text);
+end;
+
+// External versions stay separate; unknown server versions have no assumed defaults.
+// Externe Versionen bleiben getrennt; unbekannte Serverversionen erhalten keine Vorgaben.
+procedure TMainformFrm.LoadVersionsForMode(ExternalMode: Boolean);
+var
+  Ini: TAppSettingsIni;
+  Section: string;
+  Values: array[0..6] of string;
+begin
+  Section := IniSectionVersions;
+  if ExternalMode then Section := 'Versionen Extern';
+  Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
+  try
+    Values[0] := Ini.ReadString(Section, IniKeyPaperlessVersion, '');
+    Values[1] := Ini.ReadString(Section, IniKeyRedisVersion, '');
+    Values[2] := Ini.ReadString(Section, IniKeyPostgresVersion, '');
+    Values[3] := Ini.ReadString(Section, IniKeyGotenbergVersion, '');
+    Values[4] := Ini.ReadString(Section, IniKeyTikaVersion, '');
+    Values[5] := Ini.ReadString(Section, IniKeyAlpineVersion, '');
+    Values[6] := Ini.ReadString(Section, IniKeyBusyboxVersion, '');
+  finally
+    Ini.Free;
+  end;
+  if not ExternalMode then
+  begin
+    if Values[0] = '' then Values[0] := DefaultPaperlessVersion;
+    if Values[1] = '' then Values[1] := DefaultRedisVersion;
+    if Values[2] = '' then Values[2] := DefaultPostgresVersion;
+    if Values[3] = '' then Values[3] := DefaultGotenbergVersion;
+    if Values[4] = '' then Values[4] := DefaultTikaVersion;
+    if Values[5] = '' then Values[5] := DefaultAlpineVersion;
+    if Values[6] = '' then Values[6] := DefaultBusyboxVersion;
+  end;
+  paperless_version_edit.Text := Values[0];
+  redis_version_edit.Text := Values[1];
+  postgres_version_edit.Text := Values[2];
+  gotenberg_version_edit.Text := Values[3];
+  tika_version_edit.Text := Values[4];
+  alpine_version_edit.Text := Values[5];
+  busybox_version_edit.Text := Values[6];
+  CaptureVersionSnapshot;
+end;
+
+procedure TMainformFrm.SaveVersionsForMode(ExternalMode: Boolean);
+var
+  Ini: TAppSettingsIni;
+  Section: string;
+begin
+  Section := IniSectionVersions;
+  if ExternalMode then Section := 'Versionen Extern';
+  Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
+  try
+    Ini.WriteString(Section, IniKeyPaperlessVersion, paperless_version_edit.Text);
+    Ini.WriteString(Section, IniKeyRedisVersion, redis_version_edit.Text);
+    Ini.WriteString(Section, IniKeyPostgresVersion, postgres_version_edit.Text);
+    Ini.WriteString(Section, IniKeyGotenbergVersion, gotenberg_version_edit.Text);
+    Ini.WriteString(Section, IniKeyTikaVersion, tika_version_edit.Text);
+    Ini.WriteString(Section, IniKeyAlpineVersion, alpine_version_edit.Text);
+    Ini.WriteString(Section, IniKeyBusyboxVersion, busybox_version_edit.Text);
+  finally
+    Ini.Free;
+  end;
+  CaptureVersionSnapshot;
+end;
+
+// Preserve unsaved version edits or cancel before switching profiles.
+// Ungespeicherte Versionsaenderungen vor dem Profilwechsel behandeln.
+procedure TMainformFrm.InstallationModeRadioGroupClick(Sender: TObject);
+var
+  NewExternal: Boolean;
+  Choice: Integer;
+  Ini: TAppSettingsIni;
+  OldValues: array[0..6] of string;
+  OldSnapshot: array[0..6] of string;
+  I: Integer;
+begin
+  if FChangingInstallationMode then Exit;
+  NewExternal := InstallationModeRadioGroup.ItemIndex = 1;
+  if not FVersionsReady then
+  begin
+    ExternalInstallationSelected := NewExternal;
+    LocalInstallationSelected := not NewExternal;
+    Exit;
+  end;
+  if NewExternal = ExternalInstallationSelected then Exit;
+  OldValues[0] := paperless_version_edit.Text;
+  OldValues[1] := redis_version_edit.Text;
+  OldValues[2] := postgres_version_edit.Text;
+  OldValues[3] := gotenberg_version_edit.Text;
+  OldValues[4] := tika_version_edit.Text;
+  OldValues[5] := alpine_version_edit.Text;
+  OldValues[6] := busybox_version_edit.Text;
+  for I := 0 to 6 do OldSnapshot[I] := FVersionSnapshot[I];
+  try
+    if VersionsChanged then
+    begin
+      Choice := CenteredMessageDlg('Die Imageversionen wurden geaendert. Vor dem Wechsel speichern?',
+        mtConfirmation, [mbYes, mbNo, mbCancel], 0);
+      if (Choice <> mrYes) and (Choice <> mrNo) then
+      begin
+        FChangingInstallationMode := True;
+        try
+          if ExternalInstallationSelected then InstallationModeRadioGroup.ItemIndex := 1
+          else InstallationModeRadioGroup.ItemIndex := 0;
+        finally
+          FChangingInstallationMode := False;
+        end;
+        Exit;
+      end;
+      if Choice = mrYes then SaveVersionsForMode(ExternalInstallationSelected);
+    end;
+    LoadVersionsForMode(NewExternal);
+    Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
+    try
+      if NewExternal then Ini.WriteString('Paperless Extern', 'Betriebsart', 'Extern')
+      else Ini.WriteString('Paperless Extern', 'Betriebsart', 'Lokal');
+    finally
+      Ini.Free;
+    end;
+    ExternalInstallationSelected := NewExternal;
+    LocalInstallationSelected := not NewExternal;
+    UpdateInstallationModeHeaders;
+    ProtectCustomFilesCB.Enabled := LocalInstallationSelected and not FLocalStartupPending;
+    PapierkorbAufbewahrungEdit.Enabled := LocalInstallationSelected and not ProtectCustomFilesCB.Checked;
+    CheckBox1.Enabled := ExternalInstallationSelected or not ProtectCustomFilesCB.Checked;
+    CheckBox1Click(nil);
+    SettingsSavedLbl.Visible := False;
+    if LocalInstallationSelected and FLocalStartupPending then
+      CenteredShowMessage('Bitte das Programm neu starten, um die lokale Installation vorzubereiten.');
+  except
+    on E: Exception do
+    begin
+      paperless_version_edit.Text := OldValues[0];
+      redis_version_edit.Text := OldValues[1];
+      postgres_version_edit.Text := OldValues[2];
+      gotenberg_version_edit.Text := OldValues[3];
+      tika_version_edit.Text := OldValues[4];
+      alpine_version_edit.Text := OldValues[5];
+      busybox_version_edit.Text := OldValues[6];
+      for I := 0 to 6 do FVersionSnapshot[I] := OldSnapshot[I];
+      FChangingInstallationMode := True;
+      try
+        if ExternalInstallationSelected then InstallationModeRadioGroup.ItemIndex := 1
+        else InstallationModeRadioGroup.ItemIndex := 0;
+      finally
+        FChangingInstallationMode := False;
+      end;
+      CenteredShowMessage('Die Imageversionen konnten nicht gewechselt oder gespeichert werden: ' + E.Message);
+    end;
+  end;
+end;
+
+// Enable key fields only for SSH key authentication.
+// SSH-Key-Felder nur bei Anmeldung mit SSH-Key aktivieren.
+procedure TMainformFrm.ExternalAuthRadioGroupClick(Sender: TObject);
+var
+  KeyEnabled: Boolean;
+begin
+  KeyEnabled := ExternalAuthRadioGroup.ItemIndex = 1;
+  ExternalKeyLbl.Enabled := KeyEnabled;
+  ExternalKeyEdit.Enabled := KeyEnabled;
+  ExternalKeyPassphraseLbl.Enabled := KeyEnabled;
+  ExternalKeyPassphraseEdit.Enabled := KeyEnabled;
+  ExternalPasswordLbl.Enabled := not KeyEnabled;
+  ExternalPasswordEdit.Enabled := not KeyEnabled;
+end;
+
 procedure TMainformFrm.CheckBox1Click(Sender: TObject);
 var
   AllVersionsEnabled: Boolean;
 begin
   // Both checkboxes use this handler; confirmation is required for version editing.
   // Beide Checkboxen nutzen diesen Handler; die Bestätigung ist für Versionsänderungen erforderlich.
-  OnlyPaperlessVersionCB.Enabled := CheckBox1.Checked and not ProtectCustomFilesCB.Checked;
+  OnlyPaperlessVersionCB.Enabled := CheckBox1.Checked and (ExternalInstallationSelected or not ProtectCustomFilesCB.Checked);
   // Checked restriction: edit only Paperless. Unchecked restriction: edit all seven versions.
   // Einschränkung angehakt: nur Paperless ändern. Einschränkung abgewählt: alle sieben Versionen ändern.
   AllVersionsEnabled := CheckBox1.Checked and not OnlyPaperlessVersionCB.Checked and
-    not ProtectCustomFilesCB.Checked;
+    (ExternalInstallationSelected or not ProtectCustomFilesCB.Checked);
   redis_version_edit.Enabled := AllVersionsEnabled;
   postgres_version_edit.Enabled := AllVersionsEnabled;
   gotenberg_version_edit.Enabled := AllVersionsEnabled;
   tika_version_edit.Enabled := AllVersionsEnabled;
   alpine_version_edit.Enabled := AllVersionsEnabled;
   busybox_version_edit.Enabled := AllVersionsEnabled;
-  paperless_version_edit.Enabled := CheckBox1.Checked and not ProtectCustomFilesCB.Checked;
+  paperless_version_edit.Enabled := CheckBox1.Checked and (ExternalInstallationSelected or not ProtectCustomFilesCB.Checked);
 end;
 
 // Den Backup-Zielordner auswählen, speichern und die Backup-Skripte erstellen.
@@ -1541,6 +1797,16 @@ var
   TextFilePath: string;
   PathChoice: Integer;
 begin
+  if LocalInstallationSelected and FLocalStartupPending then
+  begin
+    CenteredShowMessage('Bitte das Programm neu starten, um die lokale Installation vorzubereiten.');
+    Exit;
+  end;
+  if ExternalInstallationSelected then
+  begin
+    CenteredShowMessage('Externe Serveraktionen sind noch nicht verfügbar.');
+    Exit;
+  end;
   if ComposePath.Trim = '' then
   begin
     CenteredShowMessage('Bitte zuerst den Paperless-Ordner auswählen.');
@@ -1827,6 +2093,9 @@ var
   Ini: TAppSettingsIni;
 begin
   ApplicationClosing := False;
+  FVersionsReady := False;
+  InstallationModeRadioGroup.ItemIndex := 0;
+  InstallationModeRadioGroupClick(nil);
   AppDataFolder := LoadInstallationFolder;
   NoticeAcceptedBeforeInstallation := False;
   InstallationPathReady := FileExists(InstallationPathIniFile) or
@@ -1844,9 +2113,13 @@ begin
   // Bestehende Installationen behalten ihren gewählten Pfad, auch außerhalb des Benutzerprofils.
   InstallationPathReady := InstallationPathReady and
     System.SysUtils.DirectoryExists(AppDataFolder);
+  // Load mode before local runtime files are touched.
+  // Betriebsart vor lokalen Dateizugriffen laden.
+  if InstallationPathReady then LoadStoredInstallationMode;
+  UpdateInstallationModeHeaders;
   // Do not create a runtime folder or log before the first path selection.
   // Vor der ersten Pfadwahl weder Laufzeitordner noch Log anlegen.
-  if InstallationPathReady then
+  if InstallationPathReady and LocalInstallationSelected then
   begin
     if not System.SysUtils.DirectoryExists(AppDataFolder) then System.SysUtils.ForceDirectories(AppDataFolder);
     InitLogger(AppDataFolder);
@@ -1908,12 +2181,14 @@ begin
   // Create the desktop consume folder if it does not exist.
   // Den Consume-Ordner auf dem Desktop erstellen, falls er nicht existiert.
   PaperlessInput := IncludeTrailingPathDelimiter(GetEnvironmentVariable('USERPROFILE')) + 'Desktop\' + PaperlessInputFolderName;
-  if InstallationPathReady then
+  if InstallationPathReady and LocalInstallationSelected then
   begin
     if not System.SysUtils.DirectoryExists(PaperlessInput) then System.SysUtils.ForceDirectories(PaperlessInput);
     SaveEmptyEnvFile();
   end;
 
+  if LocalInstallationSelected then
+  begin
   // Check whether the user already accepted the notice.
   // Prüfen, ob der Benutzer den Hinweis bereits akzeptiert hat.
   SettingsPath := IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + SettingsFileName;
@@ -1968,6 +2243,8 @@ begin
 
 
 
+  end;
+
   if ApplicationClosing or Application.Terminated then Exit;
   // A notice can be accepted before the install button is used.
   // Nach dem Hinweis erst den Pfad bestätigen, dann Einstellungen vorbereiten.
@@ -1978,11 +2255,13 @@ begin
       Application.Terminate;
       Exit;
     end;
-    if not System.SysUtils.DirectoryExists(PaperlessInput) then System.SysUtils.ForceDirectories(PaperlessInput);
+    if LocalInstallationSelected and not System.SysUtils.DirectoryExists(PaperlessInput) then System.SysUtils.ForceDirectories(PaperlessInput);
   end;
   // Create the section after the installation path is ready.
   // Den Abschnitt erst nach bestaetigtem Installationspfad anlegen.
   EnsureExternalPaperlessSection(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
+  if LocalInstallationSelected then
+  begin
   TextFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + ComposePathFileName;
   if FileExists(TextFilePath) then
   begin
@@ -2006,8 +2285,12 @@ begin
   DeleteFile(TextFilePath);
   end;
 
+  end;
+
   IsBackup := True;
 
+  if LocalInstallationSelected then
+  begin
   DefaultFolder := IncludeTrailingPathDelimiter(GetEnvironmentVariable('USERPROFILE')) + 'Desktop\' + PaperlessBackupFolderName;
   if not System.SysUtils.DirectoryExists(DefaultFolder) then System.SysUtils.ForceDirectories(DefaultFolder);
 
@@ -2031,6 +2314,8 @@ begin
     // Delete the old text file after a successful migration.
     // Die alte Textdatei nach erfolgreicher Migration löschen.
     if StoredPath <> '' then DeleteFile(TextFilePath);
+  end;
+
   end;
 
   // Read the last backup folder from the INI file.
@@ -2112,6 +2397,8 @@ begin
 
   BackupTargetFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + BackupTargetFileName;
 
+  if LocalInstallationSelected then
+  begin
   ComposePathTextFile := IncludeTrailingPathDelimiter(AppDataFolder) + ComposePathFileName;
   if FileExists(ComposePathTextFile) then
     begin
@@ -2213,6 +2500,8 @@ begin
       ComposePath := IncludeTrailingPathDelimiter(AppDataFolder) + DockerComposeFileName;
     end;
 
+  end;
+
   Panel6.ParentBackground := False;
   Panel6.StyleElements := Panel6.StyleElements - [seClient];
   Panel6.Color := $00234D11;
@@ -2297,7 +2586,8 @@ begin
     Ini.Free;
    end;
 
-   WriteComposeContainerAndVolumeInfo(ExtractFilePath(ComposePath));
+   if LocalInstallationSelected then
+     WriteComposeContainerAndVolumeInfo(ExtractFilePath(ComposePath));
 
 
   Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
@@ -2344,7 +2634,17 @@ begin
   finally
     ini.Free;
   end;
-
+  if ExternalInstallationSelected then
+  begin
+    LoadVersionsForMode(True);
+    ProtectCustomFilesCB.Enabled := False;
+    PapierkorbAufbewahrungEdit.Enabled := False;
+    CheckBox1.Enabled := True;
+    CheckBox1Click(nil);
+  end
+  else
+    CaptureVersionSnapshot;
+  FVersionsReady := True;
 
   LoadUpdateIniFile();
 end;
@@ -2360,6 +2660,16 @@ end;
 // Das manuelle Backup-Skript für den aktuellen Compose-Pfad neu erstellen und ausführen.
 procedure TMainformFrm.StartPaperlessBackupScriptBtnClick(Sender: TObject);
 begin
+  if LocalInstallationSelected and FLocalStartupPending then
+  begin
+    CenteredShowMessage('Bitte das Programm neu starten, um die lokale Installation vorzubereiten.');
+    Exit;
+  end;
+  if ExternalInstallationSelected then
+  begin
+    CenteredShowMessage('Externe Serveraktionen sind noch nicht verfügbar.');
+    Exit;
+  end;
   CreateBackupScript(ExtractFilePath(ComposePath));
 end;
 
@@ -2377,6 +2687,8 @@ begin
   // Clear the save confirmation when switching tabs.
   // Die Speicherbestätigung beim Tabwechsel ausblenden.
   RetentionSavedLbl.Visible := False;
+  if LocalInstallationSelected then
+  begin
   Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
     try
       Ini.WriteString('Pfade', 'DockerComposePfad', IncludeTrailingPathDelimiter(ExtractFilePath(ComposePath)) + DockerComposeFileName);
@@ -2386,6 +2698,7 @@ begin
       Ini.Free;
     end;
 
+  end;
 
   if TabControl1.TabIndex = 0 then
    begin
@@ -2545,6 +2858,16 @@ var
   ComposeFile, ComposeDir, PlannedScript, BackupBase: string;
   Volumes: TDockerVolumeNames;
 begin
+  if LocalInstallationSelected and FLocalStartupPending then
+  begin
+    CenteredShowMessage('Bitte das Programm neu starten, um die lokale Installation vorzubereiten.');
+    Exit;
+  end;
+  if ExternalInstallationSelected then
+  begin
+    CenteredShowMessage('Externe Serveraktionen sind noch nicht verfügbar.');
+    Exit;
+  end;
   FRetentionRestartChoice := CenteredMessageDlg(
     'Paperless muss neu gestartet werden, um die Einstellungen zu übernehmen. Möchten Sie Paperless neu starten?',
     mtConfirmation, [mbYes, mbNo], 0);
@@ -2695,6 +3018,16 @@ var
   Ini: TAppSettingsIni;
   ExitCode: DWORD;
 begin
+  if LocalInstallationSelected and FLocalStartupPending then
+  begin
+    CenteredShowMessage('Bitte das Programm neu starten, um die lokale Installation vorzubereiten.');
+    Exit;
+  end;
+  if ExternalInstallationSelected then
+  begin
+    CenteredShowMessage('Externe Serveraktionen sind noch nicht verfügbar.');
+    Exit;
+  end;
   // Create a script that removes the scheduled task.
   // Ein Skript erstellen, das die geplante Aufgabe entfernt.
   CmdTargetPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'Backup-Zeitplan-Entfernen.ps1';
@@ -2807,6 +3140,16 @@ var
   ComposePathTextFile: string;
   OriginalButtonText: string;
 begin
+  if LocalInstallationSelected and FLocalStartupPending then
+  begin
+    CenteredShowMessage('Bitte das Programm neu starten, um die lokale Installation vorzubereiten.');
+    Exit;
+  end;
+  if ExternalInstallationSelected then
+  begin
+    CenteredShowMessage('Externe Serveraktionen sind noch nicht verfügbar.');
+    Exit;
+  end;
   ScriptPath := '';
   OriginalButtonText := CreateBackupPlanBtn.Caption;
   CreateBackupPlanBtn.Caption := 'Bitte warten ...';
@@ -3016,6 +3359,24 @@ var
   Ini: TAppSettingsIni;
   RestartChoice: Integer;
 begin
+  if LocalInstallationSelected and FLocalStartupPending then
+  begin
+    CenteredShowMessage('Bitte das Programm neu starten, um die lokale Installation vorzubereiten.');
+    Exit;
+  end;
+  // External saves must not update local settings or start local containers.
+  // Externes Speichern darf lokale Einstellungen und Container nicht veraendern.
+  if ExternalInstallationSelected then
+  begin
+    try
+      SaveVersionsForMode(True);
+      SettingsSavedLbl.Visible := True;
+    except
+      on E: Exception do
+        CenteredShowMessage('Externe Imageversionen konnten nicht gespeichert werden: ' + E.Message);
+    end;
+    Exit;
+  end;
   RestartChoice := mrYes;
   if FRetentionUpdateRequested then
     RestartChoice := FRetentionRestartChoice
@@ -3065,6 +3426,7 @@ begin
     Ini.WriteString(IniSectionVersions, IniKeyAlpineVersion, alpine_version_edit.Text);
     Ini.WriteString(IniSectionVersions, IniKeyBusyboxVersion, busybox_version_edit.Text);
     Ini.UpdateFile;
+    CaptureVersionSnapshot;
 
   finally
     Ini.Free;
@@ -3179,6 +3541,16 @@ var
   EnvFilePath: string;
   SettingsSaved: Boolean;
 begin
+  if LocalInstallationSelected and FLocalStartupPending then
+  begin
+    CenteredShowMessage('Bitte das Programm neu starten, um die lokale Installation vorzubereiten.');
+    Exit;
+  end;
+  if ExternalInstallationSelected then
+  begin
+    CenteredShowMessage('Externe Serveraktionen sind noch nicht verfügbar.');
+    Exit;
+  end;
   SettingsSaved := False;
   // Build the full path to the file.
   // Den vollständigen Pfad zur Datei erstellen.
@@ -3540,6 +3912,16 @@ var
   PreparedKey: string;
   RestoreMailBytes: TBytes;
 begin
+  if LocalInstallationSelected and FLocalStartupPending then
+  begin
+    CenteredShowMessage('Bitte das Programm neu starten, um die lokale Installation vorzubereiten.');
+    Exit;
+  end;
+  if ExternalInstallationSelected then
+  begin
+    CenteredShowMessage('Externe Serveraktionen sind noch nicht verfügbar.');
+    Exit;
+  end;
   ClearRestoreProgressState;
   WriteComposeContainerAndVolumeInfo(ExtractFilePath(ComposePath));
   StartPaperlessBackupBtn.Enabled := False;

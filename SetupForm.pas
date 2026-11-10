@@ -436,6 +436,13 @@ var
   ExitCode: Cardinal;
   Ini:TAppSettingsIni;
 begin
+  // External operations are not implemented yet.
+  // Externe Vorgaenge sind noch nicht implementiert.
+  if ExternalInstallationSelected then
+  begin
+    CenteredShowMessage('Externe Serveraktionen sind noch nicht verfügbar.');
+    Exit;
+  end;
   if ApplicationClosing or Application.Terminated then Exit;
   WantsInstall := False;
   if not MainformFrm.SelectInstallationFolder then Exit;
@@ -693,6 +700,13 @@ var
   Ini: TAppSettingsIni;
   Versions: TDockerImageVersions;
 begin
+  // External operations are not implemented yet.
+  // Externe Vorgaenge sind noch nicht implementiert.
+  if ExternalInstallationSelected then
+  begin
+    CenteredShowMessage('Externe Serveraktionen sind noch nicht verfügbar.');
+    Exit;
+  end;
   if ApplicationClosing or Application.Terminated then Exit;
   ComposePath := IncludeTrailingPathDelimiter(AppDataFolder) + DockerComposeFileName;
   // Read image versions from the INI file and apply defaults when empty.

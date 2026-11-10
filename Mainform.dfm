@@ -138118,7 +138118,7 @@ object MainformFrm: TMainformFrm
           ParentFont = False
         end
         object Label3: TLabel
-          Left = 579
+          Left = 569
           Top = 21
           Width = 246
           Height = 16
@@ -138400,7 +138400,7 @@ object MainformFrm: TMainformFrm
           ParentFont = False
         end
         object Label9: TLabel
-          Left = 579
+          Left = 569
           Top = 21
           Width = 246
           Height = 16
@@ -138481,7 +138481,7 @@ object MainformFrm: TMainformFrm
           ParentFont = False
         end
         object Label6: TLabel
-          Left = 579
+          Left = 569
           Top = 21
           Width = 246
           Height = 16
@@ -138690,7 +138690,7 @@ object MainformFrm: TMainformFrm
           ParentFont = False
         end
         object Label14: TLabel
-          Left = 579
+          Left = 569
           Top = 21
           Width = 246
           Height = 16
@@ -138792,28 +138792,43 @@ object MainformFrm: TMainformFrm
         Width = 836
         Height = 559
         HorzScrollBar.Visible = False
+        VertScrollBar.Margin = 20
         VertScrollBar.Smooth = True
         VertScrollBar.Tracking = True
         Align = alClient
         BorderStyle = bsNone
         TabOrder = 0
+        object InstallationModeRadioGroup: TRadioGroup
+          Left = 33
+          Top = 75
+          Width = 782
+          Height = 65
+          Caption = 'Paperless-Installation'
+          Columns = 2
+          ItemIndex = 0
+          Items.Strings = (
+            'Lokale Installation'
+            'Externe Serverinstallation')
+          TabOrder = 1
+          OnClick = InstallationModeRadioGroupClick
+        end
         object Label26: TLabel
           Left = 31
-          Top = 75
+          Top = 155
           Width = 95
           Height = 18
           Caption = 'Einstellungen'
         end
         object Label19: TLabel
           Left = 33
-          Top = 129
+          Top = 209
           Width = 290
           Height = 18
           Caption = 'Papierkorb Aufbewahrungszeit in Tagen'
         end
         object OnlyIntegerAllowedLbl: TLabel
           Left = 419
-          Top = 129
+          Top = 209
           Width = 126
           Height = 18
           Caption = 'Nur Ganz-Zahlen'
@@ -138821,7 +138836,7 @@ object MainformFrm: TMainformFrm
         end
         object SettingsSavedLbl: TLabel
           Left = 362
-          Top = 500
+          Top = 580
           Width = 185
           Height = 18
           Caption = 'Einstellungen gespeichert'
@@ -138829,103 +138844,115 @@ object MainformFrm: TMainformFrm
         end
         object Label38: TLabel
           Left = 33
-          Top = 173
+          Top = 253
           Width = 107
           Height = 18
           Caption = 'Redis-Version:'
         end
         object Label39: TLabel
           Left = 32
-          Top = 245
+          Top = 325
           Width = 137
           Height = 18
           Caption = 'PostreSQL-Verion:'
         end
         object Label40: TLabel
           Left = 33
-          Top = 317
+          Top = 397
           Width = 147
           Height = 18
           Caption = 'Gotenberg-Version:'
         end
         object Label41: TLabel
           Left = 33
-          Top = 390
+          Top = 470
           Width = 91
           Height = 18
           Caption = 'Tika-Version'
         end
         object Label42: TLabel
           Left = 344
-          Top = 173
+          Top = 253
           Width = 104
           Height = 18
           Caption = 'Alpine-Version'
         end
         object Label43: TLabel
           Left = 344
-          Top = 245
+          Top = 325
           Width = 125
           Height = 18
           Caption = 'Busybox-Version'
         end
         object Label44: TLabel
           Left = 344
-          Top = 317
+          Top = 397
           Width = 131
           Height = 18
           Caption = 'Paperless-Version'
         end
+        object ExternalServerDividerPan: TPanel
+          Left = 0
+          Top = 630
+          Width = 815
+          Height = 10
+          BevelOuter = bvNone
+          Color = 2313489
+          ParentBackground = False
+          StyleElements = [seFont, seBorder]
+          TabOrder = 25
+        end
         object ExternalServerTitleLbl: TLabel
           Left = 33
-          Top = 575
+          Top = 655
           Width = 272
           Height = 18
           Caption = 'Servereinstellungen Paperless Extern'
         end
         object ExternalHostLbl: TLabel
           Left = 33
-          Top = 615
+          Top = 695
           Width = 174
           Height = 18
           Caption = 'IP-Adresse / Hostname'
         end
         object ExternalPortLbl: TLabel
           Left = 33
-          Top = 655
+          Top = 735
           Width = 69
           Height = 18
           Caption = 'SSH-Port'
         end
         object ExternalUserLbl: TLabel
           Left = 33
-          Top = 695
+          Top = 775
           Width = 109
           Height = 18
           Caption = 'Benutzername'
         end
         object ExternalPasswordLbl: TLabel
           Left = 33
-          Top = 735
+          Top = 980
           Width = 69
           Height = 18
           Caption = 'Passwort'
         end
         object ExternalKeyLbl: TLabel
+          Enabled = False
           Left = 33
-          Top = 775
+          Top = 900
           Width = 154
           Height = 18
           Caption = 'SSH-Key (Dateipfad)'
         end
         object ExternalComposePathLbl: TLabel
           Left = 33
-          Top = 815
+          Top = 1030
           Caption = 'Pfad zur Compose-Datei'
         end
         object ExternalComposeProjectLbl: TLabel
           Left = 33
-          Top = 855
+          Top = 1070
           Caption = 'Compose-Projektname'
         end
         object Panel15: TPanel
@@ -138954,8 +138981,8 @@ object MainformFrm: TMainformFrm
             ParentFont = False
           end
           object Label28: TLabel
-            Left = 579
-            Top = 21
+            Left = 569
+            Top = 101
             Width = 246
             Height = 16
             Alignment = taRightJustify
@@ -138973,8 +139000,8 @@ object MainformFrm: TMainformFrm
         end
         object SaveSettingsBtn: TButton
           AlignWithMargins = True
-          Left = 575
-          Top = 480
+          Left = 565
+          Top = 560
           Width = 250
           Height = 60
           Margins.Left = 10
@@ -138982,85 +139009,85 @@ object MainformFrm: TMainformFrm
           Margins.Right = 10
           Margins.Bottom = 10
           Caption = 'Einstellungen Speichern'
-          TabOrder = 1
+          TabOrder = 2
           TabStop = False
           OnClick = SaveSettingsBtnClick
         end
         object PapierkorbAufbewahrungEdit: TEdit
           Left = 344
-          Top = 126
+          Top = 206
           Width = 69
           Height = 26
-          TabOrder = 2
+          TabOrder = 3
           Text = '365'
           OnChange = TrashRetentionEditChange
         end
         object redis_version_edit: TEdit
           Left = 31
-          Top = 197
+          Top = 277
           Width = 225
-          Height = 26
-          TabStop = False
-          Enabled = False
-          TabOrder = 3
-        end
-        object postgres_version_edit: TEdit
-          Left = 32
-          Top = 269
-          Width = 223
           Height = 26
           TabStop = False
           Enabled = False
           TabOrder = 4
         end
-        object gotenberg_version_edit: TEdit
-          Left = 31
-          Top = 341
+        object postgres_version_edit: TEdit
+          Left = 32
+          Top = 349
           Width = 223
           Height = 26
           TabStop = False
           Enabled = False
           TabOrder = 5
         end
-        object tika_version_edit: TEdit
-          Left = 32
-          Top = 414
-          Width = 225
+        object gotenberg_version_edit: TEdit
+          Left = 31
+          Top = 421
+          Width = 223
           Height = 26
           TabStop = False
           Enabled = False
           TabOrder = 6
         end
-        object alpine_version_edit: TEdit
-          Left = 342
-          Top = 197
-          Width = 208
+        object tika_version_edit: TEdit
+          Left = 32
+          Top = 494
+          Width = 225
           Height = 26
           TabStop = False
           Enabled = False
           TabOrder = 7
         end
-        object busybox_version_edit: TEdit
+        object alpine_version_edit: TEdit
           Left = 342
-          Top = 269
+          Top = 277
           Width = 208
           Height = 26
           TabStop = False
           Enabled = False
           TabOrder = 8
         end
-        object paperless_version_edit: TEdit
+        object busybox_version_edit: TEdit
           Left = 342
-          Top = 341
+          Top = 349
           Width = 208
           Height = 26
           TabStop = False
           Enabled = False
           TabOrder = 9
         end
+        object paperless_version_edit: TEdit
+          Left = 342
+          Top = 421
+          Width = 208
+          Height = 26
+          TabStop = False
+          Enabled = False
+          TabOrder = 10
+        end
         object Memo1: TMemo
-          Left = 575
-          Top = 126
+          Left = 565
+          Top = 206
           Width = 250
           Height = 331
           TabStop = False
@@ -139083,102 +139110,128 @@ object MainformFrm: TMainformFrm
             'nach welche Versionen '
             'kompatibel sind.')
           ReadOnly = True
-          TabOrder = 11
+          TabOrder = 12
         end
         object ProtectCustomFilesCB: TCheckBox
           Left = 342
-          Top = 382
+          Top = 462
           Width = 210
           Height = 65
           Caption = 'Compose-Datei vor '#220'berschreiben sch'#252'tzen'
-          TabOrder = 13
+          TabOrder = 14
           WordWrap = True
           OnClick = ProtectCustomFilesCBClick
         end
         object OnlyPaperlessVersionCB: TCheckBox
           Left = 33
-          Top = 455
+          Top = 535
           Width = 343
           Height = 17
           Caption = 'Nur Paperless Version '#195'ndern'
           Checked = True
           Enabled = False
           State = cbChecked
-          TabOrder = 12
+          TabOrder = 13
           OnClick = CheckBox1Click
         end
         object CheckBox1: TCheckBox
           Left = 33
-          Top = 485
+          Top = 565
           Width = 343
           Height = 17
           TabStop = False
           Caption = 'Ich wei'#223' was ich tue, und habe ein Backup'
-          TabOrder = 10
+          TabOrder = 11
           OnClick = CheckBox1Click
+        end
+        object ExternalKeyPassphraseLbl: TLabel
+          Enabled = False
+          Left = 33
+          Top = 940
+          Caption = 'SSH-Key-Passphrase'
         end
         object ExternalHostEdit: TEdit
           Left = 344
-          Top = 612
-          Width = 360
-          Height = 26
-          TabOrder = 14
-        end
-        object ExternalPortEdit: TEdit
-          Left = 344
-          Top = 652
-          Width = 100
+          Top = 692
+          Width = 471
           Height = 26
           TabOrder = 15
         end
-        object ExternalUserEdit: TEdit
+        object ExternalPortEdit: TEdit
           Left = 344
-          Top = 692
-          Width = 360
+          Top = 732
+          Width = 100
           Height = 26
           TabOrder = 16
         end
-        object ExternalPasswordEdit: TEdit
-          Left = 344
-          Top = 732
-          Width = 360
-          Height = 26
-          PasswordChar = '*'
-          TabOrder = 17
-        end
-        object ExternalKeyEdit: TEdit
+        object ExternalUserEdit: TEdit
           Left = 344
           Top = 772
-          Width = 360
+          Width = 471
           Height = 26
-          TabOrder = 18
-        end
-        object ExternalComposePathEdit: TEdit
-          Left = 344
-          Top = 812
-          Width = 360
-          Height = 26
-          TabOrder = 19
-        end
-        object ExternalComposeProjectEdit: TEdit
-          Left = 344
-          Top = 852
-          Width = 360
-          Height = 26
-          TabOrder = 20
+          TabOrder = 17
         end
         object ExternalAuthRadioGroup: TRadioGroup
           Left = 33
-          Top = 900
-          Width = 671
+          Top = 805
+          Width = 782
           Height = 75
           Caption = 'SSH-Anmeldung'
           Columns = 2
           ItemIndex = 0
           Items.Strings = (
-            'SSH-Key'
-            'Passwort')
+            'Passwort'
+            'SSH-Key')
+          TabOrder = 18
+          OnClick = ExternalAuthRadioGroupClick
+        end
+        object ExternalKeyEdit: TEdit
+          Enabled = False
+          Left = 344
+          Top = 897
+          Width = 471
+          Height = 26
+          TabOrder = 19
+        end
+        object ExternalKeyPassphraseEdit: TEdit
+          Enabled = False
+          Left = 344
+          Top = 937
+          Width = 471
+          Height = 26
+          PasswordChar = '*'
+          TabOrder = 20
+        end
+        object ExternalPasswordEdit: TEdit
+          Left = 344
+          Top = 977
+          Width = 471
+          Height = 26
+          PasswordChar = '*'
           TabOrder = 21
+        end
+        object ExternalComposePathEdit: TEdit
+          Left = 344
+          Top = 1027
+          Width = 471
+          Height = 26
+          TabOrder = 22
+        end
+        object ExternalComposeProjectEdit: TEdit
+          Left = 344
+          Top = 1067
+          Width = 471
+          Height = 26
+          TabOrder = 23
+        end
+        object SaveExternalServerBtn: TButton
+          Left = 565
+          Top = 1120
+          Width = 250
+          Height = 60
+          Caption = 'Serverdaten Speichern'
+          Enabled = False
+          TabOrder = 24
         end
       end
     end
@@ -139329,7 +139382,7 @@ object MainformFrm: TMainformFrm
           ParentFont = False
         end
         object Label29: TLabel
-          Left = 579
+          Left = 569
           Top = 21
           Width = 246
           Height = 16
