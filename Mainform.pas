@@ -115,6 +115,18 @@ type
     HabeUpdaetGemachtCb: TCheckBox;
     Label18: TLabel;
     SettingsPan: TPanel;
+    SettingsScrollBox: TScrollBox;
+    ExternalServerTitleLbl: TLabel;
+    ExternalHostLbl: TLabel;
+    ExternalPortLbl: TLabel;
+    ExternalUserLbl: TLabel;
+    ExternalPasswordLbl: TLabel;
+    ExternalKeyLbl: TLabel;
+    ExternalHostEdit: TEdit;
+    ExternalPortEdit: TEdit;
+    ExternalUserEdit: TEdit;
+    ExternalPasswordEdit: TEdit;
+    ExternalKeyEdit: TEdit;
     Label26: TLabel;
     Panel15: TPanel;
     Label27: TLabel;

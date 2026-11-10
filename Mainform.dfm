@@ -138785,273 +138785,350 @@ object MainformFrm: TMainformFrm
       ParentBackground = False
       ParentColor = True
       TabOrder = 4
-      object Label26: TLabel
-        Left = 31
-        Top = 75
-        Width = 95
-        Height = 18
-        Caption = 'Einstellungen'
-      end
-      object Label19: TLabel
-        Left = 33
-        Top = 129
-        Width = 290
-        Height = 18
-        Caption = 'Papierkorb Aufbewahrungszeit in Tagen'
-      end
-      object OnlyIntegerAllowedLbl: TLabel
-        Left = 419
-        Top = 129
-        Width = 126
-        Height = 18
-        Caption = 'Nur Ganz-Zahlen'
-        Visible = False
-      end
-      object SettingsSavedLbl: TLabel
-        Left = 362
-        Top = 500
-        Width = 185
-        Height = 18
-        Caption = 'Einstellungen gespeichert'
-        Visible = False
-      end
-      object Label38: TLabel
-        Left = 33
-        Top = 173
-        Width = 107
-        Height = 18
-        Caption = 'Redis-Version:'
-      end
-      object Label39: TLabel
-        Left = 32
-        Top = 245
-        Width = 137
-        Height = 18
-        Caption = 'PostreSQL-Verion:'
-      end
-      object Label40: TLabel
-        Left = 33
-        Top = 317
-        Width = 147
-        Height = 18
-        Caption = 'Gotenberg-Version:'
-      end
-      object Label41: TLabel
-        Left = 33
-        Top = 390
-        Width = 91
-        Height = 18
-        Caption = 'Tika-Version'
-      end
-      object Label42: TLabel
-        Left = 344
-        Top = 173
-        Width = 104
-        Height = 18
-        Caption = 'Alpine-Version'
-      end
-      object Label43: TLabel
-        Left = 344
-        Top = 245
-        Width = 125
-        Height = 18
-        Caption = 'Busybox-Version'
-      end
-      object Label44: TLabel
-        Left = 344
-        Top = 317
-        Width = 131
-        Height = 18
-        Caption = 'Paperless-Version'
-      end
-      object Panel15: TPanel
+      object SettingsScrollBox: TScrollBox
         Left = 0
         Top = 0
         Width = 836
-        Height = 56
-        Align = alTop
-        BevelOuter = bvNone
-        Color = 3767324
-        ParentBackground = False
+        Height = 559
+        Align = alClient
+        BorderStyle = bsNone
         TabOrder = 0
-        object Label27: TLabel
-          Left = 20
-          Top = 19
-          Width = 285
-          Height = 20
-          Caption = 'Paperless-ngx Backup Programm'
-          Color = clWhite
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -17
-          Font.Name = 'Verdana'
-          Font.Style = []
-          ParentColor = False
-          ParentFont = False
+        object Label26: TLabel
+          Left = 31
+          Top = 75
+          Width = 95
+          Height = 18
+          Caption = 'Einstellungen'
         end
-        object Label28: TLabel
-          Left = 579
-          Top = 21
-          Width = 246
-          Height = 16
-          Alignment = taRightJustify
-          AutoSize = False
-          Caption = 'Getestet mit: Paperless-ngx v2.18.3 '
-          Color = clWhite
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -13
-          Font.Name = 'Verdana'
-          Font.Style = []
-          ParentColor = False
-          ParentFont = False
+        object Label19: TLabel
+          Left = 33
+          Top = 129
+          Width = 290
+          Height = 18
+          Caption = 'Papierkorb Aufbewahrungszeit in Tagen'
         end
-      end
-      object SaveSettingsBtn: TButton
-        AlignWithMargins = True
-        Left = 575
-        Top = 480
-        Width = 250
-        Height = 60
-        Margins.Left = 10
-        Margins.Top = 10
-        Margins.Right = 10
-        Margins.Bottom = 10
-        Caption = 'Einstellungen Speichern'
-        TabOrder = 1
-        TabStop = False
-        OnClick = SaveSettingsBtnClick
-      end
-      object PapierkorbAufbewahrungEdit: TEdit
-        Left = 344
-        Top = 126
-        Width = 69
-        Height = 26
-        TabOrder = 2
-        Text = '365'
-        OnChange = TrashRetentionEditChange
-      end
-      object redis_version_edit: TEdit
-        Left = 31
-        Top = 197
-        Width = 225
-        Height = 26
-        TabStop = False
-        Enabled = False
-        TabOrder = 3
-      end
-      object postgres_version_edit: TEdit
-        Left = 32
-        Top = 269
-        Width = 223
-        Height = 26
-        TabStop = False
-        Enabled = False
-        TabOrder = 4
-      end
-      object gotenberg_version_edit: TEdit
-        Left = 31
-        Top = 341
-        Width = 223
-        Height = 26
-        TabStop = False
-        Enabled = False
-        TabOrder = 5
-      end
-      object tika_version_edit: TEdit
-        Left = 32
-        Top = 414
-        Width = 225
-        Height = 26
-        TabStop = False
-        Enabled = False
-        TabOrder = 6
-      end
-      object alpine_version_edit: TEdit
-        Left = 342
-        Top = 197
-        Width = 208
-        Height = 26
-        TabStop = False
-        Enabled = False
-        TabOrder = 7
-      end
-      object busybox_version_edit: TEdit
-        Left = 342
-        Top = 269
-        Width = 208
-        Height = 26
-        TabStop = False
-        Enabled = False
-        TabOrder = 8
-      end
-      object paperless_version_edit: TEdit
-        Left = 342
-        Top = 341
-        Width = 208
-        Height = 26
-        TabStop = False
-        Enabled = False
-        TabOrder = 9
-      end
-      object Memo1: TMemo
-        Left = 575
-        Top = 126
-        Width = 250
-        Height = 331
-        TabStop = False
-        Lines.Strings = (
-          'Stellen Sie nur dann andere '
-          'Versionen ein, wenn Sie genau '
-          'wissen was Sie tun.'
-          ''
-          'Machen Sie vor jeder '#196'nderung '
-          'ein Backup.'
-          ''
-          'Wenn Sie die Versionen '#228'ndern '
-          'und speichern klicken'
-          'werden diese Versionen '
-          'heruntergeladen.'
-          ''
-          'Schlagen Sie bei'
-          'https://docs.paperless-'
-          'ngx.com/'
-          'nach welche Versionen '
-          'kompatibel sind.')
-        ReadOnly = True
-        TabOrder = 11
-      end
-      object ProtectCustomFilesCB: TCheckBox
-        Left = 342
-        Top = 382
-        Width = 210
-        Height = 65
-        Caption = 'Compose-Datei vor '#220'berschreiben sch'#252'tzen'
-        TabOrder = 13
-        WordWrap = True
-        OnClick = ProtectCustomFilesCBClick
-      end
-      object OnlyPaperlessVersionCB: TCheckBox
-        Left = 33
-        Top = 455
-        Width = 343
-        Height = 17
-        Caption = 'Nur Paperless Version '#195'ndern'
-        Checked = True
-        Enabled = False
-        State = cbChecked
-        TabOrder = 12
-        OnClick = CheckBox1Click
-      end
-      object CheckBox1: TCheckBox
-        Left = 33
-        Top = 485
-        Width = 343
-        Height = 17
-        TabStop = False
-        Caption = 'Ich wei'#223' was ich tue, und habe ein Backup'
-        TabOrder = 10
-        OnClick = CheckBox1Click
+        object OnlyIntegerAllowedLbl: TLabel
+          Left = 419
+          Top = 129
+          Width = 126
+          Height = 18
+          Caption = 'Nur Ganz-Zahlen'
+          Visible = False
+        end
+        object SettingsSavedLbl: TLabel
+          Left = 362
+          Top = 500
+          Width = 185
+          Height = 18
+          Caption = 'Einstellungen gespeichert'
+          Visible = False
+        end
+        object Label38: TLabel
+          Left = 33
+          Top = 173
+          Width = 107
+          Height = 18
+          Caption = 'Redis-Version:'
+        end
+        object Label39: TLabel
+          Left = 32
+          Top = 245
+          Width = 137
+          Height = 18
+          Caption = 'PostreSQL-Verion:'
+        end
+        object Label40: TLabel
+          Left = 33
+          Top = 317
+          Width = 147
+          Height = 18
+          Caption = 'Gotenberg-Version:'
+        end
+        object Label41: TLabel
+          Left = 33
+          Top = 390
+          Width = 91
+          Height = 18
+          Caption = 'Tika-Version'
+        end
+        object Label42: TLabel
+          Left = 344
+          Top = 173
+          Width = 104
+          Height = 18
+          Caption = 'Alpine-Version'
+        end
+        object Label43: TLabel
+          Left = 344
+          Top = 245
+          Width = 125
+          Height = 18
+          Caption = 'Busybox-Version'
+        end
+        object Label44: TLabel
+          Left = 344
+          Top = 317
+          Width = 131
+          Height = 18
+          Caption = 'Paperless-Version'
+        end
+        object Panel15: TPanel
+          Left = 0
+          Top = 0
+          Width = 836
+          Height = 56
+          Align = alTop
+          BevelOuter = bvNone
+          Color = 3767324
+          ParentBackground = False
+          TabOrder = 0
+          object Label27: TLabel
+            Left = 20
+            Top = 19
+            Width = 285
+            Height = 20
+            Caption = 'Paperless-ngx Backup Programm'
+            Color = clWhite
+            Font.Charset = DEFAULT_CHARSET
+            Font.Color = clWindowText
+            Font.Height = -17
+            Font.Name = 'Verdana'
+            Font.Style = []
+            ParentColor = False
+            ParentFont = False
+          end
+          object Label28: TLabel
+            Left = 579
+            Top = 21
+            Width = 246
+            Height = 16
+            Alignment = taRightJustify
+            AutoSize = False
+            Caption = 'Getestet mit: Paperless-ngx v2.18.3 '
+            Color = clWhite
+            Font.Charset = DEFAULT_CHARSET
+            Font.Color = clWindowText
+            Font.Height = -13
+            Font.Name = 'Verdana'
+            Font.Style = []
+            ParentColor = False
+            ParentFont = False
+          end
+        end
+        object SaveSettingsBtn: TButton
+          AlignWithMargins = True
+          Left = 575
+          Top = 480
+          Width = 250
+          Height = 60
+          Margins.Left = 10
+          Margins.Top = 10
+          Margins.Right = 10
+          Margins.Bottom = 10
+          Caption = 'Einstellungen Speichern'
+          TabOrder = 1
+          TabStop = False
+          OnClick = SaveSettingsBtnClick
+        end
+        object PapierkorbAufbewahrungEdit: TEdit
+          Left = 344
+          Top = 126
+          Width = 69
+          Height = 26
+          TabOrder = 2
+          Text = '365'
+          OnChange = TrashRetentionEditChange
+        end
+        object redis_version_edit: TEdit
+          Left = 31
+          Top = 197
+          Width = 225
+          Height = 26
+          TabStop = False
+          Enabled = False
+          TabOrder = 3
+        end
+        object postgres_version_edit: TEdit
+          Left = 32
+          Top = 269
+          Width = 223
+          Height = 26
+          TabStop = False
+          Enabled = False
+          TabOrder = 4
+        end
+        object gotenberg_version_edit: TEdit
+          Left = 31
+          Top = 341
+          Width = 223
+          Height = 26
+          TabStop = False
+          Enabled = False
+          TabOrder = 5
+        end
+        object tika_version_edit: TEdit
+          Left = 32
+          Top = 414
+          Width = 225
+          Height = 26
+          TabStop = False
+          Enabled = False
+          TabOrder = 6
+        end
+        object alpine_version_edit: TEdit
+          Left = 342
+          Top = 197
+          Width = 208
+          Height = 26
+          TabStop = False
+          Enabled = False
+          TabOrder = 7
+        end
+        object busybox_version_edit: TEdit
+          Left = 342
+          Top = 269
+          Width = 208
+          Height = 26
+          TabStop = False
+          Enabled = False
+          TabOrder = 8
+        end
+        object paperless_version_edit: TEdit
+          Left = 342
+          Top = 341
+          Width = 208
+          Height = 26
+          TabStop = False
+          Enabled = False
+          TabOrder = 9
+        end
+        object Memo1: TMemo
+          Left = 575
+          Top = 126
+          Width = 250
+          Height = 331
+          TabStop = False
+          Lines.Strings = (
+            'Stellen Sie nur dann andere '
+            'Versionen ein, wenn Sie genau '
+            'wissen was Sie tun.'
+            ''
+            'Machen Sie vor jeder '#196'nderung '
+            'ein Backup.'
+            ''
+            'Wenn Sie die Versionen '#228'ndern '
+            'und speichern klicken'
+            'werden diese Versionen '
+            'heruntergeladen.'
+            ''
+            'Schlagen Sie bei'
+            'https://docs.paperless-'
+            'ngx.com/'
+            'nach welche Versionen '
+            'kompatibel sind.')
+          ReadOnly = True
+          TabOrder = 11
+        end
+        object ProtectCustomFilesCB: TCheckBox
+          Left = 342
+          Top = 382
+          Width = 210
+          Height = 65
+          Caption = 'Compose-Datei vor '#220'berschreiben sch'#252'tzen'
+          TabOrder = 13
+          WordWrap = True
+          OnClick = ProtectCustomFilesCBClick
+        end
+        object OnlyPaperlessVersionCB: TCheckBox
+          Left = 33
+          Top = 455
+          Width = 343
+          Height = 17
+          Caption = 'Nur Paperless Version '#195'ndern'
+          Checked = True
+          Enabled = False
+          State = cbChecked
+          TabOrder = 12
+          OnClick = CheckBox1Click
+        end
+        object CheckBox1: TCheckBox
+          Left = 33
+          Top = 485
+          Width = 343
+          Height = 17
+          TabStop = False
+          Caption = 'Ich wei'#223' was ich tue, und habe ein Backup'
+          TabOrder = 10
+          OnClick = CheckBox1Click
+        end
+        object ExternalServerTitleLbl: TLabel
+          Left = 33
+          Top = 575
+          Width = 295
+          Height = 18
+          Caption = 'Servereinstellungen Paperless Extern'
+        end
+        object ExternalHostLbl: TLabel
+          Left = 33
+          Top = 615
+          Caption = 'IP-Adresse / Hostname'
+        end
+        object ExternalPortLbl: TLabel
+          Left = 33
+          Top = 655
+          Caption = 'SSH-Port'
+        end
+        object ExternalUserLbl: TLabel
+          Left = 33
+          Top = 695
+          Caption = 'Benutzername'
+        end
+        object ExternalPasswordLbl: TLabel
+          Left = 33
+          Top = 735
+          Caption = 'Passwort'
+        end
+        object ExternalKeyLbl: TLabel
+          Left = 33
+          Top = 775
+          Caption = 'SSH-Key (Dateipfad)'
+        end
+        object ExternalHostEdit: TEdit
+          Left = 344
+          Top = 612
+          Width = 360
+          Height = 26
+          TabOrder = 14
+        end
+        object ExternalPortEdit: TEdit
+          Left = 344
+          Top = 652
+          Width = 100
+          Height = 26
+          TabOrder = 15
+        end
+        object ExternalUserEdit: TEdit
+          Left = 344
+          Top = 692
+          Width = 360
+          Height = 26
+          TabOrder = 16
+        end
+        object ExternalPasswordEdit: TEdit
+          Left = 344
+          Top = 732
+          Width = 360
+          Height = 26
+          PasswordChar = '*'
+          TabOrder = 17
+        end
+        object ExternalKeyEdit: TEdit
+          Left = 344
+          Top = 772
+          Width = 360
+          Height = 26
+          TabOrder = 18
+        end
       end
     end
     object HelpPan: TPanel
