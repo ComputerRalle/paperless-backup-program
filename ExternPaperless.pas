@@ -5,6 +5,7 @@ interface
 procedure EnsureExternalPaperlessSection(const SettingsPath: string);
 function ReadServerSecret(const SettingsPath, SecretName: string): string;
 procedure WriteServerSecret(const SettingsPath, SecretName, Value: string);
+function RunServerAskPass: Integer;
 
 implementation
 
@@ -13,6 +14,34 @@ uses
 
 const
   ServerCredentialNotFound = 1168; // ERROR_NOT_FOUND
+
+// Only answer the requested secret; all host-key and unknown prompts fail closed.
+// Nur das angeforderte Geheimnis ausgeben; Hostschluessel und unbekannte Fragen ablehnen.
+function RunServerAskPass: Integer;
+var
+  Prompt, Mode, SettingsPath, Secret: string;
+  OutputBytes: TBytes;
+  OutputHandle: THandle;
+  Written: DWORD;
+begin
+  Result := 1;
+  Prompt := LowerCase(ParamStr(1));
+  Mode := GetEnvironmentVariable('PAPERLESS_SSH_AUTH');
+  SettingsPath := GetEnvironmentVariable('PAPERLESS_SSH_SETTINGS');
+  if (SettingsPath = '') or (ParamCount <> 1) then Exit;
+  if (Mode = 'password') and (Pos('password:', Prompt) > 0) then
+    Secret := ReadServerSecret(SettingsPath, 'Passwort')
+  else if (Mode = 'key') and (Pos('enter passphrase for key', Prompt) = 1) then
+    Secret := ReadServerSecret(SettingsPath, 'Passphrase')
+  else
+    Exit;
+  if (Secret = '') or (Pos(#10, Secret) > 0) or (Pos(#13, Secret) > 0) then Exit;
+  OutputBytes := TEncoding.UTF8.GetBytes(Secret + #10);
+  OutputHandle := GetStdHandle(STD_OUTPUT_HANDLE);
+  if (OutputHandle = 0) or (OutputHandle = INVALID_HANDLE_VALUE) then Exit;
+  if WriteFile(OutputHandle, OutputBytes[0], Length(OutputBytes), Written, nil) and
+     (Written = DWORD(Length(OutputBytes))) then Result := 0;
+end;
 
 // Credentials are scoped to the selected settings path and Windows user.
 // Zugangsdaten sind an den Einstellungspfad und Windows-Benutzer gebunden.

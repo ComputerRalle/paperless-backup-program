@@ -139224,6 +139224,23 @@ object MainformFrm: TMainformFrm
           Height = 26
           TabOrder = 23
         end
+        object UseSavedSshCredentialCB: TCheckBox
+          Left = 33
+          Top = 1095
+          Width = 500
+          Height = 20
+          Caption = 'Gespeicherte Zugangsdaten verwenden'
+          TabOrder = 26
+        end
+        object TestExternalConnectionBtn: TButton
+          Left = 295
+          Top = 1120
+          Width = 250
+          Height = 60
+          Caption = 'Verbindung testen'
+          TabOrder = 25
+          OnClick = TestExternalConnectionBtnClick
+        end
         object SaveExternalServerBtn: TButton
           Left = 565
           Top = 1120

@@ -137,6 +137,8 @@ type
     ExternalKeyPassphraseLbl: TLabel;
     ExternalKeyPassphraseEdit: TEdit;
     SaveExternalServerBtn: TButton;
+    TestExternalConnectionBtn: TButton;
+    UseSavedSshCredentialCB: TCheckBox;
     Label26: TLabel;
     Panel15: TPanel;
     Label27: TLabel;
@@ -240,6 +242,7 @@ type
     procedure CheckBox1Click(Sender: TObject);
     procedure ExternalAuthRadioGroupClick(Sender: TObject);
     procedure SaveExternalServerBtnClick(Sender: TObject);
+    procedure TestExternalConnectionBtnClick(Sender: TObject);
     procedure InstallationModeRadioGroupClick(Sender: TObject);
     procedure ProtectCustomFilesCBClick(Sender: TObject);
     procedure UpdateComposeProtectionControls;
@@ -1884,6 +1887,168 @@ end;
 
 // Save server settings without invoking the local settings or Docker workflows.
 // Serverdaten ohne lokale Einstellungen oder Dockerablaeufe speichern.
+// Use a visible OpenSSH window for authentication and read-only checks.
+// OpenSSH zur Anmeldung und fuer lesende Pruefungen sichtbar starten.
+procedure TMainformFrm.TestExternalConnectionBtnClick(Sender: TObject);
+var
+  Host, UserName, ComposeFile, KeyFile, RemotePath, RemoteCommand: string;
+  ScriptPath, Params, ArgumentList, SettingsPath, ExpectedAuth: string;
+  PortNumber: Integer;
+  Ch: Char;
+  Lines: TStringList;
+  LaunchResult: HINST;
+  Ini: TAppSettingsIni;
+begin
+  Host := Trim(ExternalHostEdit.Text);
+  UserName := Trim(ExternalUserEdit.Text);
+  ComposeFile := ExternalComposePathEdit.Text;
+  KeyFile := Trim(ExternalKeyEdit.Text);
+  if (Host = '') or (UserName = '') or (ComposeFile = '') or
+     not TryStrToInt(Trim(ExternalPortEdit.Text), PortNumber) or
+     (PortNumber < 1) or (PortNumber > 65535) then
+  begin
+    CenteredShowMessage('Bitte Host, SSH-Port (1 bis 65535), Benutzername und Compose-Dateipfad ausfuellen.');
+    Exit;
+  end;
+  for Ch in Host do
+    if not CharInSet(Ch, ['A'..'Z', 'a'..'z', '0'..'9', '.', '-', ':', '_']) then
+    begin
+      CenteredShowMessage('Host oder IP-Adresse enthaelt ungueltige Zeichen.');
+      Exit;
+    end;
+  if Host[1] = '-' then
+  begin
+    CenteredShowMessage('Der Host darf nicht mit einem Bindestrich beginnen.');
+    Exit;
+  end;
+  for Ch in UserName do
+    if not CharInSet(Ch, ['A'..'Z', 'a'..'z', '0'..'9', '.', '-', '_']) then
+    begin
+      CenteredShowMessage('Der Benutzername enthaelt ungueltige Zeichen.');
+      Exit;
+    end;
+  for Ch in ComposeFile do
+    if Ord(Ch) < 32 then
+    begin
+      CenteredShowMessage('Der Compose-Dateipfad enthaelt ungueltige Steuerzeichen.');
+      Exit;
+    end;
+  if ComposeFile[1] <> '/' then
+  begin
+    CenteredShowMessage('Bitte den absoluten Pfad zur Compose-Datei auf dem Server eingeben.');
+    Exit;
+  end;
+  if (ExternalAuthRadioGroup.ItemIndex = 1) and
+     ((KeyFile = '') or not FileExists(KeyFile)) then
+  begin
+    CenteredShowMessage('Bitte eine vorhandene SSH-Key-Datei angeben.');
+    Exit;
+  end;
+  SettingsPath := IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName;
+  if UseSavedSshCredentialCB.Checked then
+  begin
+    if ExternalAuthRadioGroup.ItemIndex = 1 then ExpectedAuth := 'SSH-Key'
+    else ExpectedAuth := 'Passwort';
+    try
+      Ini := TAppSettingsIni.Create(SettingsPath);
+      try
+        if (Host <> Trim(Ini.ReadString('Paperless Extern', 'Host', ''))) or
+           (IntToStr(PortNumber) <> Trim(Ini.ReadString('Paperless Extern', 'SSH-Port', ''))) or
+           (UserName <> Trim(Ini.ReadString('Paperless Extern', 'Benutzer', ''))) or
+           not SameText(ExpectedAuth, Ini.ReadString('Paperless Extern', 'Anmeldung', 'Passwort')) or
+           ((ExternalAuthRadioGroup.ItemIndex = 1) and
+            (KeyFile <> Trim(Ini.ReadString('Paperless Extern', 'SSH-Key-Datei', '')))) then
+        begin
+          CenteredShowMessage('Bitte die aktuellen Serverdaten vor dem automatischen Test speichern.');
+          Exit;
+        end;
+      finally
+        Ini.Free;
+      end;
+    except
+      on E: Exception do
+      begin
+        CenteredShowMessage('Die gespeicherten Serverdaten konnten nicht geprueft werden: ' + E.Message);
+        Exit;
+      end;
+    end;
+  end;
+
+  // Quote the server path as a literal POSIX shell argument.
+  // Den Serverpfad als woertliches POSIX-Shellargument quotieren.
+  RemotePath := #39 + StringReplace(ComposeFile, #39, #39 + '"' + #39 + '"' + #39,
+    [rfReplaceAll]) + #39;
+  RemoteCommand := 'echo "SSH: verbunden"; ' +
+    'if docker compose version >/dev/null 2>&1; then echo "Docker Compose: verfuegbar"; ' +
+    'else echo "Docker Compose: nicht verfuegbar oder keine Berechtigung"; fi; ' +
+    'if [ -f ' + RemotePath + ' ] && [ -r ' + RemotePath + ' ]; then ' +
+    'echo "Compose-Datei: vorhanden und lesbar"; else ' +
+    'echo "Compose-Datei: fehlt oder ist nicht lesbar"; fi';
+  if UseSavedSshCredentialCB.Checked then
+    ArgumentList := PowerShellQuote('-o') + ', ' + PowerShellQuote('StrictHostKeyChecking=yes')
+  else
+    ArgumentList := PowerShellQuote('-o') + ', ' + PowerShellQuote('StrictHostKeyChecking=ask');
+  ArgumentList := ArgumentList +
+    ', ' + PowerShellQuote('-p') + ', ' + PowerShellQuote(IntToStr(PortNumber)) +
+    ', ' + PowerShellQuote('-l') + ', ' + PowerShellQuote(UserName);
+  if ExternalAuthRadioGroup.ItemIndex = 1 then
+    ArgumentList := ArgumentList + ', ' + PowerShellQuote('-o') + ', ' +
+      PowerShellQuote('IdentitiesOnly=yes') + ', ' + PowerShellQuote('-i') + ', ' + PowerShellQuote(KeyFile)
+  else if UseSavedSshCredentialCB.Checked then
+    ArgumentList := ArgumentList + ', ' + PowerShellQuote('-o') + ', ' +
+      PowerShellQuote('PreferredAuthentications=password') + ', ' +
+      PowerShellQuote('-o') + ', ' + PowerShellQuote('PubkeyAuthentication=no') + ', ' +
+      PowerShellQuote('-o') + ', ' + PowerShellQuote('NumberOfPasswordPrompts=1')
+  else
+    ArgumentList := ArgumentList + ', ' + PowerShellQuote('-o') + ', ' +
+      PowerShellQuote('PreferredAuthentications=keyboard-interactive,password') + ', ' +
+      PowerShellQuote('-o') + ', ' + PowerShellQuote('PubkeyAuthentication=no');
+  ArgumentList := ArgumentList + ', ' + PowerShellQuote(Host) + ', ' + PowerShellQuote(RemoteCommand);
+  ScriptPath := TPath.Combine(TPath.GetTempPath, 'paperless-ssh-test-' + TGUID.NewGuid.ToString + '.ps1');
+  try
+    Lines := TStringList.Create;
+    try
+      Lines.Add('$sshArgs = @(' + ArgumentList + ')');
+      if UseSavedSshCredentialCB.Checked then
+      begin
+        Lines.Add('$env:PAPERLESS_SSH_HELPER = ''1''');
+        Lines.Add('$env:PAPERLESS_SSH_SETTINGS = ' + PowerShellQuote(SettingsPath));
+        if ExternalAuthRadioGroup.ItemIndex = 1 then
+          Lines.Add('$env:PAPERLESS_SSH_AUTH = ''key''')
+        else
+          Lines.Add('$env:PAPERLESS_SSH_AUTH = ''password''');
+        Lines.Add('$env:SSH_ASKPASS = ' + PowerShellQuote(Application.ExeName));
+        Lines.Add('$env:SSH_ASKPASS_REQUIRE = ''force''');
+        Lines.Add('$env:DISPLAY = ''paperless:0''');
+        Lines.Add('Write-Host ''Automatisch nur bei bereits bestaetigtem Server-Schluessel. Bei unbekanntem Schluessel zuerst ohne gespeicherte Zugangsdaten testen.''');
+      end;
+      Lines.Add('try {');
+      Lines.Add('  Write-Host ''Den Server-Fingerabdruck vor der Bestaetigung unabhaengig vergleichen.''');
+      Lines.Add('  $sshExe = Get-Command ssh.exe -ErrorAction Stop');
+      Lines.Add('  & $sshExe.Source @sshArgs');
+      Lines.Add('  if ($LASTEXITCODE -ne 0) { Write-Host (''SSH-Test fehlgeschlagen. Exitcode: '' + $LASTEXITCODE) }');
+      Lines.Add('} catch { Write-Host (''SSH-Test konnte nicht gestartet werden: '' + $_.Exception.Message) }');
+      Lines.Add('finally {');
+      Lines.Add('  Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue');
+      Lines.Add('  Read-Host ''Zum Schliessen Eingabetaste druecken'' | Out-Null');
+      Lines.Add('}');
+      Lines.SaveToFile(ScriptPath, TEncoding.UTF8);
+    finally
+      Lines.Free;
+    end;
+    Params := '-NoProfile -ExecutionPolicy Bypass -File "' + ScriptPath + '"';
+    LaunchResult := ShellExecute(Handle, 'open', 'powershell.exe', PChar(Params), nil, SW_SHOWNORMAL);
+    if NativeInt(LaunchResult) <= 32 then
+      raise Exception.Create('Das Fenster fuer den SSH-Test konnte nicht gestartet werden.');
+  except
+    on E: Exception do
+    begin
+      if FileExists(ScriptPath) then DeleteFile(ScriptPath);
+      CenteredShowMessage('Der Verbindungstest konnte nicht vorbereitet werden: ' + E.Message);
+    end;
+  end;
+end;
+
 procedure TMainformFrm.SaveExternalServerBtnClick(Sender: TObject);
 var
   Ini: TAppSettingsIni;

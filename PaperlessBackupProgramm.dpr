@@ -2,6 +2,7 @@
 program PaperlessBackupProgramm;
 
 uses
+  System.SysUtils,
   Vcl.Forms,
   MainForm in 'MainForm.pas' {Form1},
   Vcl.Themes,
@@ -18,6 +19,16 @@ uses
 {$R *.res}
 
 begin
+  // The helper must exit before any forms or installation code run.
+  // Der Helfer beendet sich vor Formularen oder Installationsablaeufen.
+  if GetEnvironmentVariable('PAPERLESS_SSH_HELPER') = '1' then
+  begin
+    try
+      Halt(RunServerAskPass);
+    except
+      Halt(1);
+    end;
+  end;
   Application.Initialize;
   Application.MainFormOnTaskbar := True;
   TStyleManager.TrySetStyle('Windows Modern Dark SE');
