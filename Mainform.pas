@@ -122,11 +122,15 @@ type
     ExternalUserLbl: TLabel;
     ExternalPasswordLbl: TLabel;
     ExternalKeyLbl: TLabel;
+    ExternalComposePathLbl: TLabel;
+    ExternalComposeProjectLbl: TLabel;
     ExternalHostEdit: TEdit;
     ExternalPortEdit: TEdit;
     ExternalUserEdit: TEdit;
     ExternalPasswordEdit: TEdit;
     ExternalKeyEdit: TEdit;
+    ExternalComposePathEdit: TEdit;
+    ExternalComposeProjectEdit: TEdit;
     Label26: TLabel;
     Panel15: TPanel;
     Label27: TLabel;

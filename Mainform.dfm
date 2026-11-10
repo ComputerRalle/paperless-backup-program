@@ -138544,12 +138544,13 @@ object MainformFrm: TMainformFrm
         object Label7: TLabel
           Left = 31
           Top = 44
-          Width = 696
+          Width = 797
           Height = 54
           Caption = 
-            'Diese Aufbewahrungsrichtlinie gilt f'#252'r manuelle und automatische Backups.'#13#10 +
-            'Bei 0 werden alle Backups aufbewahrt.'#13#10 +
-            'Achtung: Durch diese Richtlinie gel'#246'schte Backups sind verloren und k'#246'nnen nicht wiederhergestellt werden.'
+            'Diese Aufbewahrungsrichtlinie gilt f'#252'r manuelle und automatische' +
+            ' Backups.'#13#10'Bei 0 werden alle Backups aufbewahrt.'#13#10'Achtung: Durch' +
+            ' diese Richtlinie gel'#246'schte Backups sind verloren und k'#246'nnen nic' +
+            'ht wiederhergestellt werden.'
         end
         object AllBackupsAreRetainedLbl: TLabel
           Left = 306
@@ -138790,6 +138791,9 @@ object MainformFrm: TMainformFrm
         Top = 0
         Width = 836
         Height = 559
+        HorzScrollBar.Visible = False
+        VertScrollBar.Smooth = True
+        VertScrollBar.Tracking = True
         Align = alClient
         BorderStyle = bsNone
         TabOrder = 0
@@ -138872,10 +138876,62 @@ object MainformFrm: TMainformFrm
           Height = 18
           Caption = 'Paperless-Version'
         end
+        object ExternalServerTitleLbl: TLabel
+          Left = 33
+          Top = 575
+          Width = 272
+          Height = 18
+          Caption = 'Servereinstellungen Paperless Extern'
+        end
+        object ExternalHostLbl: TLabel
+          Left = 33
+          Top = 615
+          Width = 174
+          Height = 18
+          Caption = 'IP-Adresse / Hostname'
+        end
+        object ExternalPortLbl: TLabel
+          Left = 33
+          Top = 655
+          Width = 69
+          Height = 18
+          Caption = 'SSH-Port'
+        end
+        object ExternalUserLbl: TLabel
+          Left = 33
+          Top = 695
+          Width = 109
+          Height = 18
+          Caption = 'Benutzername'
+        end
+        object ExternalPasswordLbl: TLabel
+          Left = 33
+          Top = 735
+          Width = 69
+          Height = 18
+          Caption = 'Passwort'
+        end
+        object ExternalKeyLbl: TLabel
+          Left = 33
+          Top = 775
+          Width = 154
+          Height = 18
+          Caption = 'SSH-Key (Dateipfad)'
+        end
+        object ExternalComposePathLbl: TLabel
+          Left = 33
+          Top = 815
+          Caption = 'Pfad zur Compose-Datei'
+        end
+        object ExternalComposeProjectLbl: TLabel
+          Left = 33
+          Top = 855
+          Caption = 'Compose-Projektname'
+        end
         object Panel15: TPanel
           Left = 0
           Top = 0
-          Width = 836
+          Width = 825
           Height = 56
           Align = alTop
           BevelOuter = bvNone
@@ -139061,38 +139117,6 @@ object MainformFrm: TMainformFrm
           TabOrder = 10
           OnClick = CheckBox1Click
         end
-        object ExternalServerTitleLbl: TLabel
-          Left = 33
-          Top = 575
-          Width = 295
-          Height = 18
-          Caption = 'Servereinstellungen Paperless Extern'
-        end
-        object ExternalHostLbl: TLabel
-          Left = 33
-          Top = 615
-          Caption = 'IP-Adresse / Hostname'
-        end
-        object ExternalPortLbl: TLabel
-          Left = 33
-          Top = 655
-          Caption = 'SSH-Port'
-        end
-        object ExternalUserLbl: TLabel
-          Left = 33
-          Top = 695
-          Caption = 'Benutzername'
-        end
-        object ExternalPasswordLbl: TLabel
-          Left = 33
-          Top = 735
-          Caption = 'Passwort'
-        end
-        object ExternalKeyLbl: TLabel
-          Left = 33
-          Top = 775
-          Caption = 'SSH-Key (Dateipfad)'
-        end
         object ExternalHostEdit: TEdit
           Left = 344
           Top = 612
@@ -139128,6 +139152,20 @@ object MainformFrm: TMainformFrm
           Width = 360
           Height = 26
           TabOrder = 18
+        end
+        object ExternalComposePathEdit: TEdit
+          Left = 344
+          Top = 812
+          Width = 360
+          Height = 26
+          TabOrder = 19
+        end
+        object ExternalComposeProjectEdit: TEdit
+          Left = 344
+          Top = 852
+          Width = 360
+          Height = 26
+          TabOrder = 20
         end
       end
     end
