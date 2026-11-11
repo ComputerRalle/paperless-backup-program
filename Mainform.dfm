@@ -69,10 +69,10 @@ object MainformFrm: TMainformFrm
         ParentCtl3D = False
         TabOrder = 0
         object ProgramUpdateLbl: TLabel
-          Left = 30
+          Left = 0
           Top = 24
-          Width = 250
-          Height = 18
+          Width = 310
+          Height = 36
           Cursor = crHandPoint
           Alignment = taCenter
           AutoSize = False
@@ -84,6 +84,7 @@ object MainformFrm: TMainformFrm
           Font.Style = []
           ParentColor = False
           ParentFont = False
+          WordWrap = True
           OnClick = ProgramUpdateLblClick
         end
       end
@@ -138960,6 +138961,12 @@ object MainformFrm: TMainformFrm
           Top = 1070
           Caption = 'Compose-Projektname'
         end
+        object ExternalBackupFolderLbl: TLabel
+          Left = 33
+          Top = 1110
+          Caption = 'Backupordner:'
+          FocusControl = ExternalBackupFolderEdit
+        end
         object Panel15: TPanel
           Left = 0
           Top = 0
@@ -139237,35 +139244,52 @@ object MainformFrm: TMainformFrm
           TabOrder = 23
           OnChange = ExternalConnectionSettingsChanged
         end
+        object ExternalBackupFolderEdit: TEdit
+          Left = 344
+          Top = 1107
+          Width = 471
+          Height = 26
+          TabOrder = 24
+          Text = '/srv/paperless_backup'
+        end
         object UseSavedSshCredentialCB: TCheckBox
           Left = 33
-          Top = 1095
+          Top = 1135
           Width = 500
           Height = 20
           Caption = 'Gespeicherte Zugangsdaten verwenden'
           Checked = True
           State = cbChecked
-          TabOrder = 26
+          TabOrder = 25
           OnClick = ExternalConnectionSettingsChanged
         end
         object TestExternalConnectionBtn: TButton
-          Left = 295
-          Top = 1120
+          Left = 33
+          Top = 1160
           Width = 250
           Height = 60
           Caption = 'Verbindung testen'
-          TabOrder = 25
+          TabOrder = 26
           OnClick = TestExternalConnectionBtnClick
+        end
+        object CreateExternalBackupFolderBtn: TButton
+          Left = 299
+          Top = 1160
+          Width = 250
+          Height = 60
+          Caption = 'Backupordner anlegen'
+          TabOrder = 27
+          OnClick = CreateExternalBackupFolderBtnClick
         end
         object SaveExternalServerBtn: TButton
           Left = 565
-          Top = 1120
+          Top = 1160
           Width = 250
           Height = 60
           Caption = 'Serverdaten Speichern'
           Enabled = False
           OnClick = SaveExternalServerBtnClick
-          TabOrder = 24
+          TabOrder = 28
         end
       end
     end

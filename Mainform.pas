@@ -133,6 +133,9 @@ type
     ExternalKeyEdit: TEdit;
     ExternalComposePathEdit: TEdit;
     ExternalComposeProjectEdit: TEdit;
+    ExternalBackupFolderLbl: TLabel;
+    ExternalBackupFolderEdit: TEdit;
+    CreateExternalBackupFolderBtn: TButton;
     ExternalAuthRadioGroup: TRadioGroup;
     ExternalKeyPassphraseLbl: TLabel;
     ExternalKeyPassphraseEdit: TEdit;
@@ -242,6 +245,7 @@ type
     procedure StaticText1Click(Sender: TObject);
     procedure CheckBox1Click(Sender: TObject);
     procedure ExternalAuthRadioGroupClick(Sender: TObject);
+    procedure CreateExternalBackupFolderBtnClick(Sender: TObject);
     procedure SaveExternalServerBtnClick(Sender: TObject);
     procedure TestExternalConnectionBtnClick(Sender: TObject);
     procedure ExternalConnectionSettingsChanged(Sender: TObject);
@@ -257,6 +261,12 @@ type
     function VersionToInt(const V: string): string;
 
   private
+    FServerBackupCheckActive: Boolean;
+    FServerBackupModeWasEnabled: Boolean;
+    FServerBackupPreviousUpdateCaption: string;
+    FServerBackupCheckHandle: THandle;
+    FServerBackupCheckTimer: TTimer;
+    FServerBackupCheckResultPath: string;
     FStartupCheckHandle: THandle;
     FStartupCheckTimer: TTimer;
     FStartupCheckResultPath: string;
@@ -280,6 +290,9 @@ type
     FRetentionRestartChoice: Integer;
     FRetentionUpdateRequested: Boolean;
     FRetentionUpdateSucceeded: Boolean;
+    procedure BeginServerBackupCheck(const BackupFolder: string = '');
+    procedure EndServerBackupCheck;
+    procedure ServerBackupCheckTimerTick(Sender: TObject);
     procedure CancelExternalStartupCheck;
     procedure BeginExternalStartupCheck;
     procedure StartupCheckTimerTick(Sender: TObject);
@@ -2417,6 +2430,125 @@ begin
   paperless_version_edit.Enabled := CheckBox1.Checked and (ExternalInstallationSelected or not ProtectCustomFilesCB.Checked);
 end;
 
+// Confirm the remote directory operation before starting any SSH commands.
+// Das Anlegen des Serverordners bestätigen lassen, bevor SSH-Befehle starten.
+procedure TMainformFrm.CreateExternalBackupFolderBtnClick(Sender: TObject);
+var
+  BackupFolder: string;
+begin
+  if FServerBackupCheckActive then Exit;
+  try
+    BackupFolder := NormalizeServerBackupFolder(ExternalBackupFolderEdit.Text);
+  except
+    on E: Exception do
+    begin
+      CenteredMessageDlg(E.Message, mtWarning, [mbOK], 0);
+      Exit;
+    end;
+  end;
+
+  // Only Yes authorizes the server operation; No and Cancel leave the dialog without starting it.
+  // Nur Ja bestätigt den Servervorgang; Nein und Abbrechen schließen den Dialog ohne Start.
+  if CenteredMessageDlg(
+    'Wenn Sie auf Ja klicken, prüft das Programm zuerst den freien Speicherplatz auf dem entfernten Server. ' +
+    'Anschließend legt es den Backupordner unter folgendem Pfad an:' + sLineBreak + sLineBreak +
+    BackupFolder + sLineBreak + sLineBreak +
+    'Der verfügbare Speicherplatz wird Ihnen angezeigt. Stellen Sie sicher, dass auf dem Server genügend Platz ' +
+    'für Ihre Backups vorhanden ist.' + sLineBreak + sLineBreak +
+    'Wenn das Root-Dateisystem (/) voll läuft, kann der Server beim nächsten Neustart möglicherweise nicht mehr starten.' + sLineBreak + sLineBreak +
+    'Backupordner jetzt anlegen?',
+    mtWarning, [mbYes, mbNo, mbCancel], 0) = mrYes then
+    BeginServerBackupCheck(BackupFolder);
+end;
+
+// Lock both server actions until the operation and its result dialog have finished.
+// Beide Serveraktionen bis zum Abschluss des Vorgangs und Schließen der Ergebnismeldung sperren.
+procedure TMainformFrm.BeginServerBackupCheck(const BackupFolder: string);
+begin
+  FServerBackupCheckActive := True;
+  StartPaperlessBackupBtn.Enabled := False;
+  CreateExternalBackupFolderBtn.Enabled := False;
+  FServerBackupModeWasEnabled := InstallationModeRadioGroup.Enabled;
+  InstallationModeRadioGroup.Enabled := False;
+  // Show progress in the status label and remember the original update text.
+  // Den Wartehinweis im Statuslabel anzeigen und den bisherigen Update-Text merken.
+  FServerBackupPreviousUpdateCaption := ProgramUpdateLbl.Caption;
+  ProgramUpdateLbl.Caption := 'Bitte warten. Speicherplatzgrößen werden geprüft.';
+  try
+    if FServerBackupCheckTimer = nil then
+    begin
+      FServerBackupCheckTimer := TTimer.Create(Self);
+      FServerBackupCheckTimer.Enabled := False;
+      FServerBackupCheckTimer.Interval := 250;
+      FServerBackupCheckTimer.OnTimer := ServerBackupCheckTimerTick;
+    end;
+    StartServerBackup(FServerBackupCheckHandle, FServerBackupCheckResultPath, BackupFolder);
+    FServerBackupCheckTimer.Enabled := True;
+  except
+    on E: Exception do
+      try
+        ProgramUpdateLbl.Caption := FServerBackupPreviousUpdateCaption;
+        CenteredMessageBox(E.Message, 'Server-Backup: Prüfung fehlgeschlagen', MB_OK or MB_ICONWARNING);
+      finally
+        EndServerBackupCheck;
+      end;
+  end;
+end;
+
+// Poll the hidden process without blocking the main window and keep the button locked during the modal dialog.
+// Verdeckten Prozess ohne Blockieren des Hauptfensters abfragen und den Button auch im Meldungsdialog gesperrt lassen.
+procedure TMainformFrm.ServerBackupCheckTimerTick(Sender: TObject);
+var
+  WaitResult, ExitCode: DWORD;
+begin
+  if FServerBackupCheckHandle = 0 then Exit;
+  WaitResult := WaitForSingleObject(FServerBackupCheckHandle, 0);
+  if WaitResult = WAIT_TIMEOUT then Exit;
+  FServerBackupCheckTimer.Enabled := False;
+  // Restore the update label as soon as the check ends, before showing its result.
+  // Das Update-Label nach Ende der Prüfung vor der Ergebnismeldung zurücksetzen.
+  ProgramUpdateLbl.Caption := FServerBackupPreviousUpdateCaption;
+  try
+    try
+      ExitCode := 0;
+      if (WaitResult <> WAIT_OBJECT_0) or
+         not GetExitCodeProcess(FServerBackupCheckHandle, ExitCode) then
+        RaiseLastOSError;
+      ShowServerBackupResult(FServerBackupCheckResultPath, ExitCode);
+    except
+      on E: Exception do
+        CenteredMessageBox('Die Speicherplatzprüfung konnte nicht ausgewertet werden.' +
+          sLineBreak + E.Message, 'Server-Backup: Prüfung fehlgeschlagen', MB_OK or MB_ICONWARNING);
+    end;
+  finally
+    EndServerBackupCheck;
+  end;
+end;
+
+// Release the process and the temporary result before accepting another check.
+// Prozesshandle und temporäres Ergebnis freigeben, bevor eine weitere Prüfung möglich ist.
+procedure TMainformFrm.EndServerBackupCheck;
+begin
+  if Assigned(FServerBackupCheckTimer) then FServerBackupCheckTimer.Enabled := False;
+  if FServerBackupCheckHandle <> 0 then
+  begin
+    CloseHandle(FServerBackupCheckHandle);
+    FServerBackupCheckHandle := 0;
+  end;
+  if FServerBackupCheckResultPath <> '' then
+  begin
+    DeleteFile(FServerBackupCheckResultPath);
+    FServerBackupCheckResultPath := '';
+  end;
+  FServerBackupCheckActive := False;
+  if not ApplicationClosing then
+  begin
+    InstallationModeRadioGroup.Enabled := FServerBackupModeWasEnabled;
+    StartPaperlessBackupBtn.Enabled := True;
+    CreateExternalBackupFolderBtn.Enabled := True;
+  end;
+end;
+
 // Den Backup-Zielordner auswählen, speichern und die Backup-Skripte erstellen.
 procedure TMainformFrm.StartPaperlessBackupBtnClick(Sender: TObject);
 var
@@ -2426,6 +2558,7 @@ var
   TextFilePath: string;
   PathChoice: Integer;
 begin
+  if FServerBackupCheckActive then Exit;
   if LocalInstallationSelected = ExternalInstallationSelected then
   begin
     CenteredShowMessage('Die Betriebsart ist nicht eindeutig. Bitte die Einstellungen prüfen.');
@@ -2438,7 +2571,7 @@ begin
   end;
   if ExternalInstallationSelected then
   begin
-    StartServerBackup;
+    BeginServerBackupCheck;
     Exit;
   end;
   if ComposePath.Trim = '' then
@@ -2632,6 +2765,7 @@ end;
 procedure TMainformFrm.FormClose(Sender: TObject; var Action: TCloseAction);
 begin
   ApplicationClosing := True;
+  EndServerBackupCheck;
   CancelExternalStartupCheck;
   if FStartupCheckHandle <> 0 then
   begin
