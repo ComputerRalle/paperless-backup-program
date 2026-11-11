@@ -361,7 +361,7 @@ var
 
 implementation
 
-uses ExternalStartupCheck;
+uses ExternalStartupCheck, BackupRestoreServer;
 {$R *.dfm}
 // Eine erzeugte Skriptdatei im Windows-Dateisystem als versteckt markieren.
 procedure MarkGeneratedScriptHidden(const ScriptPath: string);
@@ -2426,6 +2426,11 @@ var
   TextFilePath: string;
   PathChoice: Integer;
 begin
+  if LocalInstallationSelected = ExternalInstallationSelected then
+  begin
+    CenteredShowMessage('Die Betriebsart ist nicht eindeutig. Bitte die Einstellungen prüfen.');
+    Exit;
+  end;
   if LocalInstallationSelected and FLocalStartupPending then
   begin
     CenteredShowMessage('Bitte das Programm neu starten, um die lokale Installation vorzubereiten.');
@@ -2433,7 +2438,7 @@ begin
   end;
   if ExternalInstallationSelected then
   begin
-    CenteredShowMessage('Externe Serveraktionen sind noch nicht verfügbar.');
+    StartServerBackup;
     Exit;
   end;
   if ComposePath.Trim = '' then

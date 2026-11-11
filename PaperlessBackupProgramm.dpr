@@ -10,6 +10,7 @@ uses
   AppConfig in 'AppConfig.pas',
   ExternPaperless in 'ExternPaperless.pas',
   ExternalStartupCheck in 'ExternalStartupCheck.pas',
+  BackupRestoreServer in 'BackupRestoreServer.pas',
   AppLogger in 'AppLogger.pas',
   AppDialogs in 'AppDialogs.pas',
   Crypto in 'Crypto.pas',
