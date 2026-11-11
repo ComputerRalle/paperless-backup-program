@@ -1,5 +1,9 @@
 ﻿# Paperless Backup Programm
 
+Stand 11.11.2026: Die Serveranbindung ist in Vorbereitung. Serverdaten werden gespeichert; ein manueller SSH-Verbindungstest wurde vom Benutzer bestaetigt. Die automatische Anmeldung ist noch nicht praktisch bestaetigt. Externe Backup-, Restore-, Update- und Zeitplanfunktionen sind noch nicht implementiert.
+
+Status 2026-11-11: External server support is in preparation. Server settings can be saved and the user confirmed a manual SSH connection test. Automatic authentication has not yet been verified in practice. External backup, restore, update and scheduling are not implemented.
+
 ## Download / Software herunterladen
 
 **[Software für Windows herunterladen / Download the Windows software](https://downloads.ralf-peter-kleinert.de/software/paperless-backup-programm.html)**

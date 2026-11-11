@@ -1,5 +1,10 @@
 ﻿# Paperless Backup Programm
 
+## Aktueller Stand Serveranbindung – 11.11.2026
+
+Stand 11.11.2026: Die externe Serveranbindung ist in Vorbereitung. Serverdaten und Anmeldeart werden gespeichert; Passwort und SSH-Key-Passphrase liegen in der Windows-Anmeldeinformationsverwaltung. Der sichtbare SSH-Test prüft Docker Compose sowie Existenz und Lesbarkeit der Compose-Datei; ein manueller Test mit Passwort wurde vom Benutzer bestätigt. Der optionale Askpass-Helfer für gespeicherte Zugangsdaten ist noch nicht praktisch mit ssh.exe bestätigt. Externe Backup-, Restore-, Update- und Zeitplanfunktionen sind noch nicht implementiert. Lokale Einstellungen und bestehende geplante Aufgaben bleiben getrennt. Historische Angaben weiter unten sind anhand des aktuellen Quellcodes und neuerer Revisionen zu prüfen.
+
+
 ## Stand / Status – 08.10.2026
 
 Version **5.26.10.100 ist veröffentlicht**. Die feste Skriptanbindung unten ist eine spätere, noch unveröffentlichte Quellcodeänderung dieses Chats. Keine neue Versionsnummer festgelegt.

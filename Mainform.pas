@@ -139,6 +139,7 @@ type
     SaveExternalServerBtn: TButton;
     TestExternalConnectionBtn: TButton;
     UseSavedSshCredentialCB: TCheckBox;
+    ExternalConnectionStatusLbl: TLabel;
     Label26: TLabel;
     Panel15: TPanel;
     Label27: TLabel;
@@ -243,6 +244,7 @@ type
     procedure ExternalAuthRadioGroupClick(Sender: TObject);
     procedure SaveExternalServerBtnClick(Sender: TObject);
     procedure TestExternalConnectionBtnClick(Sender: TObject);
+    procedure ExternalConnectionSettingsChanged(Sender: TObject);
     procedure InstallationModeRadioGroupClick(Sender: TObject);
     procedure ProtectCustomFilesCBClick(Sender: TObject);
     procedure UpdateComposeProtectionControls;
@@ -255,6 +257,10 @@ type
     function VersionToInt(const V: string): string;
 
   private
+    FExternalTestTimer: TTimer;
+    FExternalTestResultPath: string;
+    FExternalTestInvalidated: Boolean;
+    FExternalTestStarted: Cardinal;
     FRestoreLegacyNames: Boolean;
     FVersionsReady: Boolean;
     FLocalStartupPending: Boolean;
@@ -268,6 +274,7 @@ type
     FRetentionRestartChoice: Integer;
     FRetentionUpdateRequested: Boolean;
     FRetentionUpdateSucceeded: Boolean;
+    procedure ExternalTestTimerTick(Sender: TObject);
     procedure LoadStoredInstallationMode;
     procedure LoadExternalServerSettings;
     procedure PrepareLocalAfterExternalStart;
@@ -1853,6 +1860,37 @@ begin
   end;
 end;
 
+// Accept existing explicit YAML filenames while using the standard file for folders.
+// Bestehende YAML-Dateinamen erhalten, bei Ordnern den Standarddateinamen ergaenzen.
+function ExternalComposeDirectory(const Value: string): string;
+const
+  StandardName = 'docker-compose.yml';
+var
+  Suffix: string;
+begin
+  Result := Value;
+  Suffix := '/' + StandardName;
+  if (Length(Result) >= Length(Suffix)) and
+     (Copy(Result, Length(Result) - Length(Suffix) + 1, Length(Suffix)) = Suffix) then
+  begin
+    Delete(Result, Length(Result) - Length(Suffix) + 1, Length(Suffix));
+    if Result = '' then Result := '/';
+  end;
+end;
+
+function ExternalComposeFile(const Value: string): string;
+var
+  LowerValue: string;
+begin
+  Result := Value;
+  if Result = '' then Exit;
+  LowerValue := LowerCase(Result);
+  if (Copy(LowerValue, Length(LowerValue) - 3, 4) = '.yml') or
+     (Copy(LowerValue, Length(LowerValue) - 4, 5) = '.yaml') then Exit;
+  if Result[Length(Result)] <> '/' then Result := Result + '/';
+  Result := Result + 'docker-compose.yml';
+end;
+
 // Read non-secret settings separately from the protected Windows credentials.
 // Allgemeine Serverdaten und geschuetzte Zugangsdaten getrennt laden.
 procedure TMainformFrm.LoadExternalServerSettings;
@@ -1868,7 +1906,7 @@ begin
     ExternalPortEdit.Text := Ini.ReadString('Paperless Extern', 'SSH-Port', '');
     ExternalUserEdit.Text := Ini.ReadString('Paperless Extern', 'Benutzer', '');
     ExternalKeyEdit.Text := Ini.ReadString('Paperless Extern', 'SSH-Key-Datei', '');
-    ExternalComposePathEdit.Text := Ini.ReadString('Paperless Extern', 'Compose-Datei', '');
+    ExternalComposePathEdit.Text := ExternalComposeDirectory(Ini.ReadString('Paperless Extern', 'Compose-Datei', ''));
     ExternalComposeProjectEdit.Text := Ini.ReadString('Paperless Extern', 'Compose-Projekt', '');
     Auth := Ini.ReadString('Paperless Extern', 'Anmeldung', 'Passwort');
   finally
@@ -1885,6 +1923,49 @@ begin
   SaveExternalServerBtn.Enabled := True;
 end;
 
+// A successful test describes a completed SSH login, not a persistent connection.
+// Ein erfolgreicher Test bestaetigt die SSH-Anmeldung, keine dauerhafte Verbindung.
+procedure TMainformFrm.ExternalConnectionSettingsChanged(Sender: TObject);
+begin
+  FExternalTestInvalidated := True;
+  ExternalConnectionStatusLbl.Caption := 'Verbindung nicht getestet';
+end;
+
+// Read the result asynchronously so the visible SSH prompt remains usable.
+// Ergebnis asynchron lesen, damit die sichtbare SSH-Abfrage bedienbar bleibt.
+procedure TMainformFrm.ExternalTestTimerTick(Sender: TObject);
+var
+  TestResult: string;
+begin
+  if FExternalTestResultPath = '' then Exit;
+  if Cardinal(GetTickCount - FExternalTestStarted) >= 300000 then
+  begin
+    FExternalTestTimer.Enabled := False;
+    FExternalTestResultPath := '';
+    TestExternalConnectionBtn.Enabled := True;
+    ExternalConnectionStatusLbl.Caption := 'Kein Testergebnis - erneut testen';
+    Exit;
+  end;
+  if not FileExists(FExternalTestResultPath) then Exit;
+  try
+    TestResult := Trim(TFile.ReadAllText(FExternalTestResultPath, TEncoding.UTF8));
+    if (TestResult <> 'success') and (TestResult <> 'failure') then Exit;
+    DeleteFile(FExternalTestResultPath);
+    FExternalTestResultPath := '';
+    FExternalTestTimer.Enabled := False;
+    TestExternalConnectionBtn.Enabled := True;
+    if FExternalTestInvalidated then
+      ExternalConnectionStatusLbl.Caption := 'Serverdaten geaendert - erneut testen'
+    else if TestResult = 'success' then
+      ExternalConnectionStatusLbl.Caption := 'Verbindung hergestellt (SSH-Test)'
+    else
+      ExternalConnectionStatusLbl.Caption := 'Verbindung fehlgeschlagen';
+  except
+    // A writer may still hold the result file; retry on the next tick.
+    // Wenn die Datei noch geschrieben wird, beim naechsten Timer erneut lesen.
+  end;
+end;
+
 // Save server settings without invoking the local settings or Docker workflows.
 // Serverdaten ohne lokale Einstellungen oder Dockerablaeufe speichern.
 // Use a visible OpenSSH window for authentication and read-only checks.
@@ -1892,7 +1973,7 @@ end;
 procedure TMainformFrm.TestExternalConnectionBtnClick(Sender: TObject);
 var
   Host, UserName, ComposeFile, KeyFile, RemotePath, RemoteCommand: string;
-  ScriptPath, Params, ArgumentList, SettingsPath, ExpectedAuth: string;
+  ScriptPath, Params, ArgumentList, SettingsPath, ExpectedAuth, ResultPath: string;
   PortNumber: Integer;
   Ch: Char;
   Lines: TStringList;
@@ -1901,13 +1982,13 @@ var
 begin
   Host := Trim(ExternalHostEdit.Text);
   UserName := Trim(ExternalUserEdit.Text);
-  ComposeFile := ExternalComposePathEdit.Text;
+  ComposeFile := ExternalComposeFile(ExternalComposePathEdit.Text);
   KeyFile := Trim(ExternalKeyEdit.Text);
   if (Host = '') or (UserName = '') or (ComposeFile = '') or
      not TryStrToInt(Trim(ExternalPortEdit.Text), PortNumber) or
      (PortNumber < 1) or (PortNumber > 65535) then
   begin
-    CenteredShowMessage('Bitte Host, SSH-Port (1 bis 65535), Benutzername und Compose-Dateipfad ausfuellen.');
+    CenteredShowMessage('Bitte Host, SSH-Port (1 bis 65535), Benutzername und Compose-Ordner ausfuellen.');
     Exit;
   end;
   for Ch in Host do
@@ -1935,7 +2016,7 @@ begin
     end;
   if ComposeFile[1] <> '/' then
   begin
-    CenteredShowMessage('Bitte den absoluten Pfad zur Compose-Datei auf dem Server eingeben.');
+    CenteredShowMessage('Bitte den absoluten Pfad zum Compose-Ordner auf dem Server eingeben.');
     Exit;
   end;
   if (ExternalAuthRadioGroup.ItemIndex = 1) and
@@ -1950,11 +2031,21 @@ begin
     if ExternalAuthRadioGroup.ItemIndex = 1 then ExpectedAuth := 'SSH-Key'
     else ExpectedAuth := 'Passwort';
     try
+      if ((ExternalAuthRadioGroup.ItemIndex = 0) and
+          (ExternalPasswordEdit.Text <> ReadServerSecret(SettingsPath, 'Passwort'))) or
+         ((ExternalAuthRadioGroup.ItemIndex = 1) and
+          (ExternalKeyPassphraseEdit.Text <> ReadServerSecret(SettingsPath, 'Passphrase'))) then
+      begin
+        CenteredShowMessage('Bitte die aktuellen Zugangsdaten vor dem automatischen Test speichern.');
+        Exit;
+      end;
       Ini := TAppSettingsIni.Create(SettingsPath);
       try
         if (Host <> Trim(Ini.ReadString('Paperless Extern', 'Host', ''))) or
            (IntToStr(PortNumber) <> Trim(Ini.ReadString('Paperless Extern', 'SSH-Port', ''))) or
            (UserName <> Trim(Ini.ReadString('Paperless Extern', 'Benutzer', ''))) or
+           (ComposeFile <> ExternalComposeFile(Ini.ReadString('Paperless Extern', 'Compose-Datei', ''))) or
+           (ExternalComposeProjectEdit.Text <> Ini.ReadString('Paperless Extern', 'Compose-Projekt', '')) or
            not SameText(ExpectedAuth, Ini.ReadString('Paperless Extern', 'Anmeldung', 'Passwort')) or
            ((ExternalAuthRadioGroup.ItemIndex = 1) and
             (KeyFile <> Trim(Ini.ReadString('Paperless Extern', 'SSH-Key-Datei', '')))) then
@@ -2005,6 +2096,7 @@ begin
       PowerShellQuote('-o') + ', ' + PowerShellQuote('PubkeyAuthentication=no');
   ArgumentList := ArgumentList + ', ' + PowerShellQuote(Host) + ', ' + PowerShellQuote(RemoteCommand);
   ScriptPath := TPath.Combine(TPath.GetTempPath, 'paperless-ssh-test-' + TGUID.NewGuid.ToString + '.ps1');
+  ResultPath := ScriptPath + '.result';
   try
     Lines := TStringList.Create;
     try
@@ -2022,13 +2114,16 @@ begin
         Lines.Add('$env:DISPLAY = ''paperless:0''');
         Lines.Add('Write-Host ''Automatisch nur bei bereits bestaetigtem Server-Schluessel. Bei unbekanntem Schluessel zuerst ohne gespeicherte Zugangsdaten testen.''');
       end;
+      Lines.Add('$testResult = ''failure''');
       Lines.Add('try {');
       Lines.Add('  Write-Host ''Den Server-Fingerabdruck vor der Bestaetigung unabhaengig vergleichen.''');
       Lines.Add('  $sshExe = Get-Command ssh.exe -ErrorAction Stop');
       Lines.Add('  & $sshExe.Source @sshArgs');
-      Lines.Add('  if ($LASTEXITCODE -ne 0) { Write-Host (''SSH-Test fehlgeschlagen. Exitcode: '' + $LASTEXITCODE) }');
+      Lines.Add('  if ($LASTEXITCODE -eq 0) { $testResult = ''success'' }');
+      Lines.Add('  else { Write-Host (''SSH-Test fehlgeschlagen. Exitcode: '' + $LASTEXITCODE) }');
       Lines.Add('} catch { Write-Host (''SSH-Test konnte nicht gestartet werden: '' + $_.Exception.Message) }');
       Lines.Add('finally {');
+      Lines.Add('  [System.IO.File]::WriteAllText(' + PowerShellQuote(ResultPath) + ', $testResult)');
       Lines.Add('  Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue');
       Lines.Add('  Read-Host ''Zum Schliessen Eingabetaste druecken'' | Out-Null');
       Lines.Add('}');
@@ -2036,14 +2131,30 @@ begin
     finally
       Lines.Free;
     end;
+    if FExternalTestTimer = nil then
+    begin
+      FExternalTestTimer := TTimer.Create(Self);
+      FExternalTestTimer.Enabled := False;
+      FExternalTestTimer.Interval := 500;
+      FExternalTestTimer.OnTimer := ExternalTestTimerTick;
+    end;
+    FExternalTestResultPath := ResultPath;
+    FExternalTestStarted := GetTickCount;
+    FExternalTestInvalidated := False;
+    ExternalConnectionStatusLbl.Caption := 'Verbindung wird getestet ...';
+    TestExternalConnectionBtn.Enabled := False;
     Params := '-NoProfile -ExecutionPolicy Bypass -File "' + ScriptPath + '"';
     LaunchResult := ShellExecute(Handle, 'open', 'powershell.exe', PChar(Params), nil, SW_SHOWNORMAL);
     if NativeInt(LaunchResult) <= 32 then
       raise Exception.Create('Das Fenster fuer den SSH-Test konnte nicht gestartet werden.');
+    FExternalTestTimer.Enabled := True;
   except
     on E: Exception do
     begin
       if FileExists(ScriptPath) then DeleteFile(ScriptPath);
+      FExternalTestResultPath := '';
+      TestExternalConnectionBtn.Enabled := True;
+      ExternalConnectionStatusLbl.Caption := 'Verbindung fehlgeschlagen';
       CenteredShowMessage('Der Verbindungstest konnte nicht vorbereitet werden: ' + E.Message);
     end;
   end;
@@ -2054,6 +2165,7 @@ var
   Ini: TAppSettingsIni;
   SettingsPath, Auth: string;
 begin
+  ExternalConnectionSettingsChanged(Sender);
   SettingsPath := IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName;
   if ExternalAuthRadioGroup.ItemIndex = 1 then Auth := 'SSH-Key'
   else Auth := 'Passwort';
@@ -2085,6 +2197,7 @@ procedure TMainformFrm.ExternalAuthRadioGroupClick(Sender: TObject);
 var
   KeyEnabled: Boolean;
 begin
+  ExternalConnectionSettingsChanged(Sender);
   KeyEnabled := ExternalAuthRadioGroup.ItemIndex = 1;
   ExternalKeyLbl.Enabled := KeyEnabled;
   ExternalKeyEdit.Enabled := KeyEnabled;

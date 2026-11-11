@@ -138909,6 +138909,11 @@ object MainformFrm: TMainformFrm
           Height = 18
           Caption = 'Servereinstellungen Paperless Extern'
         end
+        object ExternalConnectionStatusLbl: TLabel
+          Left = 344
+          Top = 655
+          Caption = 'Verbindung nicht getestet'
+        end
         object ExternalHostLbl: TLabel
           Left = 33
           Top = 695
@@ -138948,7 +138953,7 @@ object MainformFrm: TMainformFrm
         object ExternalComposePathLbl: TLabel
           Left = 33
           Top = 1030
-          Caption = 'Pfad zur Compose-Datei'
+          Caption = 'Pfad zum Compose-Ordner'
         end
         object ExternalComposeProjectLbl: TLabel
           Left = 33
@@ -139156,6 +139161,7 @@ object MainformFrm: TMainformFrm
           Width = 471
           Height = 26
           TabOrder = 15
+          OnChange = ExternalConnectionSettingsChanged
         end
         object ExternalPortEdit: TEdit
           Left = 344
@@ -139163,6 +139169,7 @@ object MainformFrm: TMainformFrm
           Width = 100
           Height = 26
           TabOrder = 16
+          OnChange = ExternalConnectionSettingsChanged
         end
         object ExternalUserEdit: TEdit
           Left = 344
@@ -139170,6 +139177,7 @@ object MainformFrm: TMainformFrm
           Width = 471
           Height = 26
           TabOrder = 17
+          OnChange = ExternalConnectionSettingsChanged
         end
         object ExternalAuthRadioGroup: TRadioGroup
           Left = 33
@@ -139192,6 +139200,7 @@ object MainformFrm: TMainformFrm
           Width = 471
           Height = 26
           TabOrder = 19
+          OnChange = ExternalConnectionSettingsChanged
         end
         object ExternalKeyPassphraseEdit: TEdit
           Enabled = False
@@ -139201,6 +139210,7 @@ object MainformFrm: TMainformFrm
           Height = 26
           PasswordChar = '*'
           TabOrder = 20
+          OnChange = ExternalConnectionSettingsChanged
         end
         object ExternalPasswordEdit: TEdit
           Left = 344
@@ -139209,6 +139219,7 @@ object MainformFrm: TMainformFrm
           Height = 26
           PasswordChar = '*'
           TabOrder = 21
+          OnChange = ExternalConnectionSettingsChanged
         end
         object ExternalComposePathEdit: TEdit
           Left = 344
@@ -139216,6 +139227,7 @@ object MainformFrm: TMainformFrm
           Width = 471
           Height = 26
           TabOrder = 22
+          OnChange = ExternalConnectionSettingsChanged
         end
         object ExternalComposeProjectEdit: TEdit
           Left = 344
@@ -139223,6 +139235,7 @@ object MainformFrm: TMainformFrm
           Width = 471
           Height = 26
           TabOrder = 23
+          OnChange = ExternalConnectionSettingsChanged
         end
         object UseSavedSshCredentialCB: TCheckBox
           Left = 33
@@ -139230,7 +139243,10 @@ object MainformFrm: TMainformFrm
           Width = 500
           Height = 20
           Caption = 'Gespeicherte Zugangsdaten verwenden'
+          Checked = True
+          State = cbChecked
           TabOrder = 26
+          OnClick = ExternalConnectionSettingsChanged
         end
         object TestExternalConnectionBtn: TButton
           Left = 295
