@@ -33,7 +33,7 @@ procedure StartExternalStartupCheck(const Host, UserName: string; PortNumber: In
 
 implementation
 
-uses System.SysUtils, System.Classes, System.IOUtils;
+uses System.SysUtils, System.Classes, System.IOUtils, AppConfig;
 
 // Quote a value as a PowerShell single-quoted literal.
 // Einen Wert als einfach zitiertes PowerShell-Literal maskieren.
@@ -55,8 +55,7 @@ var
   ErrorCode: DWORD;
 begin
   ProcessHandle := 0;
-  ScriptPath := TPath.Combine(TPath.GetTempPath, 'paperless-startup-' + TGUID.NewGuid.ToString + '.ps1');
-  ResultPath := ScriptPath + '.result';
+  ResultPath := '';
   WorkDir := ExtractFilePath(SettingsPath);
   Lines := TStringList.Create;
   try
@@ -75,7 +74,7 @@ begin
     Lines.Add('$serverUser = ' + PsLiteral(UserName));
     Lines.Add('$port = ' + PsLiteral(IntToStr(PortNumber)));
     Lines.Add('$workDir = ' + PsLiteral(WorkDir));
-    Lines.Add('$resultPath = ' + PsLiteral(ResultPath));
+    Lines.Add('$resultPath = $PSCommandPath + ''.result''');
     Lines.Add('$cancelPath = $resultPath + ''.cancel''');
     Lines.Add('function Assert-Active { if (Test-Path -LiteralPath $cancelPath) { throw ''cancelled'' } }');
 // Require a known host key and configure the chosen authentication method.
@@ -169,7 +168,15 @@ begin
     Lines.Add('  Remove-Item -LiteralPath $cancelPath -Force -ErrorAction SilentlyContinue');
     Lines.Add('  Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue');
     Lines.Add('}');
-    Lines.SaveToFile(ScriptPath, TEncoding.UTF8);
+    // Use the backup timestamp format for the temporary script. The result path follows the script path.
+    // Den Backup-Zeitstempel für das temporäre Skript verwenden. Der Ergebnispfad leitet sich vom Skriptpfad ab.
+    ScriptPath := ReserveTimestampedScript(TPath.GetTempPath);
+    try
+      Lines.SaveToFile(ScriptPath, TEncoding.UTF8);
+    except
+      DeleteFile(PChar(ScriptPath));
+      raise;
+    end;
   finally
     Lines.Free;
   end;
@@ -190,6 +197,7 @@ begin
   end;
   CloseHandle(PI.hThread);
   ProcessHandle := PI.hProcess;
+  ResultPath := ScriptPath + '.result';
 end;
 
 end.

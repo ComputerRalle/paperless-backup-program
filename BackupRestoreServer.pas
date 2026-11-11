@@ -21,7 +21,8 @@
 // or check LICENSE.txt in this repository.
 // --------------------------------------------------------------
 
-// Externe Backup- und Wiederherstellungsabläufe.
+// Server backup, restore and transfer through the saved SSH profile.
+// Server-Backup, Wiederherstellung und Übertragung über das gespeicherte SSH-Profil.
 unit BackupRestoreServer;
 
 interface
@@ -30,7 +31,10 @@ uses Winapi.Windows;
 
 type
   TServerBackupAction = (sbaCheckSpace, sbaStartBackup, sbaWatchBackup, sbaDownloadBackup,
-    sbaListBackups);
+    sbaListBackups, sbaUploadBackup, sbaListRestoreBackups, sbaStartRestore, sbaWatchRestore);
+
+const
+  ServerWorkerActions = [sbaStartBackup, sbaWatchBackup, sbaStartRestore, sbaWatchRestore];
 
 function NormalizeServerBackupFolder(const Value: string): string;
 procedure StartServerBackup(out ProcessHandle: THandle; out ResultPath: string;
@@ -121,18 +125,43 @@ begin
 end;
 
 {$I ServerBackupWorker.inc}
+{$I ServerRestoreWorker.inc}
 
-// Publish the last readable server or download step to the application's progress display.
-// Den letzten lesbaren Server- oder Download-Schritt an die Fortschrittsanzeige geben.
-procedure AddServerProgress(const Lines: TStringList);
+// Queue worker messages in order. Other operations still publish their latest status.
+// Worker-Meldungen der Reihe nach ablegen. Andere Vorgänge geben ihren letzten Stand aus.
+procedure AddServerProgress(const Lines: TStringList; QueueMessages: Boolean = False);
 begin
   Lines.Add('$progressPath=$resultPath+''.progress''');
   Lines.Add('function SetProgress([string]$value) {');
   Lines.Add(' try {');
   Lines.Add('  $stream=[IO.File]::Open($progressPath,[IO.FileMode]::Open,[IO.FileAccess]::Write,([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))');
-  Lines.Add('  try {$bytes=[Text.Encoding]::UTF8.GetBytes($value);$stream.Write($bytes,0,$bytes.Length);$stream.SetLength($bytes.Length)}finally{$stream.Dispose()}');
+  if QueueMessages then
+    Lines.Add('  try {$bytes=[Text.Encoding]::UTF8.GetBytes($value+"`n");$stream.Position=$stream.Length;$stream.Write($bytes,0,$bytes.Length)}finally{$stream.Dispose()}')
+  else
+    Lines.Add('  try {$bytes=[Text.Encoding]::UTF8.GetBytes($value);$stream.Write($bytes,0,$bytes.Length);$stream.SetLength($bytes.Length)}finally{$stream.Dispose()}');
   Lines.Add(' } catch {}');
   Lines.Add('}');
+  if QueueMessages then
+  begin
+    Lines.Add('$progressWorker=''''');
+    Lines.Add('$progressLineCount=0');
+    // Track the last reported line for the current container. A status query starts at the current step of a running job.
+    // Die zuletzt angezeigte Zeile des aktuellen Containers merken. Eine Statusabfrage setzt beim aktuellen Schritt eines laufenden Auftrags an.
+    Lines.Add('function PublishWorkerProgress([string]$worker,[string[]]$log,[bool]$running,[bool]$watchOnly) {');
+    Lines.Add(' if($script:progressWorker -ne $worker){');
+    Lines.Add('  $script:progressWorker=$worker');
+    Lines.Add('  $script:progressLineCount=0');
+    Lines.Add('  if($watchOnly){');
+    Lines.Add('   $script:progressLineCount=$log.Count');
+    Lines.Add('   if($running -and $log.Count){$script:progressLineCount--}');
+    Lines.Add('  }');
+    Lines.Add(' }elseif($log.Count -lt $script:progressLineCount){$script:progressLineCount=0}');
+    Lines.Add(' if($log.Count -gt $script:progressLineCount){');
+    Lines.Add('  SetProgress ($log[$script:progressLineCount..($log.Count-1)] -join "`n")');
+    Lines.Add('  $script:progressLineCount=$log.Count');
+    Lines.Add(' }');
+    Lines.Add('}');
+  end;
 end;
 
 // Launch or observe the detached Docker worker using the shared SSH transport.
@@ -151,7 +180,7 @@ begin
   else
     Lines.Add('$launchBackup = $false');
   Lines.Add('$job=''paperless-pg18-backup-job''');
-  AddServerProgress(Lines);
+  AddServerProgress(Lines, True);
   Lines.Add('$step=''Status des Backupcontainers abfragen''');
   Lines.Add('try {');
   Lines.Add(' if($launchBackup){');
@@ -168,7 +197,7 @@ begin
   Lines.Add(' }');
   Lines.Add(' if(-not $launchResult -or $launchResult.StartsWith(''OK: '')){');
   Lines.Add('  $step=''Status des Backupcontainers abfragen''');
-  Lines.Add('  $statusCmd=''id=$(docker ps -aq --no-trunc --filter "name=^/''+$job+''$") || exit 1; if [ -z "$id" ]; then printf "missing\n"; else docker inspect --format ''''{{index .Config.Labels "de.computerralle.paperless.backup"}}:{{.State.Status}}:{{.State.ExitCode}}'''' "$id" && docker logs --tail 12 "$id" 2>&1; fi''');
+  Lines.Add('  $statusCmd=''id=$(docker ps -aq --no-trunc --filter "name=^/''+$job+''$") || exit 1; if [ -z "$id" ]; then printf "missing\n"; else docker inspect --format ''''{{index .Config.Labels "de.computerralle.paperless.backup"}}:{{.State.Status}}:{{.State.ExitCode}}:{{.Id}}'''' "$id" && docker logs "$id" 2>&1; fi''');
   Lines.Add('  $failures=0');
   Lines.Add('  while([IO.File]::Exists($progressPath)){');
   Lines.Add('   try {$status=Remote $statusCmd;$failures=0} catch {');
@@ -180,11 +209,13 @@ begin
   Lines.Add('    $msg=''Auf diesem Server wurde kein Backupcontainer gefunden.''');
   Lines.Add('    break');
   Lines.Add('   }');
-  Lines.Add('   if($rows[0] -notmatch ''^pg18:([a-z]+):(\d+)$''){throw ''worker_state''}');
-  Lines.Add('   $state=$matches[1];$exitCode=[int]$matches[2]');
+  Lines.Add('   if($rows[0] -notmatch ''^pg18:([a-z]+):(\d+):([0-9a-f]{64})$''){throw ''worker_state''}');
+  Lines.Add('   $state=$matches[1];$exitCode=[int]$matches[2];$workerId=$matches[3]');
   Lines.Add('   $log=@($rows | Select-Object -Skip 1)');
-  Lines.Add('   if($state -in @(''running'',''restarting'',''paused'')){');
-  Lines.Add('    if($log.Count){SetProgress $log[-1]}else{SetProgress ''Server-Backup läuft ...''}');
+  Lines.Add('   $running=$state -in @(''running'',''restarting'',''paused'')');
+  Lines.Add('   PublishWorkerProgress $workerId $log $running (-not $launchBackup)');
+  Lines.Add('   if($running){');
+  Lines.Add('    if(-not $log.Count){SetProgress ''Server-Backup läuft ...''}');
   Lines.Add('    Start-Sleep -Seconds 4');
   Lines.Add('    continue');
   Lines.Add('   }');
@@ -198,7 +229,7 @@ begin
   Lines.Add('   }');
   Lines.Add('   $msg="Server: $serverHost`r`nDocker-Status: $state (Exitcode $exitCode)"');
   Lines.Add('   if($launchResult){$msg+="`r`n"+$launchResult.Substring(4)}');
-  Lines.Add('   if($log.Count){$msg+="`r`n`r`n"+($log -join "`r`n")}');
+  Lines.Add('   if($log.Count){$msg+="`r`n`r`n"+(($log | Select-Object -Last 12) -join "`r`n")}');
   Lines.Add('   break');
   Lines.Add('  }');
   Lines.Add(' }');
@@ -208,17 +239,118 @@ begin
   Lines.Add('}');
 end;
 
-// Use the same required PG18 file set for discovery and download.
-// Für die Suche und den Download dieselben PG18-Pflichtdateien verwenden.
+// Start a detached restore or observe the last restore for the saved Compose profile.
+// Einen getrennten Restore starten oder den letzten Restore des gespeicherten Compose-Profils beobachten.
+procedure AddDockerRestoreRun(const Lines: TStringList; Action: TServerBackupAction;
+  const TargetFolder, RestoreFolder, RunId: string);
+begin
+  AddServerProgress(Lines, True);
+  Lines.Add('$job=''paperless-pg18-restore-job''');
+  Lines.Add('$jobId=''''');
+  Lines.Add('$answer=''''');
+  Lines.Add('$step=''Status der Server-Wiederherstellung abfragen''');
+  Lines.Add('try {');
+  Lines.Add(' $lf=[string][char]10');
+  Lines.Add(' $profileBytes=[Text.Encoding]::UTF8.GetBytes($composeFile+$lf+$project+$lf)');
+  Lines.Add(' $sha=[Security.Cryptography.SHA256]::Create()');
+  Lines.Add(' try{$profile=([BitConverter]::ToString($sha.ComputeHash($profileBytes))).Replace(''-'','''').ToLowerInvariant()}finally{$sha.Dispose()}');
+  if Action = sbaStartRestore then
+  begin
+    Lines.Add(' $target = ' + PsLiteral(TargetFolder));
+    Lines.Add(' $selected = ' + PsLiteral(RestoreFolder));
+    Lines.Add(' $run = ' + PsLiteral(RunId));
+    Lines.Add(' $prefix = ' + PsLiteral(ComposeProjectName));
+    Lines.Add(' $launcher = ' + PsLiteral(ServerRestoreLaunchScript));
+    Lines.Add(' $step=''Wiederherstellungscontainer vorbereiten und starten''');
+    Lines.Add(' SetProgress $step');
+    Lines.Add(' $prelude=@((''compose=''+(ShArg $composeFile)),(''project=''+(ShArg $project)),(''target=''+(ShArg $target)),(''selected=''+(ShArg $selected)),(''job=''+(ShArg $job)),(''run=''+(ShArg $run)),(''prefix=''+(ShArg $prefix))) -join $lf');
+    Lines.Add(' $launchBytes=[Text.Encoding]::UTF8.GetBytes($prelude+$lf+$launcher)');
+    Lines.Add(' $answer=(Text (Ssh ''sh -s'' $launchBytes 900000)).Trim()');
+    Lines.Add(' if($answer.StartsWith(''ERROR: '')){');
+    Lines.Add('  $title=''Server-Wiederherstellung: Start fehlgeschlagen''');
+    Lines.Add('  $msg="Server: $serverHost"+[Environment]::NewLine+$answer.Substring(7)');
+    Lines.Add(' } elseif($answer -cmatch ''^OK: ([0-9a-f]{64})$''){');
+    Lines.Add('  $jobId=$matches[1]');
+    Lines.Add(' } else {throw ''launch_result''}');
+  end;
+  // A started job is addressed by container ID. A status query also checks the saved Compose profile.
+  // Einen gestarteten Auftrag über die Container-ID ansprechen. Bei der Statusabfrage auch das gespeicherte Compose-Profil prüfen.
+  Lines.Add(' if(-not $answer -or $jobId){');
+  Lines.Add('  $step=''Status der Server-Wiederherstellung abfragen''');
+  Lines.Add('  $reference=$job;if($jobId){$reference=$jobId}');
+  Lines.Add('  $fmt=''{{index .Config.Labels "de.computerralle.paperless.restore"}}:{{index .Config.Labels "de.computerralle.paperless.restore.profile"}}:{{.State.Status}}:{{.State.ExitCode}}:{{.Id}}''');
+  Lines.Add('  $failures=0');
+  Lines.Add('  while([IO.File]::Exists($progressPath)){');
+  Lines.Add('   $cmd=''ref=''+(ShArg $reference)+''; fmt=''+(ShArg $fmt)+''; unset DOCKER_HOST DOCKER_CONTEXT; local_docker() { docker --host unix:///var/run/docker.sock "$@"; }; if state=$(local_docker inspect --type=container --format "$fmt" "$ref" 2>/dev/null); then printf "%s\n" "$state"; case "$state" in pg18:''+$profile+'':*) id=$(printf "%s" "$state" | cut -d: -f5); local_docker logs "$id" 2>&1;; esac; elif local_docker info >/dev/null 2>&1; then printf "missing\n"; else exit 1; fi''');
+  Lines.Add('   try {$status=Remote $cmd;$failures=0} catch {');
+  Lines.Add('    $failures++;if($failures -ge 3){throw};SetProgress ''SSH unterbrochen. Verbindung wird erneut versucht ...'';Start-Sleep -Seconds 4;continue');
+  Lines.Add('   }');
+  Lines.Add('   $rows=@($status.Trim() -split ''\r?\n'')');
+  Lines.Add('   if($rows[0] -eq ''missing''){');
+  Lines.Add('    $title=''Keine Server-Wiederherstellung gefunden''');
+  Lines.Add('    $msg=''Der Wiederherstellungscontainer wurde auf dem Server nicht gefunden.''');
+  Lines.Add('    break');
+  Lines.Add('   }');
+  Lines.Add('   $meta=[regex]::Match($rows[0],''^pg18:([0-9a-f]{64}):([a-z]+):(\d+):([0-9a-f]{64})$'')');
+  Lines.Add('   if(-not $meta.Success -or $meta.Groups[1].Value -cne $profile){');
+  Lines.Add('    $title=''Keine Server-Wiederherstellung für dieses Compose-Profil gefunden''');
+  Lines.Add('    $msg="Server: $serverHost"+[Environment]::NewLine+''Der vorhandene Container gehört nicht zum gespeicherten Compose-Profil.''');
+  Lines.Add('    break');
+  Lines.Add('   }');
+  Lines.Add('   $state=$meta.Groups[2].Value;$workerExitCode=[int]$meta.Groups[3].Value;$reference=$meta.Groups[4].Value');
+  Lines.Add('   $log=@($rows | Select-Object -Skip 1)');
+  Lines.Add('   $running=$state -in @(''running'',''restarting'',''paused'')');
+  Lines.Add('   PublishWorkerProgress $reference $log $running (-not $jobId)');
+  Lines.Add('   if($running){');
+  Lines.Add('    if(-not $log.Count){SetProgress ''Server-Wiederherstellung läuft ...''}');
+  Lines.Add('    Start-Sleep -Seconds 4');
+  Lines.Add('    continue');
+  Lines.Add('   }');
+  // Require both Docker exit code 0 and the worker's final completion message.
+  // Docker-Exitcode 0 und die abschließende Erfolgsmeldung des Workers voraussetzen.
+  Lines.Add('   $successMarker=''Wiederherstellung abgeschlossen: ''');
+  Lines.Add('   $backupCompleted=($state -eq ''exited'' -and $workerExitCode -eq 0 -and $log.Count -gt 0 -and $log[-1].StartsWith($successMarker))');
+  Lines.Add('   if($backupCompleted){');
+  Lines.Add('    $title=''Wiederherstellung erfolgreich''');
+  Lines.Add('    $restoredFolder=$log[-1].Substring($successMarker.Length)');
+  Lines.Add('    $msg="Das Backup wurde erfolgreich wiederhergestellt. Paperless wurde gestartet."');
+  // Use the script timestamp for the restore log and put the log path in the success dialog.
+  // Den Skriptzeitstempel für das Wiederherstellungslog verwenden und den Logpfad im Erfolgsdialog anzeigen.
+  Lines.Add('    try {');
+  Lines.Add('     $logDir=[IO.Path]::Combine($runtimeDir,''Logs'')');
+  Lines.Add('     [void][IO.Directory]::CreateDirectory($logDir)');
+  Lines.Add('     $logPath=[IO.Path]::Combine($logDir,[IO.Path]::GetFileNameWithoutExtension($PSCommandPath)+''.log'')');
+  Lines.Add('     $logLines=@("Server: $serverHost","Backup: $restoredFolder","Docker-Status: $state (Exitcode $workerExitCode)","PowerShell-Skript: $PSCommandPath","")+$log');
+  Lines.Add('     [byte[]]$logBytes=[Text.Encoding]::UTF8.GetPreamble()+[Text.Encoding]::UTF8.GetBytes(($logLines -join "`r`n")+"`r`n")');
+  Lines.Add('     $logFile=[IO.File]::Open($logPath,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write)');
+  Lines.Add('     try{$logFile.Write($logBytes,0,$logBytes.Length)}finally{$logFile.Dispose()}');
+  Lines.Add('     $msg+="`r`n`r`nLogdatei: $logPath"');
+  Lines.Add('    }catch{');
+  Lines.Add('     $msg+="`r`n`r`nDie Logdatei konnte nicht gespeichert werden."');
+  Lines.Add('    }');
+  Lines.Add('   }else{');
+  Lines.Add('    $title=''Server-Wiederherstellung: Fehlgeschlagen''');
+  Lines.Add('    $msg="Server: $serverHost"+[Environment]::NewLine+"Docker-Status: $state (Exitcode $workerExitCode)"');
+  Lines.Add('    if($log.Count){$msg+=[Environment]::NewLine+[Environment]::NewLine+(($log | Select-Object -Last 12) -join [Environment]::NewLine)}');
+  Lines.Add('   }');
+  Lines.Add('   break');
+  Lines.Add('  }');
+  Lines.Add(' }');
+  Lines.Add('} catch {');
+  Lines.Add(' $title=''Server-Wiederherstellung: Status nicht verfügbar''');
+  Lines.Add(' $msg=(CheckFailure $step $_.Exception)+[Environment]::NewLine+[Environment]::NewLine+''Ein bereits gestarteter Container kann weiterlaufen. Rufen Sie den Status über „Backup wiederherstellen“ erneut ab.''');
+  Lines.Add('}');
+end;
+
+// Use the same four PG18 restore files for discovery and transfer.
+// Für Suche und Übertragung dieselben vier für die PG18-Wiederherstellung nötigen Dateien verwenden.
 procedure AddRequiredServerBackupFiles(const Lines: TStringList);
 begin
   Lines.Add('$required = @(' +
     PsLiteral(ComposeProjectName + '-db-1_backup.sql') + ',' +
     PsLiteral(ComposeProjectName + '_data.tar.gz') + ',' +
-    PsLiteral(ComposeProjectName + '_db_data_18.tar.gz') + ',' +
     PsLiteral(ComposeProjectName + '_export.tar.gz') + ',' +
-    PsLiteral(ComposeProjectName + '_media.tar.gz') + ',' +
-    PsLiteral(PaperlessSecretKeyFileName) + ',' + PsLiteral(ImageVersionsFileName) + ')');
+    PsLiteral(ComposeProjectName + '_media.tar.gz') + ')');
 end;
 
 // List only published timestamp folders with readable, nonempty backup files.
@@ -265,7 +397,9 @@ begin
   Lines.Add('$downloadParent = ' + PsLiteral(LocalFolder));
   Lines.Add('$runId = ' + PsLiteral(RunId));
   AddRequiredServerBackupFiles(Lines);
-  Lines.Add('$mailFile = ' + PsLiteral(EmailEnvEncryptedFileName));
+  Lines.Add('$optionalFiles = @(' + PsLiteral(ComposeProjectName + '_db_data_18.tar.gz') + ',' +
+    PsLiteral(PaperlessSecretKeyFileName) + ',' + PsLiteral(ImageVersionsFileName) + ',' +
+    PsLiteral(EmailEnvEncryptedFileName) + ')');
   Lines.Add(' $title=''Server-Backup: Download fehlgeschlagen''');
   Lines.Add(' $step=''Backupordner auf dem Server prüfen''');
   Lines.Add(' $staging=$null');
@@ -274,8 +408,8 @@ begin
   Lines.Add('  $folderName=$downloadSource.Substring($downloadSource.LastIndexOf(''/'')+1)');
   Lines.Add('  if($folderName -notmatch ''^[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{2}-[0-9]{2}-[0-9]{2}$''){throw ''backup_folder''}');
   Lines.Add('  $final=[IO.Path]::Combine($downloadParent,$folderName)');
-  Lines.Add('  $names=$required+@($mailFile)');
-  Lines.Add('  $manifest=''set -eu; cd ''+(ShArg $downloadSource)+''; test "$(pwd -P)" = ''+(ShArg $downloadSource)+''; for f in ''+(($required | ForEach-Object {ShArg $_}) -join '' '')+''; do test -f "$f" && test ! -L "$f" || exit 70; bytes=$(stat -c %s -- "$f"); printf "%s\t%s\n" "$f" "$bytes"; done; f=''+(ShArg $mailFile)+''; if [ -e "$f" ] || [ -L "$f" ]; then test -f "$f" && test ! -L "$f" || exit 70; bytes=$(stat -c %s -- "$f"); printf "%s\t%s\n" "$f" "$bytes"; fi''');
+  Lines.Add('  $names=$required+@($optionalFiles)');
+  Lines.Add('  $manifest=''set -eu; cd ''+(ShArg $downloadSource)+''; test "$(pwd -P)" = ''+(ShArg $downloadSource)+''; for f in ''+(($required | ForEach-Object {ShArg $_}) -join '' '')+''; do test -f "$f" && test ! -L "$f" || exit 70; bytes=$(stat -c %s -- "$f"); printf "%s\t%s\n" "$f" "$bytes"; done; for f in ''+(($optionalFiles | ForEach-Object {ShArg $_}) -join '' '')+''; do if [ -e "$f" ] || [ -L "$f" ]; then test -f "$f" && test ! -L "$f" || exit 70; bytes=$(stat -c %s -- "$f"); printf "%s\t%s\n" "$f" "$bytes"; fi; done''');
   // Accept only the defined file names and record their remote sizes before opening local files.
   // Nur die festgelegten Dateinamen übernehmen und vor dem Öffnen lokaler Dateien ihre Größen erfassen.
   Lines.Add('  $sizes=@{}');
@@ -330,6 +464,94 @@ begin
   Lines.Add(' }');
 end;
 
+// Check capacity before writing and publish a staged upload under its original timestamp.
+// Vor dem Schreiben den Speicher prüfen und die vollständige Kopie unter ihrem Zeitstempel freigeben.
+// Check the destination before streaming a complete backup into a staging directory.
+// Das Ziel vor der Übertragung des vollständigen Backups in einen temporären Ordner prüfen.
+procedure AddServerBackupUpload(const Lines: TStringList; const LocalFolder, TargetFolder, RunId: string);
+begin
+  AddServerProgress(Lines);
+  AddRequiredServerBackupFiles(Lines);
+  Lines.Add('$uploadSource = ' + PsLiteral(LocalFolder));
+  Lines.Add('$uploadParent = ' + PsLiteral(TargetFolder));
+  Lines.Add('$runId = ' + PsLiteral(RunId));
+  Lines.Add(' $title=''Backup zum Server senden: fehlgeschlagen''');
+  Lines.Add(' $step=''Lokalen Backupordner prüfen''');
+  Lines.Add(' $staging=$null');
+  Lines.Add(' try {');
+  Lines.Add('  SetProgress ''Dateien des lokalen Backups werden geprüft ...''');
+  Lines.Add('  $directory=[IO.DirectoryInfo]::new($uploadSource)');
+  Lines.Add('  $folderName=$directory.Name');
+  Lines.Add('  if($folderName -notmatch ''^[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{2}-[0-9]{2}-[0-9]{2}$''){throw ''upload_folder_name''}');
+  Lines.Add('  $files=@($directory.GetFileSystemInfos() | Sort-Object Name)');
+  Lines.Add('  $names=@($files | ForEach-Object {$_.Name})');
+  Lines.Add('  $total=[decimal]0');
+  Lines.Add('  foreach($file in $files){');
+  Lines.Add('   if($file -isnot [IO.FileInfo] -or ($file.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw ''upload_file_type''}');
+  Lines.Add('   $total+=[decimal]$file.Length');
+  Lines.Add('  }');
+  Lines.Add('  foreach($name in $required){');
+  Lines.Add('   if($names -cnotcontains $name -or ([IO.FileInfo]::new([IO.Path]::Combine($uploadSource,$name))).Length -le 0){throw (''upload_missing:''+$name)}');
+  Lines.Add('  }');
+  Lines.Add('  $requiredBytes=$total+1MB');
+  Lines.Add('  $step=''Freien Speicher am Serverziel prüfen''');
+  Lines.Add('  SetProgress $step');
+  Lines.Add('  $inspect=''cd -P ''+(ShArg $uploadParent)+'' || exit 72; test -w . && test -x . || exit 72; case "$PWD" in /|*[[:cntrl:]]*) exit 73;; esac; printf "%s\n" "$PWD"; df -B1 --output=avail -- .''');
+  Lines.Add('  $rows=@((Remote $inspect) -split ''\r?\n'')');
+  Lines.Add('  $parent=$rows[0]');
+  Lines.Add('  if($parent -notmatch ''^/[^\x00-\x1f]+$''){throw ''upload_parent''}');
+  Lines.Add('  $free=ReadFreeBytes (($rows | Select-Object -Skip 1) -join "`n")');
+  Lines.Add('  if($free -lt $requiredBytes){throw ''upload_space''}');
+  Lines.Add('  if(-not [IO.File]::Exists($progressPath)){throw ''upload_cancelled''}');
+  Lines.Add('  $step=''Server-Zielordner vorbereiten''');
+  Lines.Add('  $final=$parent+''/''+$folderName');
+  Lines.Add('  $candidate=$parent+''/.paperless-upload-''+$runId+''.partial''');
+  Lines.Add('  $finalArg=ShArg $final');
+  Lines.Add('  $stageArg=ShArg $candidate');
+  Lines.Add('  $null=Remote (''if [ -e ''+$finalArg+'' ] || [ -L ''+$finalArg+'' ]; then exit 74; fi; umask 077; mkdir -- ''+$stageArg)');
+  Lines.Add('  $staging=$candidate');
+  Lines.Add('  $index=0');
+  Lines.Add('  foreach($file in $files){');
+  Lines.Add('   if(-not [IO.File]::Exists($progressPath)){throw ''upload_cancelled''}');
+  Lines.Add('   $index++');
+  Lines.Add('   $step="Datei $index/$($files.Count) senden: $($file.Name)"');
+  Lines.Add('   SetProgress $step');
+  Lines.Add('   $destination=ShArg ($staging+''/''+$file.Name)');
+  Lines.Add('   $expected=([long]$file.Length).ToString([Globalization.CultureInfo]::InvariantCulture)');
+  Lines.Add('   $send=''set -eu; test -d ''+$stageArg+'' && test ! -L ''+$stageArg+'' || exit 75; umask 077; set -C; cat > ''+$destination+''; test "$(stat -c %s -- ''+$destination+'')" = ''+$expected+'' || exit 76''');
+  Lines.Add('   $null=Ssh $send $null 120000 '''' ([long]$file.Length) $file.FullName');
+  Lines.Add('  }');
+  Lines.Add('  if(-not [IO.File]::Exists($progressPath)){throw ''upload_cancelled''}');
+  Lines.Add('  $step=''Vollständigen Backupordner auf dem Server freigeben''');
+  Lines.Add('  $publish=''test -d ''+$stageArg+'' && test ! -L ''+$stageArg+'' || exit 75; mv -T -n -- ''+$stageArg+'' ''+$finalArg+'' || exit 75; if [ -e ''+$stageArg+'' ] || [ -L ''+$stageArg+'' ]; then exit 74; fi''');
+  Lines.Add('  $null=Remote $publish');
+  Lines.Add('  $staging=$null');
+  Lines.Add('  $backupCompleted=$true');
+  Lines.Add('  $title=''Backup zum Server senden: abgeschlossen''');
+  Lines.Add('  $msg="Das Backup wurde auf den Server kopiert.`r`n`r`nServer: $serverHost`r`nZielordner: $final"');
+  Lines.Add(' } catch {');
+  Lines.Add('  $errorCode=$_.Exception.Message');
+  Lines.Add('  if($errorCode -eq ''upload_space''){');
+  Lines.Add('   $neededText=([double]($requiredBytes/1GB)).ToString(''N2'')');
+  Lines.Add('   $freeText=([double]($free/1GB)).ToString(''N2'')');
+  Lines.Add('   $msg="Auf dem Server ist nicht genug Platz für dieses Backup.`r`n`r`nZiel: $uploadParent`r`nBenötigt: $neededText GiB (inkl. Reserve)`r`nVerfügbar: $freeText GiB`r`n`r`nDer Kopiervorgang wurde abgebrochen."');
+  Lines.Add('  } elseif($errorCode -eq ''upload_folder_name''){ $msg=''Bitte den Zeitstempelordner eines PG18-Backups auswählen.'' }');
+  Lines.Add('  elseif($errorCode -eq ''upload_file_type''){ $msg=''Der Backupordner muss aus regulären Dateien ohne Unterordner oder Verknüpfungen bestehen.'' }');
+  Lines.Add('  elseif($errorCode.StartsWith(''upload_missing:'')){ $msg=''Die erforderliche Backupdatei fehlt oder ist leer: ''+$errorCode.Substring(15) }');
+  Lines.Add('  elseif($errorCode -eq ''ssh_exit_72''){ $msg=''Der gespeicherte Serverordner fehlt oder ist nicht beschreibbar: ''+$uploadParent }');
+  Lines.Add('  elseif($errorCode -eq ''ssh_exit_74''){ $msg="Auf dem Server gibt es bereits einen gleichnamigen Backupordner:`r`n$final" }');
+  Lines.Add('  elseif($errorCode -eq ''ssh_exit_76'' -or $errorCode -eq ''upload_length''){ $msg=$step+"`r`nDie Dateigröße stimmt nicht überein." }');
+  Lines.Add('  else { $msg=CheckFailure $step $_.Exception }');
+  Lines.Add(' } finally {');
+  Lines.Add('  if($staging){');
+  Lines.Add('   try {');
+  Lines.Add('    $clean=''if [ -d ''+$stageArg+'' ] && [ ! -L ''+$stageArg+'' ]; then find ''+$stageArg+'' -mindepth 1 -maxdepth 1 -type f -delete && rmdir -- ''+$stageArg+''; fi''');
+  Lines.Add('    $null=Remote $clean');
+  Lines.Add('   } catch { $msg+="`r`n`r`nUnvollständige Dateien können auf dem Server liegen: $staging" }');
+  Lines.Add('  }');
+  Lines.Add(' }');
+end;
+
 // Start the requested server operation with the saved SSH profile.
 // Den gewählten Servervorgang mit dem gespeicherten SSH-Profil starten.
 procedure StartServerBackup(out ProcessHandle: THandle; out ResultPath: string;
@@ -337,7 +559,7 @@ procedure StartServerBackup(out ProcessHandle: THandle; out ResultPath: string;
 var
   Ini: TAppSettingsIni;
   SettingsPath, Host, UserName, KeyFile, Auth, ComposeFile, Project, SavedBackupFolder: string;
-  ScriptPath, ServerDir, ScriptKind, PowerShellPath, CommandLine, RunId: string;
+  ScriptPath, ServerDir, PowerShellPath, CommandLine, RunId: string;
   ServerDirAttributes: DWORD;
   Lines: TStringList;
   PortNumber: Integer;
@@ -366,7 +588,8 @@ begin
     end;
     if not IsValidHost(Host) or not IsValidUser(UserName) then
       raise Exception.Create('Bitte gültigen Server und Benutzernamen speichern.');
-    if (BackupFolder = '') and (Action in [sbaCheckSpace, sbaStartBackup]) and
+    if (((BackupFolder = '') and (Action = sbaCheckSpace)) or
+        (Action in [sbaStartBackup, sbaStartRestore, sbaWatchRestore])) and
        ((ComposeFile = '') or not ComposeFile.StartsWith('/') or HasControlChars(ComposeFile) or HasControlChars(Project)) then
       raise Exception.Create('Bitte einen gültigen absoluten Compose-Ordner speichern.');
     if SameText(Auth, 'SSH-Key') then UseKey := True
@@ -377,13 +600,18 @@ begin
     if not UseKey and (ReadServerSecret(SettingsPath, 'Passwort') = '') then
       raise Exception.Create('Bitte zuerst das SSH-Passwort speichern.');
 
-    if Action in [sbaStartBackup, sbaListBackups] then
+    if Action in [sbaStartBackup, sbaListBackups, sbaUploadBackup, sbaListRestoreBackups,
+      sbaStartRestore] then
       SavedBackupFolder := NormalizeServerBackupFolder(SavedBackupFolder);
     if (Action = sbaDownloadBackup) and not TDirectory.Exists(LocalDownloadFolder) then
       raise Exception.Create('Der gewählte Windows-Zielordner ist nicht vorhanden.');
+    if (Action = sbaUploadBackup) and not TDirectory.Exists(LocalDownloadFolder) then
+      raise Exception.Create('Der gewählte lokale Backupordner ist nicht vorhanden.');
+    // Use the run ID for temporary result and progress files and for server-side workspaces.
+    // Die Lauf-ID für temporäre Ergebnis- und Fortschrittsdateien sowie serverseitige Arbeitsordner verwenden.
     RunId := StringReplace(StringReplace(TGUID.NewGuid.ToString, '{', '', []), '}', '', []);
-    // Retain the exact script for each invocation and keep only IPC files temporary.
-    // Das genaue Skript jedes Aufrufs behalten und nur Ergebnis- und Fortschrittsdateien temporär speichern.
+    // Keep the generated script of each invocation in the Server directory.
+    // Das erzeugte Skript jedes Aufrufs im Ordner Server aufbewahren.
     ServerDir := TPath.Combine(ExtractFilePath(SettingsPath), 'Server');
     if not TDirectory.Exists(ExtractFilePath(SettingsPath)) then
       raise Exception.Create('Der Laufzeitordner des Programms ist nicht vorhanden.');
@@ -392,20 +620,11 @@ begin
     if (ServerDirAttributes = INVALID_FILE_ATTRIBUTES) or
        ((ServerDirAttributes and FILE_ATTRIBUTE_REPARSE_POINT) <> 0) then
       raise Exception.Create('Der Server-Ordner muss ein direktes Verzeichnis im Laufzeitordner sein.');
-    case Action of
-      sbaStartBackup: ScriptKind := 'backup-start';
-      sbaWatchBackup: ScriptKind := 'backup-status';
-      sbaDownloadBackup: ScriptKind := 'backup-download';
-      sbaListBackups: ScriptKind := 'backupliste';
-    else
-      if BackupFolder <> '' then ScriptKind := 'backupordner'
-      else ScriptKind := 'speicherpruefung';
-    end;
-    ScriptPath := TPath.Combine(ServerDir, FormatDateTime('yyyy-mm-dd_hh-nn-ss', Now) +
-      '_' + ScriptKind + '_' + RunId + '.ps1');
     ResultPath := TPath.Combine(TPath.GetTempPath, 'paperless-server-' + RunId + '.result');
     TFile.WriteAllText(ResultPath, '', TEncoding.UTF8);
-    if Action <> sbaCheckSpace then
+    if Action in ServerWorkerActions then
+      TFile.WriteAllBytes(ResultPath + '.progress', nil)
+    else if Action <> sbaCheckSpace then
       TFile.WriteAllText(ResultPath + '.progress', '', TEncoding.UTF8);
     Lines := TStringList.Create;
     try
@@ -448,23 +667,46 @@ begin
       Lines.Add('function ShArg([string]$s) {$q=[string][char]39;return $q+$s.Replace($q,($q+''\''+$q+$q))+$q}');
 // Transfer SSH streams as bytes, keep stderr separate, and check the process result.
 // SSH-Daten als Bytes uebertragen, stderr getrennt halten und das Prozessergebnis pruefen.
-      Lines.Add('function Ssh([string]$cmd,[byte[]]$inputBytes,[int]$timeoutMs=120000,[string]$outputPath,[long]$expectedBytes=0) {');
+      Lines.Add('function Ssh([string]$cmd,[byte[]]$inputBytes,[int]$timeoutMs=120000,[string]$outputPath,[long]$expectedBytes=0,[string]$inputPath) {');
       Lines.Add(' $si=New-Object Diagnostics.ProcessStartInfo; $si.FileName=(Get-Command ssh.exe -ErrorAction Stop).Source');
       Lines.Add(' $a=@(''-T'',''-o'',''StrictHostKeyChecking=yes'',''-o'',''UpdateHostKeys=no'',''-o'',''ConnectTimeout=10'',''-o'',''NumberOfPasswordPrompts=1'',''-p'',$port,''-l'',$serverUser)');
       Lines.Add(' if($useKey){$a+=@(''-o'',''IdentitiesOnly=yes'',''-i'',$keyFile)}else{$a+=@(''-o'',''PreferredAuthentications=password'',''-o'',''PubkeyAuthentication=no'')}');
-      Lines.Add(' if($outputPath){$a+=@(''-o'',''ServerAliveInterval=15'',''-o'',''ServerAliveCountMax=3'')}');
+      Lines.Add(' if($outputPath -or $inputPath){$a+=@(''-o'',''ServerAliveInterval=15'',''-o'',''ServerAliveCountMax=3'')}');
       Lines.Add(' $a+=@($serverHost,$cmd);$si.Arguments=(($a|ForEach-Object{WinArg $_}) -join '' '')');
       Lines.Add(' $si.UseShellExecute=$false;$si.CreateNoWindow=$true;$si.RedirectStandardOutput=$true;$si.RedirectStandardError=$true;$si.RedirectStandardInput=$true');
 // Stream backup files directly to a new file and keep the bounded memory path for metadata.
 // Backupdateien direkt in eine neue Datei schreiben und Metadaten weiter im Speicher lesen.
-      Lines.Add(' $p=New-Object Diagnostics.Process;$p.StartInfo=$si;$m=$null;$started=$false');
+      Lines.Add(' $p=New-Object Diagnostics.Process;$p.StartInfo=$si;$m=$null;$source=$null;$started=$false');
       Lines.Add(' try {');
       Lines.Add('  if($outputPath){$m=[IO.File]::Open($outputPath,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::Read)}');
       Lines.Add('  else{$m=New-Object IO.MemoryStream}');
+      Lines.Add('  if($inputPath){');
+      Lines.Add('   if(([IO.File]::GetAttributes($inputPath) -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw ''upload_file_type''}');
+      Lines.Add('   $source=[IO.File]::Open($inputPath,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)');
+      Lines.Add('   if($source.Length -ne $expectedBytes){throw ''upload_length''}');
+      Lines.Add('  }');
       Lines.Add('  if(-not $p.Start()){throw ''ssh_start''}');
       Lines.Add('  $started=$true');
       Lines.Add('  $err=$p.StandardError.ReadToEndAsync();$out=$p.StandardOutput.BaseStream.CopyToAsync($m)');
-      Lines.Add('  if($inputBytes){$write=$p.StandardInput.BaseStream.WriteAsync($inputBytes,0,$inputBytes.Length);if(-not $write.Wait(120000)){try{$p.Kill()}catch{};throw ''ssh_timeout''}}');
+      // Stream local archives through SSH stdin with a progress-based timeout.
+      // Lokale Archive über SSH-stdin streamen und bei Stillstand abbrechen.
+      Lines.Add('  if($source){');
+      Lines.Add('   $watch=[Diagnostics.Stopwatch]::StartNew();$sent=0');
+      Lines.Add('   $write=$source.CopyToAsync($p.StandardInput.BaseStream)');
+      Lines.Add('   while(-not $write.Wait(1000)){');
+      Lines.Add('    if(-not [IO.File]::Exists($progressPath)){throw ''upload_cancelled''}');
+      Lines.Add('    if($p.HasExited){throw (''ssh_exit_''+$p.ExitCode)}');
+      Lines.Add('    $position=$source.Position');
+      Lines.Add('    if($position -gt $sent){');
+      Lines.Add('     $sent=$position;$watch.Restart()');
+      Lines.Add('     if($expectedBytes -gt 0){SetProgress ("$step ("+[math]::Floor(100.0*$sent/$expectedBytes)+" %)")}');
+      Lines.Add('    } elseif($watch.ElapsedMilliseconds -ge 300000){throw ''ssh_timeout''}');
+      Lines.Add('   }');
+      Lines.Add('   if($source.Position -ne $expectedBytes){throw ''upload_length''}');
+      Lines.Add('  } elseif($inputBytes){');
+      Lines.Add('   $write=$p.StandardInput.BaseStream.WriteAsync($inputBytes,0,$inputBytes.Length)');
+      Lines.Add('   if(-not $write.Wait(120000)){throw ''ssh_timeout''}');
+      Lines.Add('  }');
       Lines.Add('  $p.StandardInput.Close()');
       // Measure download progress and use an idle timeout so large active transfers can finish.
       // Downloadfortschritt messen und nur bei Stillstand abbrechen, damit große aktive Übertragungen fertig werden.
@@ -488,6 +730,7 @@ begin
       Lines.Add('  return ,$m.ToArray()');
       Lines.Add(' } finally {');
       Lines.Add('  if($started -and -not $p.HasExited){try{$p.Kill();[void]$p.WaitForExit(2000)}catch{}}');
+      Lines.Add('  if($source){$source.Dispose()}');
       Lines.Add('  if($m){$m.Dispose()}');
       Lines.Add('  $p.Dispose()');
       Lines.Add(' }');
@@ -516,12 +759,18 @@ begin
       Lines.Add('$title=''Server-Backup: Prüfung fehlgeschlagen''');
       Lines.Add('$msg=''Die Speicherplatzprüfung konnte nicht abgeschlossen werden.''');
       Lines.Add('try {');
-      if Action = sbaListBackups then
+      if Action = sbaUploadBackup then
+        AddServerBackupUpload(Lines, ExpandFileName(LocalDownloadFolder), SavedBackupFolder, RunId)
+      else if Action in [sbaListBackups, sbaListRestoreBackups] then
         AddServerBackupList(Lines, SavedBackupFolder)
       else if Action = sbaDownloadBackup then
         AddServerBackupDownload(Lines, NormalizeServerBackupFolder(BackupFolder),
           ExpandFileName(LocalDownloadFolder), RunId)
-      else if Action <> sbaCheckSpace then
+      else if Action = sbaStartRestore then
+        AddDockerRestoreRun(Lines, Action, SavedBackupFolder, NormalizeServerBackupFolder(BackupFolder), RunId)
+      else if Action = sbaWatchRestore then
+        AddDockerRestoreRun(Lines, Action, '', '', RunId)
+      else if Action in [sbaStartBackup, sbaWatchBackup] then
         AddDockerBackupRun(Lines, Action, SavedBackupFolder, RunId)
       else if BackupFolder <> '' then
       begin
@@ -673,7 +922,10 @@ begin
       Lines.Add(' if($cleanupFailed){');
       Lines.Add('  $msg+="`r`n`r`nDie temporäre Compose-Kopie oder ihr Arbeitsordner konnte nicht gelöscht werden. Bitte prüfen Sie den Ordner:`r`n$privateDir"');
       Lines.Add(' }');
-      Lines.Add(' $msg+="`r`n`r`nPowerShell-Skript: $PSCommandPath"');
+      if Action in [sbaStartRestore, sbaWatchRestore] then
+        Lines.Add(' if(-not $backupCompleted){$msg+="`r`n`r`nPowerShell-Skript: $PSCommandPath"}')
+      else
+        Lines.Add(' $msg+="`r`n`r`nPowerShell-Skript: $PSCommandPath"');
       Lines.Add(' $json=@{ title=$title; message=$msg; backupCompleted=$backupCompleted; completedBackupFolder=$completedBackupFolder; availableBackupFolders=$availableBackupFolders } | ConvertTo-Json -Compress');
       Lines.Add(' $resultBytes=[Text.Encoding]::UTF8.GetBytes($json)');
       Lines.Add(' try {');
@@ -681,7 +933,15 @@ begin
       Lines.Add('  try {$resultFile.Write($resultBytes,0,$resultBytes.Length);$resultFile.SetLength($resultBytes.Length)}finally{$resultFile.Dispose()}');
       Lines.Add(' } catch [IO.FileNotFoundException] {}');
       Lines.Add('}');
-      Lines.SaveToFile(ScriptPath, TEncoding.UTF8);
+      // Reserve the timestamp in Server and account for any existing log with that timestamp.
+      // Den Zeitstempel in Server reservieren und vorhandene Logs mit demselben Zeitstempel berücksichtigen.
+      ScriptPath := ReserveTimestampedScript(ServerDir, TPath.Combine(ExtractFilePath(SettingsPath), 'Logs'));
+      try
+        Lines.SaveToFile(ScriptPath, TEncoding.UTF8);
+      except
+        DeleteFile(ScriptPath);
+        raise;
+      end;
     finally
       Lines.Free;
     end;

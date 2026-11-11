@@ -60,7 +60,7 @@ object MainformFrm: TMainformFrm
         Left = 0
         Top = 300
         Width = 836
-        Height = 163
+        Height = 77
         Align = alTop
         BevelOuter = bvNone
         Color = clSilver
@@ -68,14 +68,26 @@ object MainformFrm: TMainformFrm
         ParentBackground = False
         ParentCtl3D = False
         TabOrder = 0
+      end
+      object Panel3: TPanel
+        Left = 1
+        Top = 300
+        Width = 834
+        Height = 77
+        BevelOuter = bvNone
+        Ctl3D = False
+        ParentBackground = False
+        ParentCtl3D = False
+        TabOrder = 1
         object ProgramUpdateLbl: TLabel
           Left = 0
-          Top = 24
+          Top = 15
           Width = 310
           Height = 36
           Cursor = crHandPoint
           Alignment = taCenter
           AutoSize = False
+          Layout = tlCenter
           Color = clBtnFace
           Font.Charset = DEFAULT_CHARSET
           Font.Color = clWindowText
@@ -87,29 +99,22 @@ object MainformFrm: TMainformFrm
           WordWrap = True
           OnClick = ProgramUpdateLblClick
         end
-      end
-      object Panel3: TPanel
-        Left = 1
-        Top = 380
-        Width = 834
-        Height = 77
-        BevelOuter = bvNone
-        Ctl3D = False
-        ParentBackground = False
-        ParentCtl3D = False
-        TabOrder = 1
         object BackupWiederherProgNeuStartLbl: TLabel
-          Left = 31
-          Top = 30
-          Width = 738
-          Height = 18
+          Left = 30
+          Top = 24
+          Width = 794
+          Height = 37
           Caption = 
             'Um ein Backup oder eine Wiederherstellung zu machen, muss das Pr' +
             'ogramm neu gestartet werden'
+          AutoSize = False
+          EllipsisPosition = epEndEllipsis
+          Layout = tlCenter
           Visible = False
+          WordWrap = True
         end
         object BusyWaitLbl: TLabel
-          Left = 31
+          Left = 30
           Top = 5
           Width = 152
           Height = 18
@@ -124,9 +129,9 @@ object MainformFrm: TMainformFrm
         end
         object ProgressBar1: TProgressBar
           Left = 30
-          Top = 55
+          Top = 62
           Width = 794
-          Height = 17
+          Height = 14
           TabOrder = 0
         end
       end
@@ -143,7 +148,7 @@ object MainformFrm: TMainformFrm
       end
       object Panel5: TPanel
         Left = 0
-        Top = 463
+        Top = 377
         Width = 836
         Height = 2
         Align = alTop
@@ -165,7 +170,7 @@ object MainformFrm: TMainformFrm
         TabOrder = 4
         object Image1: TImage
           Left = 378
-          Top = 63
+          Top = 33
           Width = 90
           Height = 90
           Picture.Data = {
@@ -138020,7 +138025,7 @@ object MainformFrm: TMainformFrm
         end
         object Label18: TLabel
           Left = 365
-          Top = 151
+          Top = 121
           Width = 127
           Height = 20
           Caption = 'ComputerRalle'
@@ -138039,7 +138044,7 @@ object MainformFrm: TMainformFrm
           Width = 250
           Height = 60
           Caption = 'Changelog '#246'ffnen'
-          TabOrder = 5
+          TabOrder = 6
           OnClick = ChangelogBtnClick
         end
         object BuyMeACoffeBtn: TButton
@@ -138084,13 +138089,27 @@ object MainformFrm: TMainformFrm
           OnClick = UpdateDoneCbClick
         end
         object Button1: TButton
-          Left = 30
+          Left = 31
           Top = 168
           Width = 250
           Height = 60
           Caption = 'Paperless im Browser aufrufen'
           TabOrder = 4
           OnClick = OpenPaperlessBrowserLblClick
+        end
+        object OpenManualBtn: TButton
+          AlignWithMargins = True
+          Left = 303
+          Top = 168
+          Width = 250
+          Height = 60
+          Margins.Left = 10
+          Margins.Top = 10
+          Margins.Right = 10
+          Margins.Bottom = 10
+          Caption = 'Anleitung '#246'ffnen'
+          TabOrder = 5
+          OnClick = OpenManualBtnClick
         end
       end
       object Panel7: TPanel
@@ -138139,7 +138158,7 @@ object MainformFrm: TMainformFrm
       object RestorePaperlessBackupBtn: TButton
         AlignWithMargins = True
         Left = 575
-        Top = 480
+        Top = 382
         Width = 250
         Height = 60
         Margins.Left = 10
@@ -138147,10 +138166,10 @@ object MainformFrm: TMainformFrm
         Margins.Right = 10
         Margins.Bottom = 10
         Caption = 'Backup Wiederherstellen'
-        TabOrder = 6
+        TabOrder = 7
         OnClick = RestorePaperlessBackupBtnClick
       end
-      object OpenManualBtn: TButton
+      object StartPaperlessBackupBtn: TButton
         AlignWithMargins = True
         Left = 31
         Top = 382
@@ -138160,38 +138179,53 @@ object MainformFrm: TMainformFrm
         Margins.Top = 10
         Margins.Right = 10
         Margins.Bottom = 10
-        Caption = 'Anleitung '#246'ffnen'
-        TabOrder = 8
-        OnClick = OpenManualBtnClick
-      end
-      object StartPaperlessBackupBtn: TButton
-        AlignWithMargins = True
-        Left = 31
-        Top = 480
-        Width = 250
-        Height = 60
-        Margins.Left = 10
-        Margins.Top = 10
-        Margins.Right = 10
-        Margins.Bottom = 10
         Caption = 'Paperless Backup Starten'
-        TabOrder = 7
+        TabOrder = 6
         OnClick = StartPaperlessBackupBtnClick
       end
-      object LoadServerBackupBtn: TButton
-        AlignWithMargins = True
-        Left = 303
-        Top = 480
+      object LoadServerBackupHintPan: TPanel
+        Left = 31
+        Top = 456
         Width = 250
         Height = 60
-        Margins.Left = 10
-        Margins.Top = 10
-        Margins.Right = 10
-        Margins.Bottom = 10
-        Caption = 'Backup vom Server laden'
+        Hint = 'Nur f'#252'r die Servervariante'
+        BevelOuter = bvNone
+        ParentShowHint = False
+        ShowHint = True
+        TabOrder = 8
+        object LoadServerBackupBtn: TButton
+          Left = 0
+          Top = 0
+          Width = 250
+          Height = 60
+          Align = alClient
+          Caption = 'Backup vom Server laden'
+          Enabled = False
+          TabOrder = 0
+          OnClick = LoadServerBackupBtnClick
+        end
+      end
+      object SendServerBackupHintPan: TPanel
+        Left = 575
+        Top = 456
+        Width = 250
+        Height = 60
+        Hint = 'Nur f'#252'r die Servervariante'
+        BevelOuter = bvNone
+        ParentShowHint = False
+        ShowHint = True
         TabOrder = 9
-        Visible = False
-        OnClick = LoadServerBackupBtnClick
+        object SendServerBackupBtn: TButton
+          Left = 0
+          Top = 0
+          Width = 250
+          Height = 60
+          Align = alClient
+          Caption = 'Backup zum Server senden'
+          Enabled = False
+          TabOrder = 0
+          OnClick = SendServerBackupBtnClick
+        end
       end
     end
     object BackupPlanPan: TPanel

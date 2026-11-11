@@ -51,6 +51,7 @@ const
   IniKeyServerBackupFolder = 'Backupordner';
   PaperlessInputFolderName = 'Paperless-Input-PG18';
   PaperlessBackupFolderName = 'Paperless-Backup-PG18';
+  BackupTimestampFormat = 'yyyy-mm-dd_hh-nn-ss';
 
   // Runtime file names.
   // Dateinamen zur Laufzeit.
@@ -136,12 +137,50 @@ function LoadInstallationFolder: string;
 procedure SaveInstallationFolder(const Folder: string);
 procedure EnsurePaperlessScripts(const RuntimeFolder: string);
 function BackupCustomFiles(const RuntimeFolder: string): string;
+function ReserveTimestampedScript(const Folder: string; const LogFolder: string = ''): string;
 function CustomFileProtected(const TargetPath: string): Boolean;
 function NoticeReminderDue(const InstallationDate, LastAccepted, Today: TDateTime): Boolean;
 
 implementation
 
-uses System.SysUtils, System.IOUtils, Winapi.Windows;
+uses System.SysUtils, System.DateUtils, System.IOUtils, Winapi.Windows;
+
+// Reserve the script atomically and advance by one second when the timestamp is occupied.
+// Den Skriptnamen atomar reservieren und bei belegtem Zeitstempel zur nächsten Sekunde wechseln.
+function ReserveTimestampedScript(const Folder, LogFolder: string): string;
+var
+  StampTime: TDateTime;
+  Stamp: string;
+  ScriptHandle: THandle;
+  ErrorCode: DWORD;
+begin
+  StampTime := Now;
+  repeat
+    Stamp := FormatDateTime(BackupTimestampFormat, StampTime);
+    Result := TPath.Combine(Folder, Stamp + '.ps1');
+    ScriptHandle := CreateFile(PChar(Result), GENERIC_WRITE, FILE_SHARE_READ, nil,
+      CREATE_NEW, FILE_ATTRIBUTE_NORMAL, 0);
+    if ScriptHandle <> INVALID_HANDLE_VALUE then
+    begin
+      CloseHandle(ScriptHandle);
+      // Check related files after reserving the script, including results of an earlier run.
+      // Zugehörige Dateien nach der Reservierung prüfen, auch Ergebnisse früherer Aufrufe.
+      if not (FileExists(Result + '.result') or FileExists(Result + '.result.cancel') or
+              FileExists(Result + '.hosts') or
+              ((LogFolder <> '') and FileExists(TPath.Combine(LogFolder, Stamp + '.log')))) then
+        Exit;
+      if not Winapi.Windows.DeleteFile(PChar(Result)) then
+        RaiseLastOSError;
+    end
+    else
+    begin
+      ErrorCode := GetLastError;
+      if (ErrorCode <> ERROR_FILE_EXISTS) and (ErrorCode <> ERROR_ALREADY_EXISTS) then
+        RaiseLastOSError(ErrorCode);
+    end;
+    StampTime := IncSecond(StampTime);
+  until False;
+end;
 
 // Save each set separately so later unlocks never overwrite earlier custom edits.
 // Jeden Stand separat sichern, damit späteres Entsperren ältere Bearbeitungen nicht überschreibt.
@@ -154,7 +193,7 @@ begin
   // Use only local date and time; the user requested no GUID or extra suffix.
   // Nur lokales Datum und Uhrzeit verwenden; Benutzer wünscht keine GUID oder weiteren Zusatz.
   Result := IncludeTrailingPathDelimiter(RuntimeFolder) + 'Eigene Bearbeitungen Backup' +
-    PathDelim + FormatDateTime('yyyy-mm-dd_hh-nn-ss', Now);
+    PathDelim + FormatDateTime(BackupTimestampFormat, Now);
   // Never merge into an existing backup created in the same second.
   // Niemals in eine bereits in derselben Sekunde angelegte Sicherung kopieren.
   if System.SysUtils.DirectoryExists(Result) then

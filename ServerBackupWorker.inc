@@ -30,6 +30,12 @@ begin
     Lines.Add('');
     Lines.Add('# Use a fixed container name as a daemon-side lock and verify its ownership before reuse.');
     Lines.Add('# Einen festen Containernamen als Sperre verwenden und vor der Wiederverwendung das Label pruefen.');
+    // Also keep this version's launcher out of an active restore's mount and space checks.
+    // Auch den Starter während einer Wiederherstellung von Mount- und Platzprüfungen fernhalten.
+    Lines.Add('stage=''Laufende Wiederherstellung pruefen''');
+    Lines.Add('restore=$(docker ps -q --filter "name=^/paperless-pg18-restore-job$" --filter "label=de.computerralle.paperless.restore=pg18")');
+    Lines.Add('if [ -n "$restore" ]; then stage=''Eine Server-Wiederherstellung laeuft bereits''; exit 1; fi');
+    Lines.Add('');
     Lines.Add('stage=''Vorhandenen Backuplauf pruefen''');
     Lines.Add('old=$(docker ps -aq --no-trunc --filter "name=^/$job$" 2>/dev/null)');
     Lines.Add('if [ -n "$old" ]; then');
@@ -122,6 +128,7 @@ begin
     Lines.Add('build_dir=$(mktemp -d)');
     Lines.Add('cat > "$build_dir/Dockerfile" <<''PAPERLESS_DOCKERFILE''');
     Lines.Add('FROM docker:cli');
+    Lines.Add('RUN command -v flock >/dev/null || apk add --no-cache flock');
     Lines.Add('COPY worker.sh /paperless-backup.sh');
     Lines.Add('RUN ["/bin/sh", "-n", "/paperless-backup.sh"]');
     Lines.Add('ENTRYPOINT ["/bin/sh", "/paperless-backup.sh"]');
@@ -131,8 +138,44 @@ begin
     Lines.Add('set -eu');
     Lines.Add('umask 077');
     Lines.Add('stage=''Backup vorbereiten''');
+    // Hold the shared Docker-volume lock until backup cleanup has restarted the services.
+    // Die gemeinsame Docker-Volume-Sperre bis zum Dienstneustart beim Aufräumen halten.
+    Lines.Add('exec 9>>/operation-lock/job.lock');
+    Lines.Add('if ! flock -n 9; then printf ''%s\n'' ''FEHLER: Ein Backup oder eine Wiederherstellung läuft bereits.''; exit 1; fi');
     Lines.Add('restart_db=0');
     Lines.Add('restart_web=0');
+    Lines.Add('archive_progress_pid=');
+    Lines.Add('');
+    Lines.Add('# Monitor archive size without inheriting the operation lock.');
+    Lines.Add('# Die Archivgroesse anzeigen, ohne die Sperre an den Beobachter zu vererben.');
+    // Read the compressed archive size while tar writes it. Stop the observer before resuming services.
+    // Beim Schreiben mit tar die komprimierte Archivgröße ermitteln. Den Beobachter vor dem Dienstneustart beenden.
+    Lines.Add('archive_progress() {');
+    Lines.Add('  trap - EXIT');
+    Lines.Add('  timer=');
+    Lines.Add('  trap ''if [ -n "$timer" ]; then kill "$timer" 2>/dev/null || :; wait "$timer" 2>/dev/null || :; fi; exit 0'' HUP INT TERM');
+    Lines.Add('  last_mib=0');
+    Lines.Add('  while :; do');
+    Lines.Add('    sleep 8 &');
+    Lines.Add('    timer=$!');
+    Lines.Add('    wait "$timer" || return');
+    Lines.Add('    timer=');
+    Lines.Add('    bytes=$(stat -c %s -- "$1" 2>/dev/null) || continue');
+    Lines.Add('    case "$bytes" in ''''|*[!0-9]*) continue;; esac');
+    Lines.Add('    mib=$((bytes / 1048576))');
+    Lines.Add('    if [ "$mib" -gt "$last_mib" ]; then');
+    Lines.Add('      printf ''Archiv %s: %s MiB geschrieben\n'' "$2" "$mib"');
+    Lines.Add('      last_mib=$mib');
+    Lines.Add('    fi');
+    Lines.Add('  done');
+    Lines.Add('}');
+    Lines.Add('stop_archive_progress() {');
+    Lines.Add('  if [ -n "$archive_progress_pid" ]; then');
+    Lines.Add('    kill "$archive_progress_pid" 2>/dev/null || :');
+    Lines.Add('    wait "$archive_progress_pid" 2>/dev/null || :');
+    Lines.Add('    archive_progress_pid=');
+    Lines.Add('  fi');
+    Lines.Add('}');
     Lines.Add('');
     Lines.Add('# Restore services stopped by this run, even when an archive fails.');
     Lines.Add('# Die in diesem Lauf gestoppten Dienste auch bei Archivfehlern starten.');
@@ -158,6 +201,7 @@ begin
     Lines.Add('  rc=$?');
     Lines.Add('  trap - EXIT');
     Lines.Add('  trap '''' HUP INT TERM');
+    Lines.Add('  stop_archive_progress');
     Lines.Add('  if ! resume_services; then');
     Lines.Add('    printf ''%s\n'' ''FEHLER: Paperless oder PostgreSQL konnte nicht wieder gestartet werden. Bitte auf dem Server pruefen.''');
     Lines.Add('    rc=1');
@@ -254,7 +298,11 @@ begin
     Lines.Add('for role in data db_data_18 export media; do');
     Lines.Add('  stage="Archiv $role schreiben"');
     Lines.Add('  printf ''%s\n'' "$stage"');
-    Lines.Add('  tar -czf "$partial/${prefix}_$role.tar.gz" -C "/source-$role" . 2>/dev/null');
+    Lines.Add('  archive="$partial/${prefix}_$role.tar.gz"');
+    Lines.Add('  archive_progress "$archive" "$role" 9>&- &');
+    Lines.Add('  archive_progress_pid=$!');
+    Lines.Add('  tar -czf "$archive" -C "/source-$role" . 2>/dev/null');
+    Lines.Add('  stop_archive_progress');
     Lines.Add('done');
     Lines.Add('');
     Lines.Add('# Bring Paperless back before validating the archives and publishing the completed directory.');
@@ -285,6 +333,8 @@ begin
     Lines.Add('if [ -n "$old" ]; then docker rm "$old" >/dev/null 2>&1; fi');
     Lines.Add('set -- --detach --name "$job" --restart=no --network none --stop-timeout 240 --log-driver local \');
     Lines.Add('  --label de.computerralle.paperless.backup=pg18 \');
+    Lines.Add('  --label de.computerralle.paperless.maintenance=flock-v1 \');
+    Lines.Add('  --mount type=volume,src=paperless-pg18-operation-lock,dst=/operation-lock \');
     Lines.Add('  --mount "type=bind,src=$socket,dst=/var/run/docker.sock" \');
     Lines.Add('  --mount "type=bind,src=$target,dst=/backup" \');
     Lines.Add('  --mount "type=bind,src=$data,dst=/source-data,readonly" \');

@@ -1,8 +1,8 @@
 ﻿# Paperless Backup Programm
 
-## Server-Backup und lokale Wiederherstellung
+## Server-Backup und Wiederherstellung
 
-**Praxisbestätigung vom 11.11.2026:** Ein auf der Linux-VM erzeugtes Server-Backup wurde erfolgreich in der lokalen Paperless-Installation mit Docker Desktop unter Windows wiederhergestellt. Der Benutzer hat auch bestätigt, dass das Programm vorhandene Server-Backups findet. Die Auswahl und Übertragung über den neuen Windows-Dialog sind gesondert zu prüfen. Die Wiederherstellung auf einem Server ist noch nicht implementiert.
+**Praxisbestätigung vom 11.11.2026:** Ein auf der Linux-VM erzeugtes Backup wurde erfolgreich in Docker Desktop unter Windows eingespielt. Bei einer Wiederherstellung auf der Linux-VM meldete der Server-Worker den erfolgreichen Import und Start von Paperless. Das Programm findet vorhandene Server-Backups. Die Übertragungsdialoge für Upload und Download sowie das Öffnen eines Dokuments nach dem Server-Restore sind separat zu prüfen.
 
 ### Server einrichten und sichern
 
@@ -17,13 +17,24 @@ Auf **Lokale Installation** umschalten und **Backup Wiederherstellen** wählen. 
 
 Der Server schreibt das Backup im lokalen PG18-Dateiformat. Die Wiederherstellung verwendet den UTF-8-SQL-Dump sowie die Archive `data`, `media` und `export`. Das zusätzlich gesicherte physische DB-Archiv ist für den regulären Restore nicht erforderlich. Der Backupordner enthält auch den Paperless Secret Key und die Image-Metadaten. Eine vorhandene verschlüsselte Maildatei wird mitgesichert.
 
+### Backup auf dem Server einspielen
+
+1. Liegt das Backup auf Windows, zuerst **Backup zum Server senden** wählen. Den PG18-Zeitstempelordner auswählen und das Serverziel bestätigen. Das Programm prüft vor der Übertragung den freien Platz und danach die Dateigrößen. Gleichnamige Backups im Serverordner bleiben erhalten.
+2. Im Servermodus **Backup Wiederherstellen** wählen und den Hinweis mit **OK** schließen. Mit **Ja** die Liste der Backups im gespeicherten Serverordner öffnen. Ein Backup auswählen und den Zielserver prüfen.
+3. Das Überschreiben der Datenbank und der Ordner `data`, `media` und `export` bestätigen. Paperless ist während der Wiederherstellung vorübergehend nicht erreichbar.
+4. Bei Erfolg meldet das Programm **Wiederherstellung erfolgreich** und zeigt den Pfad zur Logdatei. Anschließend lassen sich die wiederhergestellten Dokumente im Browser kontrollieren.
+
+Ein eigener Docker-Container führt die Wiederherstellung aus. Nach dem Start läuft er auch bei einer SSH-Unterbrechung weiter. Den letzten oder laufenden Status über **Backup Wiederherstellen → OK → Nein** abrufen. Backup und Restore verwenden eine gemeinsame Sperre. Die Statusanzeige gibt die neuen Arbeitsschritte der Reihe nach aus. Bei langen Archivschritten erscheint ein Zwischenstand in MiB.
+
+Der Restore spielt den SQL-Dump und die drei Datenarchive ein. Er übernimmt den Paperless-Schlüssel des Backups in die Compose-Konfiguration. Fehlt der Schlüssel oder ist er leer, verwendet das Programm seinen Legacy-Schlüssel. Die Wiederherstellung verschlüsselter Mail-Einstellungen erfolgt über den lokalen Restore.
+
 ### Betrieb und Fehlersuche
 
 Das Backup prüft PostgreSQL 18, die tatsächlich eingebundenen Quellen und den freien Platz am gespeicherten Ziel. Ein eigener Docker-Backupcontainer hält Paperless während der Sicherung vorübergehend an. Er startet die gestoppten Dienste wieder und gibt den Zeitstempelordner nach erfolgreicher Archivprüfung frei. Bei Fehlern können Teildateien in einem `.paperless-*.partial`-Ordner verbleiben. Ein gestarteter Container kann bei unterbrochener SSH-Verbindung weiterlaufen.
 
 Der erste Lauf benötigt gegebenenfalls Zugriff auf das Docker-CLI-Basisimage. Der SSH-Benutzer braucht Zugriff auf den lokalen Docker-Socket, Leserechte an den Sicherungsquellen und Schreibrechte am Backupziel. Die automatische SSH-Startprüfung zeigt den letzten Verbindungsstatus an. Neue Server-Fingerabdrücke vor der Bestätigung unabhängig vergleichen. Geänderte Schlüssel werden nicht automatisch ersetzt.
 
-Die erzeugten PowerShell-Skripte bleiben pro Aufruf unter `Server` im Windows-Laufzeitordner. Die Ergebnismeldung zeigt den Skriptpfad. Das Skript zum Backupstart enthält auch den Linux-Starter und den Backupcontainer-Ablauf. SSH-Passwörter und Passphrasen bleiben in der Windows-Anmeldeinformationsverwaltung.
+Die erzeugten PowerShell-Skripte bleiben pro Aufruf unter `Server` im Windows-Laufzeitordner. Der Dateiname besteht aus dem Zeitstempel im Format `JJJJ-MM-TT_HH-MM-SS` und der Endung `.ps1`. Nach erfolgreicher Server-Wiederherstellung verweist der Dialog auf die gleichnamige `.log`-Datei unter `Logs`. Bei mehreren Aufrufen in derselben Sekunde verwendet das Programm den nächsten freien Zeitstempel. Das Skript zum Backupstart enthält auch den Linux-Starter und den Backupcontainer-Ablauf. SSH-Passwörter und Passphrasen bleiben in der Windows-Anmeldeinformationsverwaltung.
 
 Beim lokalen Speichern mit Neustart adressiert das Updateskript PostgreSQL über den Compose-Dienst `db`. Vor den Datenbankbefehlen wartet es auf PostgreSQL. Dadurch hängt dieser Schritt nach einem Wechsel aus dem Servermodus nicht von gespeicherten Containernamen ab.
 

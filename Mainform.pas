@@ -42,6 +42,9 @@ type
     OpenManualBtn: TButton;
     RestorePaperlessBackupBtn: TButton;
     LoadServerBackupBtn: TButton;
+    SendServerBackupBtn: TButton;
+    LoadServerBackupHintPan: TPanel;
+    SendServerBackupHintPan: TPanel;
     Panel4: TPanel;
     Panel5: TPanel;
     Panel1: TPanel;
@@ -200,6 +203,7 @@ type
     Button1: TButton;
     procedure StartPaperlessBackupBtnClick(Sender: TObject);
     procedure LoadServerBackupBtnClick(Sender: TObject);
+    procedure SendServerBackupBtnClick(Sender: TObject);
     procedure OpenManualBtnClick(Sender: TObject);
     procedure BuyMeACoffeeBtnClick(Sender: TObject);
     procedure StartCmdScript;
@@ -267,8 +271,8 @@ type
     FServerBackupProgressActive: Boolean;
     FServerBackupAction: TServerBackupAction;
     FServerBackupStatusText: string;
+    FServerWorkerProgressOffset: Int64;
     FServerBackupModeWasEnabled: Boolean;
-    FServerBackupPreviousUpdateCaption: string;
     FServerBackupCheckHandle: THandle;
     FServerBackupCheckTimer: TTimer;
     FServerBackupCheckResultPath: string;
@@ -299,6 +303,8 @@ type
       Action: TServerBackupAction = sbaCheckSpace; const LocalDownloadFolder: string = '');
     procedure EndServerBackupCheck;
     procedure ServerBackupCheckTimerTick(Sender: TObject);
+    function ReadNextServerWorkerStatus(const ProgressPath: string): Boolean;
+    function ConfirmServerRestore(const BackupFolder: string): Boolean;
     procedure CancelExternalStartupCheck;
     procedure BeginExternalStartupCheck;
     procedure StartupCheckTimerTick(Sender: TObject);
@@ -307,6 +313,7 @@ type
     procedure LoadExternalServerSettings;
     procedure PrepareLocalAfterExternalStart;
     function LocalInstallationAvailable: Boolean;
+    procedure UpdateServerBackupButtons;
     procedure UpdateInstallationModeHeaders;
     procedure CaptureVersionSnapshot;
     function VersionsChanged: Boolean;
@@ -906,6 +913,7 @@ end;
 procedure TMainformFrm.BeginScriptBusyState;
 begin
   if ScriptBusy then Exit;
+  ProgramUpdateLbl.Hide;
   ScriptBusy := True;
   ScriptBusyTabIndex := TabControl1.TabIndex;
   if not Assigned(ScriptBusyControlStates) then
@@ -914,9 +922,6 @@ begin
     ScriptBusyControlStates.Clear;
   SaveAndDisableInteractiveControls(Self);
   BuyMeACoffeBtn.Enabled := True;
-  // Keep the status area clear while a script is running.
-  // Den Statusbereich während eines Skriptlaufs freihalten.
-  OpenManualBtn.Visible := False;
   BusyWaitLbl.Visible := True;
 end;
 // Hauptformular nach einem Skriptlauf wiederherstellen.
@@ -935,9 +940,7 @@ begin
   BuyMeACoffeBtn.Enabled := True;
   BusyWaitLbl.Visible := False;
   ScriptBusy := False;
-  // Restore the manual button only when no restart message occupies its area.
-  // Den Anleitungsbutton nur ohne Neustarthinweis an derselben Stelle anzeigen.
-  OpenManualBtn.Visible := not BackupWiederherProgNeuStartLbl.Visible and not IsAutostart;
+  OpenManualBtn.Visible := not IsAutostart;
 end;
 // Einen Wert für die Verwendung in einer PowerShell-Befehlszeile quoten.
 function TMainformFrm.PowerShellQuote(const Value: string): string;
@@ -1156,8 +1159,14 @@ begin
   begin
     if FServerBackupAction = sbaDownloadBackup then
       Result := 'Backup wird heruntergeladen. Bitte warten ...'
-    else if FServerBackupAction = sbaListBackups then
+    else if FServerBackupAction = sbaUploadBackup then
+      Result := 'Backup wird zum Server gesendet. Bitte warten ...'
+    else if FServerBackupAction in [sbaListBackups, sbaListRestoreBackups] then
       Result := 'Server-Backups werden gesucht. Bitte warten ...'
+    else if FServerBackupAction = sbaStartRestore then
+      Result := 'Server-Wiederherstellung läuft. Bitte warten ...'
+    else if FServerBackupAction = sbaWatchRestore then
+      Result := 'Status der Server-Wiederherstellung wird abgefragt. Bitte warten ...'
     else
       Result := 'Server-Backup läuft. Bitte warten ...';
   end
@@ -1201,8 +1210,7 @@ begin
   BusyWaitLbl.Visible := True;
   BusyWaitLbl.Caption := BuildBusyWaitText(StatusText);
   BackupWiederherProgNeuStartLbl.Visible := True;
-  OpenManualBtn.Visible := False;
-  BackupWiederherProgNeuStartLbl.Caption := ShortenScriptStatusText(StatusText);
+  BackupWiederherProgNeuStartLbl.Caption := StatusText.Trim;
   ProgressBar1.Min := 0;
   ProgressBar1.Max := 100;
   if not FServerBackupProgressActive and (RestoreEstimatedSeconds > 0) and
@@ -1242,16 +1250,15 @@ begin
     Exit;
   end;
   BackupWiederherProgNeuStartLbl.Visible := True;
-  OpenManualBtn.Visible := False;
   if not FServerBackupProgressActive and (RestoreEstimatedSeconds > 0) and
      ((RestoreEstimateText.Trim <> '') or IsRestoreApplyingSettings) then
   begin
     ProgressBar1.Position := ApproximateRestoreProgressPercent;
-    BackupWiederherProgNeuStartLbl.Caption := ShortenScriptStatusText(StatusText);
+    BackupWiederherProgNeuStartLbl.Caption := StatusText.Trim;
   end
   else
   begin
-    BackupWiederherProgNeuStartLbl.Caption := ShortenScriptStatusText(StatusText);
+    BackupWiederherProgNeuStartLbl.Caption := StatusText.Trim;
     if ProgressBar1.Position >= ProgressBar1.Max then
       ProgressBar1.Position := ProgressBar1.Min
     else
@@ -1286,17 +1293,16 @@ begin
     RestorePaperlessBackupBtn.Enabled := True;
   end;
   BackupWiederherProgNeuStartLbl.Visible := True;
-  OpenManualBtn.Visible := False;
   if Success and RestoreProgress then
     BackupWiederherProgNeuStartLbl.Caption := 'Wiederherstellung wird abgeschlossen. Bitte warten ...'
   else
-    BackupWiederherProgNeuStartLbl.Caption := ShortenScriptStatusText(StatusText);
+    BackupWiederherProgNeuStartLbl.Caption := StatusText.Trim;
   if Success then
   begin
     if RestoreProgress then
     begin
       AnimateProgressBarToComplete(ProgressBar1);
-      BackupWiederherProgNeuStartLbl.Caption := ShortenScriptStatusText(StatusText);
+      BackupWiederherProgNeuStartLbl.Caption := StatusText.Trim;
       EndScriptBusyState;
       StartPaperlessBackupBtn.Enabled := True;
       RestorePaperlessBackupBtn.Enabled := True;
@@ -1484,6 +1490,7 @@ end;
 // Die Unterstützungsseite im Standardbrowser öffnen.
 procedure TMainformFrm.BuyMeACoffeeBtnClick(Sender: TObject);
 begin
+  ProgramUpdateLbl.Hide;
   ShellExecute(0, 'open', BuyMeACoffeeUrl, nil, nil, SW_SHOWNORMAL);
 end;
 
@@ -1595,15 +1602,27 @@ end;
 // Manuelle Bearbeitung der Docker-Image-Versionen aktivieren oder deaktivieren.
 // Keep both selection flags consistent without changing either installation.
 // Beide Auswahlvariablen synchron halten, ohne Installationen zu veraendern.
+// The enabled panels display the hint even when Windows skips the disabled button.
+// Die aktiven Rahmen zeigen den Hinweis auch dann, wenn Windows den deaktivierten Button überspringt.
+procedure TMainformFrm.UpdateServerBackupButtons;
+var
+  LocalMode, ServerMode: Boolean;
+begin
+  LocalMode := LocalInstallationSelected and not ExternalInstallationSelected;
+  ServerMode := ExternalInstallationSelected and not LocalInstallationSelected;
+  LoadServerBackupBtn.Enabled := ServerMode and not ScriptBusy and not FServerBackupCheckActive;
+  SendServerBackupBtn.Enabled := LoadServerBackupBtn.Enabled;
+  LoadServerBackupHintPan.ShowHint := LocalMode;
+  SendServerBackupHintPan.ShowHint := LocalMode;
+end;
+
 // Update the headers without changing the selected profile.
 // Die Kopfzeilen aktualisieren, ohne das Profil zu veraendern.
 procedure TMainformFrm.UpdateInstallationModeHeaders;
 var
   HeaderText: string;
 begin
-  // Show the download button only in an unambiguous server mode.
-  // Den Downloadbutton nur im eindeutig gewählten Servermodus anzeigen.
-  LoadServerBackupBtn.Visible := ExternalInstallationSelected and not LocalInstallationSelected;
+  UpdateServerBackupButtons;
   if ExternalInstallationSelected then
   begin
     HeaderText := 'Paperless Backup Programm - Server';
@@ -2207,6 +2226,7 @@ var
   LaunchResult: HINST;
   Ini: TAppSettingsIni;
 begin
+  ProgramUpdateLbl.Hide;
   Host := Trim(ExternalHostEdit.Text);
   UserName := Trim(ExternalUserEdit.Text);
   ComposeFile := ExternalComposeFile(ExternalComposePathEdit.Text);
@@ -2322,9 +2342,9 @@ begin
       PowerShellQuote('PreferredAuthentications=keyboard-interactive,password') + ', ' +
       PowerShellQuote('-o') + ', ' + PowerShellQuote('PubkeyAuthentication=no');
   ArgumentList := ArgumentList + ', ' + PowerShellQuote(Host) + ', ' + PowerShellQuote(RemoteCommand);
-  ScriptPath := TPath.Combine(TPath.GetTempPath, 'paperless-ssh-test-' + TGUID.NewGuid.ToString + '.ps1');
-  ResultPath := ScriptPath + '.result';
   try
+    ScriptPath := ReserveTimestampedScript(TPath.GetTempPath);
+    ResultPath := ScriptPath + '.result';
     Lines := TStringList.Create;
     try
       Lines.Add('$sshArgs = @(' + ArgumentList + ')');
@@ -2392,6 +2412,7 @@ var
   Ini: TAppSettingsIni;
   SettingsPath, Auth, BackupFolder: string;
 begin
+  ProgramUpdateLbl.Hide;
   ExternalConnectionSettingsChanged(Sender);
   SettingsPath := IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName;
   if ExternalAuthRadioGroup.ItemIndex = 1 then Auth := 'SSH-Key'
@@ -2464,6 +2485,7 @@ procedure TMainformFrm.CreateExternalBackupFolderBtnClick(Sender: TObject);
 var
   BackupFolder: string;
 begin
+  ProgramUpdateLbl.Hide;
   if FServerBackupCheckActive then Exit;
   try
     BackupFolder := NormalizeServerBackupFolder(ExternalBackupFolderEdit.Text);
@@ -2493,12 +2515,14 @@ end;
 // Serveraktionen bis zum Abschluss des Vorgangs und seiner Dialoge sperren.
 procedure TMainformFrm.BeginServerBackupCheck(const BackupFolder: string; Action: TServerBackupAction;
   const LocalDownloadFolder: string);
+var
+  ErrorCaption: string;
 begin
   if ScriptBusy or FServerBackupCheckActive or ApplicationClosing then Exit;
   FServerBackupCheckActive := True;
   FServerBackupAction := Action;
+  FServerWorkerProgressOffset := 0;
   FServerBackupProgressActive := Action <> sbaCheckSpace;
-  FServerBackupPreviousUpdateCaption := ProgramUpdateLbl.Caption;
   try
     // Reuse the local backup display without setting the local IsBackup flag.
     // Die lokale Backupanzeige verwenden, ohne das lokale Flag IsBackup zu setzen.
@@ -2509,8 +2533,14 @@ begin
           FServerBackupStatusText := 'Server-Backup wird vorbereitet. Bitte warten ...';
         sbaDownloadBackup:
           FServerBackupStatusText := 'Backup-Download wird vorbereitet. Bitte warten ...';
-        sbaListBackups:
+        sbaUploadBackup:
+          FServerBackupStatusText := 'Speicherplatz auf dem Server wird geprüft. Bitte warten ...';
+        sbaListBackups, sbaListRestoreBackups:
           FServerBackupStatusText := 'Gespeicherter Backupordner wird geprüft. Bitte warten ...';
+        sbaStartRestore:
+          FServerBackupStatusText := 'Server-Wiederherstellung wird vorbereitet. Bitte warten ...';
+        sbaWatchRestore:
+          FServerBackupStatusText := 'Status der Server-Wiederherstellung wird abgefragt. Bitte warten ...';
       else
         FServerBackupStatusText := 'Backupstatus wird abgefragt. Bitte warten ...';
       end;
@@ -2521,9 +2551,13 @@ begin
       StartPaperlessBackupBtn.Enabled := False;
       CreateExternalBackupFolderBtn.Enabled := False;
       LoadServerBackupBtn.Enabled := False;
+      SendServerBackupBtn.Enabled := False;
       FServerBackupModeWasEnabled := InstallationModeRadioGroup.Enabled;
       InstallationModeRadioGroup.Enabled := False;
-      ProgramUpdateLbl.Caption := 'Bitte warten. Speicherplatzgrößen werden geprüft.';
+      // Keep the check visible on the settings tab.
+      // Die laufende Prüfung auf dem Einstellungstab anzeigen.
+      StatusBar1.SimpleText := 'Bitte warten. Speicherplatzgrößen werden geprüft.';
+      StatusBar1.SimplePanel := True;
     end;
     if FServerBackupCheckTimer = nil then
     begin
@@ -2538,17 +2572,56 @@ begin
   except
     on E: Exception do
       try
-        ProgramUpdateLbl.Caption := FServerBackupPreviousUpdateCaption;
+        ErrorCaption := 'Server-Backup: Prüfung fehlgeschlagen';
+        if Action in [sbaListRestoreBackups, sbaStartRestore, sbaWatchRestore] then
+          ErrorCaption := 'Server-Wiederherstellung: Prüfung fehlgeschlagen';
         if Action = sbaDownloadBackup then
           FinishScriptProgress('Backup-Download konnte nicht gestartet werden.', False)
-        else if Action = sbaListBackups then
+        else if Action = sbaUploadBackup then
+          FinishScriptProgress('Backup konnte nicht zum Server gesendet werden.', False)
+        else if Action in [sbaListBackups, sbaListRestoreBackups] then
           FinishScriptProgress('Server-Backups konnten nicht geprüft werden.', False)
+        else if Action in [sbaStartRestore, sbaWatchRestore] then
+          FinishScriptProgress('Server-Wiederherstellung konnte nicht gestartet oder abgefragt werden.', False)
         else if FServerBackupProgressActive then
           FinishScriptProgress('Server-Backup konnte nicht gestartet oder abgefragt werden.', False);
-        CenteredMessageBox(E.Message, 'Server-Backup: Prüfung fehlgeschlagen', MB_OK or MB_ICONWARNING);
+        CenteredMessageBox(E.Message, ErrorCaption, MB_OK or MB_ICONWARNING);
       finally
         EndServerBackupCheck;
       end;
+  end;
+end;
+
+// Consume only complete UTF-8 lines so a concurrent append cannot split a message.
+// Nur vollständige UTF-8-Zeilen lesen, damit ein gleichzeitiger Schreibzugriff keine Meldung teilt.
+function TMainformFrm.ReadNextServerWorkerStatus(const ProgressPath: string): Boolean;
+var
+  Stream: TFileStream;
+  Pending: TBytes;
+  Available: Int64;
+  Count, LineEnd: Integer;
+begin
+  Result := False;
+  try
+    Stream := TFileStream.Create(ProgressPath, fmOpenRead or fmShareDenyNone);
+    try
+      Available := Stream.Size - FServerWorkerProgressOffset;
+      if Available <= 0 then Exit;
+      SetLength(Pending, Available);
+      Stream.Position := FServerWorkerProgressOffset;
+      Count := Stream.Read(Pending[0], Length(Pending));
+    finally
+      Stream.Free;
+    end;
+    for LineEnd := 0 to Count - 1 do
+      if Pending[LineEnd] = 10 then
+      begin
+        Inc(FServerWorkerProgressOffset, LineEnd + 1);
+        FServerBackupStatusText := TEncoding.UTF8.GetString(Pending, 0, LineEnd).Trim;
+        Exit(True);
+      end;
+  except
+    on E: EStreamError do ;
   end;
 end;
 
@@ -2557,22 +2630,31 @@ end;
 procedure TMainformFrm.ServerBackupCheckTimerTick(Sender: TObject);
 var
   WaitResult, ExitCode: DWORD;
-  ProgressPath, ProgressText, Caption, MessageText: string;
-  CompletedBackupFolder, DownloadSourceFolder, DownloadTargetFolder: string;
+  ProgressPath, ProgressText, Caption, MessageText, SelectionCaption: string;
+  CompletedBackupFolder, DownloadSourceFolder, DownloadTargetFolder, RestoreSourceFolder: string;
   AvailableBackupFolders, BackupNames: TArray<string>;
   I, SelectedIndex: Integer;
-  OperationSucceeded, SelectableBackups: Boolean;
+  OperationSucceeded, SelectableBackups, WorkerProgress: Boolean;
 begin
   if FServerBackupCheckHandle = 0 then Exit;
   WaitResult := WaitForSingleObject(FServerBackupCheckHandle, 0);
+  ProgressPath := FServerBackupCheckResultPath + '.progress';
+  WorkerProgress := FServerBackupAction in ServerWorkerActions;
+  // Show one queued status per timer tick. Drain the final batch before showing the result dialog.
+  // Pro Timer-Takt eine vorgemerkte Meldung anzeigen. Die Meldungen der letzten Abfrage vor dem Ergebnisdialog ausgeben.
+  if WorkerProgress and ((WaitResult = WAIT_TIMEOUT) or (WaitResult = WAIT_OBJECT_0)) and
+     ReadNextServerWorkerStatus(ProgressPath) then
+  begin
+    UpdateScriptProgress(FServerBackupStatusText);
+    Exit;
+  end;
   if WaitResult = WAIT_TIMEOUT then
   begin
     if FServerBackupProgressActive then
     begin
       // Keep the last server status while PowerShell updates the progress file.
       // Den letzten Serverstatus beibehalten, während PowerShell die Fortschrittsdatei aktualisiert.
-      ProgressPath := FServerBackupCheckResultPath + '.progress';
-      if FileExists(ProgressPath) then
+      if not WorkerProgress and FileExists(ProgressPath) then
         try
           ProgressText := TFile.ReadAllText(ProgressPath, TEncoding.UTF8).Trim;
           if ProgressText <> '' then FServerBackupStatusText := ProgressText;
@@ -2584,11 +2666,9 @@ begin
     Exit;
   end;
   FServerBackupCheckTimer.Enabled := False;
-  // Restore the update label as soon as the check ends, before showing its result.
-  // Das Update-Label nach Ende der Prüfung vor der Ergebnismeldung zurücksetzen.
-  ProgramUpdateLbl.Caption := FServerBackupPreviousUpdateCaption;
   DownloadSourceFolder := '';
   DownloadTargetFolder := '';
+  RestoreSourceFolder := '';
   try
     try
       ExitCode := 0;
@@ -2597,7 +2677,7 @@ begin
         RaiseLastOSError;
       OperationSucceeded := ReadServerBackupResult(FServerBackupCheckResultPath, ExitCode, Caption, MessageText,
         CompletedBackupFolder, AvailableBackupFolders);
-      SelectableBackups := (FServerBackupAction = sbaListBackups) and OperationSucceeded and
+      SelectableBackups := (FServerBackupAction in [sbaListBackups, sbaListRestoreBackups]) and OperationSucceeded and
         (Length(AvailableBackupFolders) > 0);
       if FServerBackupProgressActive then
         FinishScriptProgress(Caption, OperationSucceeded);
@@ -2608,14 +2688,21 @@ begin
     except
       on E: Exception do
       begin
+        Caption := 'Server-Backup: Prüfung fehlgeschlagen';
+        if FServerBackupAction in [sbaListRestoreBackups, sbaStartRestore, sbaWatchRestore] then
+          Caption := 'Server-Wiederherstellung: Prüfung fehlgeschlagen';
         if FServerBackupAction = sbaDownloadBackup then
           FinishScriptProgress('Backup-Download: Ergebnis nicht verfügbar.', False)
-        else if FServerBackupAction = sbaListBackups then
+        else if FServerBackupAction = sbaUploadBackup then
+          FinishScriptProgress('Backup-Upload: Ergebnis nicht verfügbar.', False)
+        else if FServerBackupAction in [sbaListBackups, sbaListRestoreBackups] then
           FinishScriptProgress('Server-Backups: Prüfergebnis nicht verfügbar.', False)
+        else if FServerBackupAction in [sbaStartRestore, sbaWatchRestore] then
+          FinishScriptProgress('Server-Wiederherstellung: Ergebnis nicht verfügbar.', False)
         else if FServerBackupProgressActive then
           FinishScriptProgress('Server-Backup: Ergebnis nicht verfügbar.', False);
         CenteredMessageBox('Der Servervorgang konnte nicht ausgewertet werden.' +
-          sLineBreak + E.Message, 'Server-Backup: Prüfung fehlgeschlagen', MB_OK or MB_ICONWARNING);
+          sLineBreak + E.Message, Caption, MB_OK or MB_ICONWARNING);
         Exit;
       end;
     end;
@@ -2624,15 +2711,26 @@ begin
       try
         if SelectableBackups then
         begin
-          // Show only the timestamp names and retain the server paths for the transfer.
-          // Nur die Zeitstempelnamen anzeigen und die Serverpfade für die Übertragung behalten.
+          // Display backup names and keep the canonical paths for the selected server operation.
+          // Backupnamen anzeigen und die kanonischen Pfade für die gewählte Serveraktion behalten.
+          if FServerBackupAction = sbaListRestoreBackups then
+            SelectionCaption := 'Backup auf dem Server wiederherstellen'
+          else
+            SelectionCaption := 'Backup vom Server laden';
           SetLength(BackupNames, Length(AvailableBackupFolders));
           for I := 0 to High(AvailableBackupFolders) do
             BackupNames[I] := Copy(AvailableBackupFolders[I],
               LastDelimiter('/', AvailableBackupFolders[I]) + 1, MaxInt);
-          if CenteredSelectListItem('Backup vom Server laden', 'Backup auswählen:', BackupNames,
-            SelectedIndex) then
-            DownloadSourceFolder := AvailableBackupFolders[SelectedIndex];
+          if CenteredSelectListItem(SelectionCaption, 'Backup auswählen:', BackupNames, SelectedIndex) then
+          begin
+            if FServerBackupAction = sbaListRestoreBackups then
+            begin
+              if ConfirmServerRestore(AvailableBackupFolders[SelectedIndex]) then
+                RestoreSourceFolder := AvailableBackupFolders[SelectedIndex];
+            end
+            else
+              DownloadSourceFolder := AvailableBackupFolders[SelectedIndex];
+          end;
         end
         else if (FServerBackupAction in [sbaStartBackup, sbaWatchBackup]) and OperationSucceeded and
           (CompletedBackupFolder <> '') then
@@ -2648,18 +2746,47 @@ begin
         on E: Exception do
         begin
           DownloadTargetFolder := '';
-          CenteredMessageBox('Backup oder Zielordner konnte nicht ausgewählt werden.' + sLineBreak + E.Message,
-            'Backup herunterladen', MB_OK or MB_ICONWARNING);
+          if FServerBackupAction = sbaListRestoreBackups then
+            CenteredMessageBox('Das Backup für die Wiederherstellung konnte nicht ausgewählt werden.' +
+              sLineBreak + E.Message, 'Server-Wiederherstellung', MB_OK or MB_ICONWARNING)
+          else
+            CenteredMessageBox('Backup oder Zielordner konnte nicht ausgewählt werden.' + sLineBreak + E.Message,
+              'Backup herunterladen', MB_OK or MB_ICONWARNING);
         end;
       end;
   finally
     EndServerBackupCheck;
   end;
 
-  // Release the previous operation before starting the download in the same progress UI.
-  // Den vorherigen Vorgang freigeben und den Download in derselben Fortschrittsanzeige starten.
-  if DownloadTargetFolder <> '' then
+  // Release the listing before starting the next server operation in the same progress UI.
+  // Die Auflistung freigeben und die nächste Serveraktion in derselben Fortschrittsanzeige starten.
+  if RestoreSourceFolder <> '' then
+    BeginServerBackupCheck(RestoreSourceFolder, sbaStartRestore)
+  else if DownloadTargetFolder <> '' then
     BeginServerBackupCheck(DownloadSourceFolder, sbaDownloadBackup, DownloadTargetFolder);
+end;
+
+// Confirm the backup, saved server and overwrite before the worker can start.
+// Backup, gespeicherten Server und Überschreiben bestätigen, bevor der Restore-Container starten kann.
+function TMainformFrm.ConfirmServerRestore(const BackupFolder: string): Boolean;
+var
+  Ini: TAppSettingsIni;
+  Host: string;
+begin
+  Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
+  try
+    Host := Ini.ReadString('Paperless Extern', 'Host', '').Trim;
+  finally
+    Ini.Free;
+  end;
+  Result := CenteredMessageBox(
+    'Wollen Sie dieses Backup auf dem Server wiederherstellen?' + sLineBreak + sLineBreak +
+    'Server: ' + Host + sLineBreak +
+    'Backup: ' + BackupFolder + sLineBreak + sLineBreak +
+    'Die aktuelle Paperless-Datenbank und die Ordner data, media und export werden überschrieben. ' +
+    'Paperless übernimmt den Schlüssel aus dem Backup. Fehlt er, wird der Legacy-Schlüssel des Programms verwendet. ' +
+    'Paperless ist während der Wiederherstellung vorübergehend nicht erreichbar.',
+    'Server-Wiederherstellung starten?', MB_YESNO or MB_ICONWARNING or MB_DEFBUTTON2) = IDYES;
 end;
 
 // Release the process and the temporary result before accepting another check.
@@ -2687,24 +2814,65 @@ begin
       EndScriptBusyState
     else
     begin
+      StatusBar1.SimplePanel := False;
       InstallationModeRadioGroup.Enabled := FServerBackupModeWasEnabled;
       StartPaperlessBackupBtn.Enabled := True;
       CreateExternalBackupFolderBtn.Enabled := True;
-      LoadServerBackupBtn.Enabled := True;
     end;
   end;
   FServerBackupStatusText := '';
   FServerBackupAction := sbaCheckSpace;
   FServerBackupProgressActive := False;
   FServerBackupCheckActive := False;
+  if not ApplicationClosing then UpdateServerBackupButtons;
 end;
 
 // Check the saved server folder before offering any backup for download.
 // Den gespeicherten Serverordner prüfen, bevor ein Backup zum Download angeboten wird.
 procedure TMainformFrm.LoadServerBackupBtnClick(Sender: TObject);
 begin
+  ProgramUpdateLbl.Hide;
   if ExternalInstallationSelected and not LocalInstallationSelected then
     BeginServerBackupCheck('', sbaListBackups);
+end;
+
+// Confirm the selected local backup and the persisted server destination before starting the upload.
+// Das gewählte lokale Backup und das gespeicherte Serverziel vor dem Senden bestätigen lassen.
+procedure TMainformFrm.SendServerBackupBtnClick(Sender: TObject);
+var
+  Ini: TAppSettingsIni;
+  LocalBackupFolder, BackupName, ServerBackupFolder: string;
+begin
+  ProgramUpdateLbl.Hide;
+  if not ExternalInstallationSelected or LocalInstallationSelected or ScriptBusy or
+     FServerBackupCheckActive or ApplicationClosing then Exit;
+
+  LocalBackupFolder := '';
+  if not CenteredSelectDirectory('Lokalen Backupordner zum Senden auswählen', LocalBackupFolder) then Exit;
+  BackupName := ExtractFileName(ExcludeTrailingPathDelimiter(LocalBackupFolder));
+  if BackupName = '' then BackupName := LocalBackupFolder;
+
+  try
+    Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
+    try
+      ServerBackupFolder := NormalizeServerBackupFolder(
+        Ini.ReadString('Paperless Extern', IniKeyServerBackupFolder, DefaultServerBackupFolder));
+    finally
+      Ini.Free;
+    end;
+  except
+    on E: Exception do
+    begin
+      CenteredMessageDlg('Der gespeicherte Server-Backupordner konnte nicht gelesen werden.' +
+        sLineBreak + E.Message, mtWarning, [mbOK], 0);
+      Exit;
+    end;
+  end;
+
+  if CenteredMessageDlg('Wollen Sie das Backup „' + BackupName +
+    '“ auf den Server in den gespeicherten Ordner „' + ServerBackupFolder + '“ kopieren?',
+    mtConfirmation, [mbYes, mbNo, mbCancel], 0) = mrYes then
+    BeginServerBackupCheck('', sbaUploadBackup, LocalBackupFolder);
 end;
 
 // Den Backup-Zielordner auswählen, speichern und die Backup-Skripte erstellen.
@@ -2716,6 +2884,7 @@ var
   TextFilePath: string;
   PathChoice: Integer;
 begin
+  ProgramUpdateLbl.Hide;
   if FServerBackupCheckActive then Exit;
   if LocalInstallationSelected = ExternalInstallationSelected then
   begin
@@ -3664,6 +3833,7 @@ procedure TMainformFrm.TabControl1Change(Sender: TObject);
 var
   Ini: TAppSettingsIni;
 begin
+  ProgramUpdateLbl.Hide;
   if ScriptBusy then
   begin
     TabControl1.TabIndex := ScriptBusyTabIndex;
@@ -3843,6 +4013,7 @@ var
   ComposeFile, ComposeDir, PlannedScript, BackupBase: string;
   Volumes: TDockerVolumeNames;
 begin
+  ProgramUpdateLbl.Hide;
   if LocalInstallationSelected and FLocalStartupPending then
   begin
     CenteredShowMessage('Bitte das Programm neu starten, um die lokale Installation vorzubereiten.');
@@ -4003,6 +4174,7 @@ var
   Ini: TAppSettingsIni;
   ExitCode: DWORD;
 begin
+  ProgramUpdateLbl.Hide;
   if LocalInstallationSelected and FLocalStartupPending then
   begin
     CenteredShowMessage('Bitte das Programm neu starten, um die lokale Installation vorzubereiten.');
@@ -4125,6 +4297,7 @@ var
   ComposePathTextFile: string;
   OriginalButtonText: string;
 begin
+  ProgramUpdateLbl.Hide;
   if LocalInstallationSelected and FLocalStartupPending then
   begin
     CenteredShowMessage('Bitte das Programm neu starten, um die lokale Installation vorzubereiten.');
@@ -4344,6 +4517,7 @@ var
   Ini: TAppSettingsIni;
   RestartChoice: Integer;
 begin
+  ProgramUpdateLbl.Hide;
   if LocalInstallationSelected and FLocalStartupPending then
   begin
     CenteredShowMessage('Bitte das Programm neu starten, um die lokale Installation vorzubereiten.');
@@ -4526,6 +4700,7 @@ var
   EnvFilePath: string;
   SettingsSaved: Boolean;
 begin
+  ProgramUpdateLbl.Hide;
   if LocalInstallationSelected and FLocalStartupPending then
   begin
     CenteredShowMessage('Bitte das Programm neu starten, um die lokale Installation vorzubereiten.');
@@ -4897,6 +5072,13 @@ var
   PreparedKey: string;
   RestoreMailBytes: TBytes;
 begin
+  ProgramUpdateLbl.Hide;
+  if ScriptBusy or FServerBackupCheckActive or ApplicationClosing then Exit;
+  if LocalInstallationSelected = ExternalInstallationSelected then
+  begin
+    CenteredShowMessage('Die Betriebsart ist nicht eindeutig. Bitte die Einstellungen prüfen.');
+    Exit;
+  end;
   if LocalInstallationSelected and FLocalStartupPending then
   begin
     CenteredShowMessage('Bitte das Programm neu starten, um die lokale Installation vorzubereiten.');
@@ -4904,7 +5086,21 @@ begin
   end;
   if ExternalInstallationSelected then
   begin
-    CenteredShowMessage('Externe Serveraktionen sind noch nicht verfügbar.');
+    // Keep the server mode out of the local restore and folder picker.
+    // Im Servermodus die lokale Wiederherstellung und Ordnerauswahl überspringen.
+    CenteredMessageBox(
+      'Wenn Sie lokale Backups wiederherstellen möchten, müssen Sie diese zunächst mit ' +
+      '„Backup zum Server senden“ in den gespeicherten Backupordner auf dem Server kopieren.',
+      'Backup auf dem Server wiederherstellen', MB_OK or MB_ICONINFORMATION);
+    case CenteredMessageDlg(
+      'Ja: Ein Backup aus dem gespeicherten Serverordner zur Wiederherstellung auswählen.' +
+      sLineBreak + sLineBreak +
+      'Nein: Den Status der letzten oder laufenden Server-Wiederherstellung abfragen.' + sLineBreak +
+      'Abbrechen: Dialog schließen.',
+      mtConfirmation, [mbYes, mbNo, mbCancel], 0) of
+      mrYes: BeginServerBackupCheck('', sbaListRestoreBackups);
+      mrNo: BeginServerBackupCheck('', sbaWatchRestore);
+    end;
     Exit;
   end;
   ClearRestoreProgressState;
@@ -4946,7 +5142,6 @@ begin
     begin
       BackupFolder := FolderDialog.FileName;
       BackupWiederherProgNeuStartLbl.Visible := True;
-      OpenManualBtn.Visible := False;
       BackupWiederherProgNeuStartLbl.Caption := 'Backup wird geprüft. Bitte warten ...';
       Application.ProcessMessages;
       BackupSizeBytes := GetDirectorySizeBytes(BackupFolder);
@@ -5013,7 +5208,6 @@ begin
       begin
         ClearRestoreProgressState;
         BackupWiederherProgNeuStartLbl.Visible := True;
-        OpenManualBtn.Visible := False;
         BackupWiederherProgNeuStartLbl.Caption := 'Wiederherstellung abgebrochen.';
       end;
     end
@@ -5042,11 +5236,13 @@ end;
 // Die PDF-Anleitung im Standardbrowser öffnen.
 procedure TMainformFrm.OpenManualBtnClick(Sender: TObject);
 begin
+  ProgramUpdateLbl.Hide;
   ShellExecute(Handle, 'open', PChar(ProgramManualUrl), nil, nil, SW_SHOWNORMAL);
 end;
 
 procedure TMainformFrm.OpenPaperlessBrowserLblClick(Sender: TObject);
 begin
+  ProgramUpdateLbl.Hide;
   ShellExecute(0, 'open', PaperlessLocalUrlWithSlash, nil, nil, SW_SHOWNORMAL);
 end;
 // Create paperless-restore.ps1 for the selected backup folder.
@@ -5441,6 +5637,7 @@ end;
 // Die Einstellungsseite anzeigen, auf der Image-Versionen und Update-Einstellungen bearbeitet werden.
 procedure TMainformFrm.PaperlessUpdateBtnClick(Sender: TObject);
 begin
+  ProgramUpdateLbl.Hide;
   TabControl1.TabIndex := 4;
   BackupRestorePan.Visible := False;
   BackupPlanPan.Visible := False;
@@ -5775,6 +5972,7 @@ end;
 // Den Changelog im Browser öffnen.
 procedure TMainformFrm.ChangelogBtnClick(Sender: TObject);
 begin
+  ProgramUpdateLbl.Hide;
   if NativeInt(ShellExecute(Handle, 'open', PChar(ChangelogUrl), nil, nil, SW_SHOWNORMAL)) <= 32 then
     CenteredShowMessage('Der Changelog konnte nicht im Browser geöffnet werden.');
 end;
@@ -5782,6 +5980,7 @@ end;
 // Die Programm-Downloadseite oeffnen, wenn ein Update verfügbar ist.
 procedure TMainformFrm.ProgramUpdateLblClick(Sender: TObject);
 begin
+  ProgramUpdateLbl.Hide;
   ShellExecute(0, 'open', ProgramDownloadUrl, nil, nil, SW_SHOWNORMAL);
 end;
 
