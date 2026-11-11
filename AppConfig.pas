@@ -45,6 +45,10 @@ const
   AppStatusTitle = '#ComputerRalle - Paperless Backup Programm ';
   AppDataFolderName = 'Paperless Backup Programm PG18';
   ComposeProjectName = 'paperless-ngx-pg18';
+  // Default and settings key for the backup directory on the external Linux server.
+  // Vorgabe und Einstellungsschlüssel für das Sicherungsverzeichnis auf dem externen Linux-Server.
+  DefaultServerBackupFolder = '/srv/paperless_backup';
+  IniKeyServerBackupFolder = 'Backupordner';
   PaperlessInputFolderName = 'Paperless-Input-PG18';
   PaperlessBackupFolderName = 'Paperless-Backup-PG18';
 

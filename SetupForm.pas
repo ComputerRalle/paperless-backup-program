@@ -859,7 +859,6 @@ begin
   // Update-Modus: Compose-Konfiguration neu erstellen und Paperless neu starten.
   if IsUpdate = True then
   begin
-    MainformFrm.ReadContainerNamesFromFile;
     // Create and save the PowerShell script for the Docker restart.
     // Das PowerShell-Skript für den Docker-Neustart erstellen und speichern.
     CmdTargetPath := IncludeTrailingPathDelimiter(AppDataFolder) + 'update_paperless.ps1';
@@ -891,6 +890,16 @@ begin
           '&& test -x /usr/src/paperless/scripts/master_pre_consume.sh" } ' +
             '"Skript-Ausfuehrungsrechte konnten nicht gesetzt werden."');
         CmdFile.Add('  Invoke-Step { docker compose --progress plain -f docker-compose.yml up -d } "Fehler beim Starten der Container."');
+        // Wait for PostgreSQL in this Compose project to accept connections after the restart.
+        // Nach dem Neustart warten, bis PostgreSQL in diesem Compose-Projekt Verbindungen annimmt.
+        CmdFile.Add('  Write-Host "Warte auf PostgreSQL..."');
+        CmdFile.Add('  $DatabaseReady = $false');
+        CmdFile.Add('  for ($Attempt = 0; $Attempt -lt 60; $Attempt++) {');
+        CmdFile.Add('    docker compose -f docker-compose.yml exec -T db pg_isready -q -U paperless -d paperless');
+        CmdFile.Add('    if ($LASTEXITCODE -eq 0) { $DatabaseReady = $true; break }');
+        CmdFile.Add('    Start-Sleep -Seconds 2');
+        CmdFile.Add('  }');
+        CmdFile.Add('  if (-not $DatabaseReady) { throw "PostgreSQL wurde innerhalb von 120 Sekunden nicht bereit." }');
         CmdFile.Add('  Write-Host "Aktualisiere Django-Datenbankstruktur..."');
         CmdFile.Add('  docker compose -f docker-compose.yml exec -T paperless python3 manage.py migrate');
         CmdFile.Add('  if ($LASTEXITCODE -ne 0) {');
@@ -898,7 +907,9 @@ begin
         CmdFile.Add('    $global:LASTEXITCODE = 0');
         CmdFile.Add('  }');
         CmdFile.Add('  Write-Host "Aktualisiere PostgreSQL Collation Version..."');
-        CmdFile.Add(Format('  Invoke-Step { docker exec -i %s psql -U paperless -d paperless -c "ALTER DATABASE paperless REFRESH COLLATION VERSION;" } "Fehler beim Aktualisieren der PostgreSQL Collation Version."', [PaperlessDBName]));
+        // Resolve the db service through Compose and make psql report SQL errors as failures.
+        // Den db-Dienst über Compose auflösen und SQL-Fehler von psql als Fehlschlag melden.
+        CmdFile.Add('  Invoke-Step { docker compose -f docker-compose.yml exec -T db psql -X -w -U paperless -d paperless -v ON_ERROR_STOP=1 -c "ALTER DATABASE paperless REFRESH COLLATION VERSION;" } "Fehler beim Aktualisieren der PostgreSQL Collation Version."');
         CmdFile.Add('  Write-Host "Nicht mehr verwendete Volumes werden geloescht"');
         CmdFile.Add('  Wait-Countdown 3');
         CmdFile.Add('  Invoke-Step { docker volume prune -f } "Fehler beim Bereinigen nicht verwendeter Volumes."');

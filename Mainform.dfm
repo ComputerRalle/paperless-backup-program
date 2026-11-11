@@ -138178,6 +138178,21 @@ object MainformFrm: TMainformFrm
         TabOrder = 7
         OnClick = StartPaperlessBackupBtnClick
       end
+      object LoadServerBackupBtn: TButton
+        AlignWithMargins = True
+        Left = 303
+        Top = 480
+        Width = 250
+        Height = 60
+        Margins.Left = 10
+        Margins.Top = 10
+        Margins.Right = 10
+        Margins.Bottom = 10
+        Caption = 'Backup vom Server laden'
+        TabOrder = 9
+        Visible = False
+        OnClick = LoadServerBackupBtnClick
+      end
     end
     object BackupPlanPan: TPanel
       Left = 4

@@ -32,6 +32,8 @@ uses
 procedure CenterFormOnApplication(const Dialog: TForm);
 function CenteredFolderDialogExecute(const Dialog: TFileOpenDialog): Boolean;
 function CenteredSelectDirectory(const Caption: string; var Directory: string): Boolean;
+function CenteredSelectListItem(const Caption, Prompt: string; const Items: TArray<string>;
+  out ItemIndex: Integer): Boolean;
 procedure CenteredShowMessage(const Msg: string);
 function CenteredMessageDlg(const Msg: string; DlgType: TMsgDlgType; Buttons: TMsgDlgButtons; HelpCtx: Longint): Integer;
 function CenteredMessageBox(const Text, Caption: string; Flags: Cardinal): Integer;
@@ -250,6 +252,75 @@ begin
     Dialog.Free;
   end;
 end;
+
+// Select a single list entry by index so callers can keep the original data separate.
+// Einen Eintrag per Index auswählen, damit der Aufrufer die Originaldaten getrennt halten kann.
+function CenteredSelectListItem(const Caption, Prompt: string; const Items: TArray<string>;
+  out ItemIndex: Integer): Boolean;
+var
+  Dialog: TForm;
+  PromptLbl: TLabel;
+  ItemList: TListBox;
+  ContinueBtn, CancelBtn: TButton;
+  Item: string;
+begin
+  Result := False;
+  ItemIndex := -1;
+  if Length(Items) = 0 then Exit;
+
+  Dialog := TForm.Create(nil);
+  try
+    Dialog.BorderStyle := bsDialog;
+    Dialog.Caption := Caption;
+    Dialog.ClientWidth := 420;
+    Dialog.ClientHeight := 320;
+
+    PromptLbl := TLabel.Create(Dialog);
+    PromptLbl.Parent := Dialog;
+    PromptLbl.Left := 16;
+    PromptLbl.Top := 16;
+    PromptLbl.Caption := Prompt;
+
+    ItemList := TListBox.Create(Dialog);
+    ItemList.Parent := Dialog;
+    ItemList.SetBounds(16, 42, Dialog.ClientWidth - 32, 216);
+    ItemList.IntegralHeight := False;
+    ItemList.Items.BeginUpdate;
+    try
+      for Item in Items do
+        ItemList.Items.Add(Item);
+    finally
+      ItemList.Items.EndUpdate;
+    end;
+    // Preserve the caller's order and preselect the first entry for keyboard navigation.
+    // Die vorgegebene Reihenfolge beibehalten und den ersten Eintrag für die Tastaturbedienung vorwählen.
+    ItemList.ItemIndex := 0;
+    PromptLbl.FocusControl := ItemList;
+
+    ContinueBtn := TButton.Create(Dialog);
+    ContinueBtn.Parent := Dialog;
+    ContinueBtn.SetBounds(188, 274, 104, 30);
+    ContinueBtn.Caption := 'Weiter';
+    ContinueBtn.ModalResult := mrOk;
+    ContinueBtn.Default := True;
+
+    CancelBtn := TButton.Create(Dialog);
+    CancelBtn.Parent := Dialog;
+    CancelBtn.SetBounds(300, 274, 104, 30);
+    CancelBtn.Caption := 'Abbrechen';
+    CancelBtn.ModalResult := mrCancel;
+    CancelBtn.Cancel := True;
+
+    Dialog.ActiveControl := ItemList;
+    PrepareModalDialog(Dialog, ActiveFormHandle);
+    if Dialog.ShowModal <> mrOk then Exit;
+    ItemIndex := ItemList.ItemIndex;
+    Result := ItemIndex >= 0;
+  finally
+    Dialog.Free;
+  end;
+end;
+
 // Fragt ein maskiertes Passwort ab und prüft bei Bedarf die Wiederholung. Leere oder abweichende Angaben führen erneut zur Eingabe.
 // Bei Abbruch bleibt das Ergebnis False; der temporäre Dialog wird in jedem Fall freigegeben.
 function RequestPasswordDialog(const DialogCaption, Prompt: string; const ConfirmPassword: Boolean; out Password: string; const CancelButtonCaption: string): Integer;

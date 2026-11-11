@@ -1,15 +1,31 @@
 ﻿# Paperless Backup Programm
 
-## Aktueller Stand Serveranbindung – 11.11.2026
+## Server-Backup und lokale Wiederherstellung
 
-Bei Paperless Extern prüft „Paperless Backup Starten“ per SSH die geschätzte Größe der Compose-Volumes und Bind-Mounts. Der freie Platz auf dem Dateisystem des Compose-Ordners wird unabhängig ermittelt. Das Programm zeigt die Ergebnisse und bei Fehlern den betroffenen Prüfschritt sowie gegebenenfalls den SSH-Exitcode an. Der Servervorgang läuft im Hintergrund, das gelbe Label zeigt den Wartehinweis und die Serveraktionen bleiben bis zum Schließen der Ergebnismeldung gesperrt. Die Compose-Datei wird vorübergehend geschützt im Laufzeitordner abgelegt; Docker Compose normalisiert sie auf dem Server und die Anwendung wertet die Daten lokal aus. Die Prüfung erstellt kein Backup.
+**Praxisbestätigung vom 11.11.2026:** Ein auf der Linux-VM erzeugtes Server-Backup wurde erfolgreich in der lokalen Paperless-Installation mit Docker Desktop unter Windows wiederhergestellt. Der Benutzer hat auch bestätigt, dass das Programm vorhandene Server-Backups findet. Die Auswahl und Übertragung über den neuen Windows-Dialog sind gesondert zu prüfen. Die Wiederherstellung auf einem Server ist noch nicht implementiert.
 
-Unter **Einstellungen → Paperless Extern** ist der Backupordner mit `/srv/paperless_backup` vorbelegt. Nach Bestätigung mit **Ja** prüft das Programm den freien Platz am Zielordner oder am nächsten vorhandenen Elternordner. Erst nach erfolgreicher Messung legt es den Ordner per SSH an und zeigt den gemessenen Platz in einer Programmmeldung. **Nein** und **Abbrechen** führen keinen Serverbefehl aus. Der Benutzer hat die Ordneranlage auf seiner VM bestätigt. Der Pfad wird derzeit nicht gespeichert.
+### Server einrichten und sichern
 
-Die automatische SSH-Startprüfung für Paperless Extern verwendet die gespeicherten Serverdaten und Windows-Zugangsdaten. Im Kopf steht je nach Testergebnis „Server verbunden“ oder „Server nicht verbunden“; fehlende Verbindungsdaten und die laufende Prüfung werden gesondert angezeigt. Der Status beschreibt den letzten Test, keine dauerhaft offene SSH-Verbindung. Unbekannte Server-Fingerabdrücke müssen unabhängig verglichen und bestätigt werden; bestätigte Schlüssel können nach erfolgreicher Anmeldung für spätere Verbindungen gespeichert oder nur für den aktuellen Test verwendet werden. Geänderte Schlüssel werden nicht automatisch ersetzt. Die erzeugte PowerShell und simulierte Fälle wurden geprüft; ein Delphi-13-Win64-IDE-Build und praktische Tests mit Server und Askpass stehen aus. Die Benutzeranleitung ist noch an diesen Ablauf anzupassen.
+1. Unter **Einstellungen → Paperless Extern** die Serververbindung und den Backupordner eintragen und **Serverdaten Speichern** wählen. Der Standardpfad ist `/srv/paperless_backup`. **Backupordner anlegen** prüft nach Bestätigung den freien Platz am Ziel oder am nächsten vorhandenen Elternordner und legt den Ordner anschließend per SSH an.
+2. Im Serverbetrieb **Paperless Backup Starten** wählen. **Ja** startet das Backup. **Nein** ruft den Status des letzten oder laufenden Server-Backups ab.
+3. Nach einem erfolgreichen Lauf den angebotenen Download mit **Ja** starten. Für ein vorhandenes Backup **Backup vom Server laden** wählen, einen vollständigen Zeitstempelordner aus der Liste auswählen und mit **Weiter** zur Windows-Ordnerauswahl gehen. Die Liste zeigt die neueste Sicherung zuerst.
+4. Den Windows-Zielordner auswählen. Der Download legt darin nach vollständiger Übertragung und Größenprüfung den Zeitstempelordner an. Ein vorhandener gleichnamiger Ordner bleibt erhalten. Der Fortschritt erscheint in der Anwendung. Eine erreichbare Netzwerkfreigabe kann ebenfalls als Ziel dienen.
 
-Stand 11.11.2026: Die externe Serveranbindung ist in Vorbereitung. Serverdaten und Anmeldeart werden gespeichert; Passwort und SSH-Key-Passphrase liegen in der Windows-Anmeldeinformationsverwaltung. Der sichtbare SSH-Test prüft Docker Compose sowie Existenz und Lesbarkeit der Compose-Datei; ein manueller Test mit Passwort wurde vom Benutzer bestätigt. Der optionale Askpass-Helfer für gespeicherte Zugangsdaten ist noch nicht praktisch mit ssh.exe bestätigt. Externe Backup-, Restore-, Update- und Zeitplanfunktionen sind noch nicht implementiert. Lokale Einstellungen und bestehende geplante Aufgaben bleiben getrennt. Historische Angaben weiter unten sind anhand des aktuellen Quellcodes und neuerer Revisionen zu prüfen.
+### Server-Backup unter Windows einspielen
 
+Auf **Lokale Installation** umschalten und **Backup Wiederherstellen** wählen. Den heruntergeladenen Zeitstempelordner selbst auswählen. Die Wiederherstellung ersetzt die Daten der ausgewählten lokalen Paperless-Installation. Vorher bei Bedarf deren aktuellen Stand sichern.
+
+Der Server schreibt das Backup im lokalen PG18-Dateiformat. Die Wiederherstellung verwendet den UTF-8-SQL-Dump sowie die Archive `data`, `media` und `export`. Das zusätzlich gesicherte physische DB-Archiv ist für den regulären Restore nicht erforderlich. Der Backupordner enthält auch den Paperless Secret Key und die Image-Metadaten. Eine vorhandene verschlüsselte Maildatei wird mitgesichert.
+
+### Betrieb und Fehlersuche
+
+Das Backup prüft PostgreSQL 18, die tatsächlich eingebundenen Quellen und den freien Platz am gespeicherten Ziel. Ein eigener Docker-Backupcontainer hält Paperless während der Sicherung vorübergehend an. Er startet die gestoppten Dienste wieder und gibt den Zeitstempelordner nach erfolgreicher Archivprüfung frei. Bei Fehlern können Teildateien in einem `.paperless-*.partial`-Ordner verbleiben. Ein gestarteter Container kann bei unterbrochener SSH-Verbindung weiterlaufen.
+
+Der erste Lauf benötigt gegebenenfalls Zugriff auf das Docker-CLI-Basisimage. Der SSH-Benutzer braucht Zugriff auf den lokalen Docker-Socket, Leserechte an den Sicherungsquellen und Schreibrechte am Backupziel. Die automatische SSH-Startprüfung zeigt den letzten Verbindungsstatus an. Neue Server-Fingerabdrücke vor der Bestätigung unabhängig vergleichen. Geänderte Schlüssel werden nicht automatisch ersetzt.
+
+Die erzeugten PowerShell-Skripte bleiben pro Aufruf unter `Server` im Windows-Laufzeitordner. Die Ergebnismeldung zeigt den Skriptpfad. Das Skript zum Backupstart enthält auch den Linux-Starter und den Backupcontainer-Ablauf. SSH-Passwörter und Passphrasen bleiben in der Windows-Anmeldeinformationsverwaltung.
+
+Beim lokalen Speichern mit Neustart adressiert das Updateskript PostgreSQL über den Compose-Dienst `db`. Vor den Datenbankbefehlen wartet es auf PostgreSQL. Dadurch hängt dieser Schritt nach einem Wechsel aus dem Servermodus nicht von gespeicherten Containernamen ab.
 
 ## Stand / Status – 08.10.2026
 
