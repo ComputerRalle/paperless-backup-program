@@ -155,6 +155,7 @@
         </DCCReference>
         <DCCReference Include="AppConfig.pas"/>
         <DCCReference Include="ExternPaperless.pas"/>
+        <DCCReference Include="ExternalStartupCheck.pas"/>
         <DCCReference Include="AppLogger.pas"/>
         <DCCReference Include="AppDialogs.pas"/>
         <DCCReference Include="Crypto.pas"/>

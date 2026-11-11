@@ -2,6 +2,8 @@
 
 ## Aktueller Stand Serveranbindung – 11.11.2026
 
+Die automatische SSH-Startprüfung für Paperless Extern verwendet die gespeicherten Serverdaten und Windows-Zugangsdaten. Im Kopf steht je nach Testergebnis „Server verbunden“ oder „Server nicht verbunden“; fehlende Verbindungsdaten und die laufende Prüfung werden gesondert angezeigt. Der Status beschreibt den letzten Test, keine dauerhaft offene SSH-Verbindung. Unbekannte Server-Fingerabdrücke müssen unabhängig verglichen und bestätigt werden; bestätigte Schlüssel können nach erfolgreicher Anmeldung für spätere Verbindungen gespeichert oder nur für den aktuellen Test verwendet werden. Geänderte Schlüssel werden nicht automatisch ersetzt. Die erzeugte PowerShell und simulierte Fälle wurden geprüft; ein Delphi-13-Win64-IDE-Build und praktische Tests mit Server und Askpass stehen aus. Die Benutzeranleitung ist noch an diesen Ablauf anzupassen.
+
 Stand 11.11.2026: Die externe Serveranbindung ist in Vorbereitung. Serverdaten und Anmeldeart werden gespeichert; Passwort und SSH-Key-Passphrase liegen in der Windows-Anmeldeinformationsverwaltung. Der sichtbare SSH-Test prüft Docker Compose sowie Existenz und Lesbarkeit der Compose-Datei; ein manueller Test mit Passwort wurde vom Benutzer bestätigt. Der optionale Askpass-Helfer für gespeicherte Zugangsdaten ist noch nicht praktisch mit ssh.exe bestätigt. Externe Backup-, Restore-, Update- und Zeitplanfunktionen sind noch nicht implementiert. Lokale Einstellungen und bestehende geplante Aufgaben bleiben getrennt. Historische Angaben weiter unten sind anhand des aktuellen Quellcodes und neuerer Revisionen zu prüfen.
 
 

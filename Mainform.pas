@@ -257,6 +257,12 @@ type
     function VersionToInt(const V: string): string;
 
   private
+    FStartupCheckHandle: THandle;
+    FStartupCheckTimer: TTimer;
+    FStartupCheckResultPath: string;
+    FStartupCheckOnce: Boolean;
+    FStartupCheckInvalidated: Boolean;
+    FExternalConnectionHeader: string;
     FExternalTestTimer: TTimer;
     FExternalTestResultPath: string;
     FExternalTestInvalidated: Boolean;
@@ -274,6 +280,9 @@ type
     FRetentionRestartChoice: Integer;
     FRetentionUpdateRequested: Boolean;
     FRetentionUpdateSucceeded: Boolean;
+    procedure CancelExternalStartupCheck;
+    procedure BeginExternalStartupCheck;
+    procedure StartupCheckTimerTick(Sender: TObject);
     procedure ExternalTestTimerTick(Sender: TObject);
     procedure LoadStoredInstallationMode;
     procedure LoadExternalServerSettings;
@@ -351,6 +360,8 @@ var
 
 
 implementation
+
+uses ExternalStartupCheck;
 {$R *.dfm}
 // Eine erzeugte Skriptdatei im Windows-Dateisystem als versteckt markieren.
 procedure MarkGeneratedScriptHidden(const ScriptPath: string);
@@ -1558,7 +1569,14 @@ var
   HeaderText: string;
 begin
   if ExternalInstallationSelected then
-    HeaderText := 'Paperless Backup Programm - Server'
+  begin
+    HeaderText := 'Paperless Backup Programm - Server';
+    if (FExternalConnectionHeader = 'verbunden') or
+       (FExternalConnectionHeader = 'nicht verbunden') then
+      HeaderText := HeaderText + ' ' + FExternalConnectionHeader
+    else if FExternalConnectionHeader <> '' then
+      HeaderText := HeaderText + ' - ' + FExternalConnectionHeader;
+  end
   else
     HeaderText := 'Paperless Backup Programm - Lokal';
   Label1.Caption := HeaderText;
@@ -1827,6 +1845,8 @@ begin
     end;
     ExternalInstallationSelected := NewExternal;
     LocalInstallationSelected := not NewExternal;
+    CancelExternalStartupCheck;
+    FExternalConnectionHeader := 'nicht verbunden';
     if LocalInstallationSelected then FLocalStartupPending := False;
     UpdateInstallationModeHeaders;
     ProtectCustomFilesCB.Enabled := LocalInstallationSelected and not FLocalStartupPending;
@@ -1891,6 +1911,163 @@ begin
   Result := Result + 'docker-compose.yml';
 end;
 
+// Ask the background check to stop before another prompt or saved-key change.
+// Bei Profilaenderung oder Programmende keinen veralteten Test fortsetzen.
+procedure TMainformFrm.CancelExternalStartupCheck;
+begin
+  FStartupCheckInvalidated := True;
+  if (FStartupCheckHandle <> 0) and (FStartupCheckResultPath <> '') and
+     (WaitForSingleObject(FStartupCheckHandle, 0) = WAIT_TIMEOUT) then
+    try
+      TFile.WriteAllText(FStartupCheckResultPath + '.cancel', '', TEncoding.UTF8);
+    except
+      // The result is still ignored if the temporary marker cannot be written.
+      // Das Ergebnis wird auch ohne Abbruchdatei nicht mehr uebernommen.
+    end;
+end;
+
+// Start one asynchronous SSH check using the loaded server profile.
+// Eine asynchrone SSH-Pruefung mit dem geladenen Serverprofil starten.
+procedure TMainformFrm.BeginExternalStartupCheck;
+var
+  Host, UserName, KeyFile, SettingsPath: string;
+  PortNumber: Integer;
+  Ch: Char;
+  UseKey: Boolean;
+begin
+  if FStartupCheckOnce or not ExternalInstallationSelected then Exit;
+  FStartupCheckOnce := True;
+  Host := Trim(ExternalHostEdit.Text);
+  UserName := Trim(ExternalUserEdit.Text);
+  KeyFile := Trim(ExternalKeyEdit.Text);
+  UseKey := ExternalAuthRadioGroup.ItemIndex = 1;
+  if (Host = '') or (UserName = '') or (Trim(ExternalPortEdit.Text) = '') or
+     (UseKey and (KeyFile = '')) or
+     ((not UseKey) and (ExternalPasswordEdit.Text = '')) then
+  begin
+    FExternalConnectionHeader := 'keine Verbindungsdaten';
+    UpdateInstallationModeHeaders;
+    Exit;
+  end;
+  if not TryStrToInt(Trim(ExternalPortEdit.Text), PortNumber) or
+     (PortNumber < 1) or (PortNumber > 65535) then
+  begin
+    FExternalConnectionHeader := 'nicht verbunden';
+    UpdateInstallationModeHeaders;
+    CenteredShowMessage('Paperless extern: Der gespeicherte SSH-Port ist ungültig.');
+    Exit;
+  end;
+  for Ch in Host do
+    if not CharInSet(Ch, ['A'..'Z', 'a'..'z', '0'..'9', '.', '-', ':', '_']) then
+    begin
+      FExternalConnectionHeader := 'nicht verbunden';
+      UpdateInstallationModeHeaders;
+      CenteredShowMessage('Paperless extern: Der gespeicherte Host ist ungültig.');
+      Exit;
+    end;
+  if Host[1] = '-' then
+  begin
+    FExternalConnectionHeader := 'nicht verbunden';
+    UpdateInstallationModeHeaders;
+    CenteredShowMessage('Paperless extern: Der gespeicherte Host ist ungültig.');
+    Exit;
+  end;
+  for Ch in UserName do
+    if not CharInSet(Ch, ['A'..'Z', 'a'..'z', '0'..'9', '.', '-', '_']) then
+    begin
+      FExternalConnectionHeader := 'nicht verbunden';
+      UpdateInstallationModeHeaders;
+      CenteredShowMessage('Paperless extern: Der gespeicherte Benutzername ist ungültig.');
+      Exit;
+    end;
+  if UseKey and not FileExists(KeyFile) then
+  begin
+    FExternalConnectionHeader := 'nicht verbunden';
+    UpdateInstallationModeHeaders;
+    CenteredShowMessage('Paperless extern: Die SSH-Key-Datei wurde nicht gefunden.');
+    Exit;
+  end;
+  SettingsPath := IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName;
+  try
+    if FStartupCheckTimer = nil then
+    begin
+      FStartupCheckTimer := TTimer.Create(Self);
+      FStartupCheckTimer.Enabled := False;
+      FStartupCheckTimer.Interval := 500;
+      FStartupCheckTimer.OnTimer := StartupCheckTimerTick;
+    end;
+    FStartupCheckInvalidated := False;
+    FExternalConnectionHeader := 'Verbindung wird geprüft';
+    UpdateInstallationModeHeaders;
+    ExternalConnectionStatusLbl.Caption := 'Verbindung wird getestet ...';
+    TestExternalConnectionBtn.Enabled := False;
+    StartExternalStartupCheck(Host, UserName, PortNumber, KeyFile, SettingsPath,
+      Application.ExeName, UseKey, FStartupCheckHandle, FStartupCheckResultPath);
+    FStartupCheckTimer.Enabled := True;
+  except
+    on E: Exception do
+    begin
+      if FStartupCheckHandle <> 0 then CloseHandle(FStartupCheckHandle);
+      FStartupCheckHandle := 0;
+      FExternalConnectionHeader := 'nicht verbunden';
+      UpdateInstallationModeHeaders;
+      TestExternalConnectionBtn.Enabled := True;
+      ExternalConnectionStatusLbl.Caption := 'Verbindung fehlgeschlagen';
+      CenteredShowMessage('Paperless extern: Der Verbindungstest konnte nicht gestartet werden. ' + E.Message);
+    end;
+  end;
+end;
+
+// Only apply a completed result to the same unchanged server profile.
+// Ein Ergebnis nur fuer das unveraenderte Serverprofil uebernehmen.
+procedure TMainformFrm.StartupCheckTimerTick(Sender: TObject);
+var
+  TestResult: string;
+begin
+  if FStartupCheckHandle = 0 then Exit;
+  if WaitForSingleObject(FStartupCheckHandle, 0) <> WAIT_OBJECT_0 then Exit;
+  FStartupCheckTimer.Enabled := False;
+  CloseHandle(FStartupCheckHandle);
+  FStartupCheckHandle := 0;
+  TestExternalConnectionBtn.Enabled := True;
+  TestResult := 'unknown';
+  try
+    if FileExists(FStartupCheckResultPath) then
+      TestResult := Trim(TFile.ReadAllText(FStartupCheckResultPath, TEncoding.UTF8));
+  except
+    TestResult := 'unknown';
+  end;
+  if FileExists(FStartupCheckResultPath) then DeleteFile(FStartupCheckResultPath);
+  if FileExists(FStartupCheckResultPath + '.cancel') then
+    DeleteFile(FStartupCheckResultPath + '.cancel');
+  FStartupCheckResultPath := '';
+  if FStartupCheckInvalidated or not ExternalInstallationSelected or ApplicationClosing then Exit;
+  if (TestResult = 'success') or (TestResult = 'save_failed') then
+  begin
+    FExternalConnectionHeader := 'verbunden';
+    ExternalConnectionStatusLbl.Caption := 'Verbindung hergestellt (SSH-Test)';
+    UpdateInstallationModeHeaders;
+    if TestResult = 'save_failed' then
+      CenteredShowMessage('Die SSH-Verbindung wurde hergestellt, der Server-Fingerabdruck konnte aber nicht gespeichert werden.');
+    Exit;
+  end;
+  FExternalConnectionHeader := 'nicht verbunden';
+  ExternalConnectionStatusLbl.Caption := 'Verbindung fehlgeschlagen';
+  UpdateInstallationModeHeaders;
+  if TestResult = 'cancelled' then
+    ExternalConnectionStatusLbl.Caption := 'Verbindungsprüfung abgebrochen'
+  else if TestResult = 'unreachable' then
+    CenteredShowMessage('Paperless extern nicht erreichbar.')
+  else if TestResult = 'auth' then
+    CenteredShowMessage('Paperless extern erreichbar, Anmeldung abgelehnt. Bitte prüfen Sie die Zugangsdaten und die Anmeldeart.')
+  else if TestResult = 'changed_host' then
+    CenteredShowMessage('Der gespeicherte Server-Fingerabdruck hat sich geändert. Bitte prüfen Sie den Server-Schlüssel unabhängig. Die Verbindung wurde abgebrochen.')
+  else if (TestResult = 'hostkey') or (TestResult = 'unknown_host') then
+    CenteredShowMessage('Der Server-Fingerabdruck konnte nicht bestätigt werden. Bitte prüfen Sie den Server-Schlüssel.')
+  else
+    CenteredShowMessage('Paperless extern: Der SSH-Verbindungstest ist fehlgeschlagen.');
+end;
+
 // Read non-secret settings separately from the protected Windows credentials.
 // Allgemeine Serverdaten und geschuetzte Zugangsdaten getrennt laden.
 procedure TMainformFrm.LoadExternalServerSettings;
@@ -1928,6 +2105,11 @@ end;
 procedure TMainformFrm.ExternalConnectionSettingsChanged(Sender: TObject);
 begin
   FExternalTestInvalidated := True;
+  CancelExternalStartupCheck;
+  FExternalConnectionHeader := 'nicht verbunden';
+  if not (csLoading in ComponentState) and Assigned(Label1) and Assigned(Label8) and
+     Assigned(Label5) and Assigned(Label2) and Assigned(Label27) and Assigned(Label25) then
+    UpdateInstallationModeHeaders;
   ExternalConnectionStatusLbl.Caption := 'Verbindung nicht getestet';
 end;
 
@@ -1957,9 +2139,17 @@ begin
     if FExternalTestInvalidated then
       ExternalConnectionStatusLbl.Caption := 'Serverdaten geaendert - erneut testen'
     else if TestResult = 'success' then
-      ExternalConnectionStatusLbl.Caption := 'Verbindung hergestellt (SSH-Test)'
+    begin
+      ExternalConnectionStatusLbl.Caption := 'Verbindung hergestellt (SSH-Test)';
+      FExternalConnectionHeader := 'verbunden';
+      UpdateInstallationModeHeaders;
+    end
     else
+    begin
       ExternalConnectionStatusLbl.Caption := 'Verbindung fehlgeschlagen';
+      FExternalConnectionHeader := 'nicht verbunden';
+      UpdateInstallationModeHeaders;
+    end;
   except
     // A writer may still hold the result file; retry on the next tick.
     // Wenn die Datei noch geschrieben wird, beim naechsten Timer erneut lesen.
@@ -2437,6 +2627,12 @@ end;
 procedure TMainformFrm.FormClose(Sender: TObject; var Action: TCloseAction);
 begin
   ApplicationClosing := True;
+  CancelExternalStartupCheck;
+  if FStartupCheckHandle <> 0 then
+  begin
+    CloseHandle(FStartupCheckHandle);
+    FStartupCheckHandle := 0;
+  end;
   WantsInstall := False;
   ShouldOpenPaperless := False;
   FreeAndNil(ScriptBusyControlStates);
@@ -2736,6 +2932,7 @@ begin
   EnsureExternalPaperlessSection(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
     LoadExternalServerSettings;
+    BeginExternalStartupCheck;
   except
     on E: Exception do
       CenteredShowMessage('Serverdaten konnten nicht geladen werden. Speichern bleibt gesperrt. ' + E.Message);
