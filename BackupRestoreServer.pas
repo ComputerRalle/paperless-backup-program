@@ -34,11 +34,15 @@ uses
   Winapi.Windows, Winapi.ShellAPI, System.SysUtils, System.Classes, System.IOUtils,
   Vcl.Forms, AppConfig, AppDialogs, ExternPaperless;
 
+// Quote a value as a PowerShell single-quoted literal.
+// Einen Wert als einfach zitiertes PowerShell-Literal maskieren.
 function PsLiteral(const Value: string): string;
 begin
   Result := #39 + StringReplace(Value, #39, #39#39, [rfReplaceAll]) + #39;
 end;
 
+// Restrict the host to characters accepted by the SSH invocation.
+// Den Host auf die fuer den SSH-Aufruf zugelassenen Zeichen beschraenken.
 function IsValidHost(const Value: string): Boolean;
 var
   C: Char;
@@ -50,6 +54,8 @@ begin
   Result := True;
 end;
 
+// Restrict the SSH user name to supported characters.
+// Den SSH-Benutzernamen auf unterstuetzte Zeichen beschraenken.
 function IsValidUser(const Value: string): Boolean;
 var
   C: Char;
@@ -61,6 +67,8 @@ begin
   Result := True;
 end;
 
+// Detect control characters in server paths and project names.
+// Steuerzeichen in Serverpfaden und Projektnamen erkennen.
 function HasControlChars(const Value: string): Boolean;
 var
   C: Char;
@@ -70,6 +78,8 @@ begin
   Result := False;
 end;
 
+// Use the default Compose file for a directory and retain explicit YAML names.
+// Bei einem Ordner die Standard-Compose-Datei verwenden und YAML-Dateinamen beibehalten.
 function RemoteComposeFile(const Value: string): string;
 var
   S: string;
@@ -82,6 +92,8 @@ begin
   Result := Result + 'docker-compose.yml';
 end;
 
+// Start the read-only space estimate; server backup and restore are not implemented yet.
+// Die lesende Speicherplatzschaetzung starten; Server-Backup und Restore sind noch nicht implementiert.
 procedure StartServerBackup;
 var
   Ini: TAppSettingsIni;
@@ -140,6 +152,8 @@ begin
       if UseKey then Lines.Add('$useKey = $true') else Lines.Add('$useKey = $false');
       Lines.Add('$ErrorActionPreference = ''Stop''');
       Lines.Add('$privateDir = $null');
+// Quote arguments for Windows and the remote POSIX shell.
+// Argumente fuer Windows und die POSIX-Shell des Servers maskieren.
       Lines.Add('function WinArg([string]$s) {');
       Lines.Add(' $b=New-Object Text.StringBuilder; [void]$b.Append(''"''); $n=0');
       Lines.Add(' foreach($c in $s.ToCharArray()) {');
@@ -150,6 +164,8 @@ begin
       Lines.Add(' if($n){[void]$b.Append((''\''*(2*$n)))};[void]$b.Append(''"'');$b.ToString()');
       Lines.Add('}');
       Lines.Add('function ShArg([string]$s) {$q=[string][char]39;return $q+$s.Replace($q,($q+''\''+$q+$q))+$q}');
+// Transfer SSH streams as bytes, keep stderr separate, and check the process result.
+// SSH-Daten als Bytes uebertragen, stderr getrennt halten und das Prozessergebnis pruefen.
       Lines.Add('function Ssh([string]$cmd,[byte[]]$inputBytes) {');
       Lines.Add(' $si=New-Object Diagnostics.ProcessStartInfo; $si.FileName=(Get-Command ssh.exe -ErrorAction Stop).Source');
       Lines.Add(' $a=@(''-T'',''-o'',''StrictHostKeyChecking=yes'',''-o'',''UpdateHostKeys=no'',''-o'',''ConnectTimeout=10'',''-o'',''NumberOfPasswordPrompts=1'',''-p'',$port,''-l'',$serverUser)');
@@ -173,6 +189,8 @@ begin
       Lines.Add('function Remote([string]$cmd){return Text (Ssh $cmd $null)}');
       Lines.Add('try {');
       Lines.Add(' Add-Type -AssemblyName System.Windows.Forms');
+// Create a protected temporary workspace for the server Compose copy.
+// Einen geschuetzten temporaeren Arbeitsbereich fuer die Server-Compose-Kopie anlegen.
       Lines.Add(' $serverDir=Join-Path $runtimeDir ''Server''');
       Lines.Add(' if(-not [IO.Directory]::Exists($runtimeDir)){throw ''runtime''}');
       Lines.Add(' if(-not [IO.Directory]::Exists($serverDir)){[void][IO.Directory]::CreateDirectory($serverDir)}');
@@ -184,6 +202,8 @@ begin
       Lines.Add(' $rule=New-Object Security.AccessControl.FileSystemAccessRule($sid,[Security.AccessControl.FileSystemRights]::FullControl,$inherit,[Security.AccessControl.PropagationFlags]::None,[Security.AccessControl.AccessControlType]::Allow)');
       Lines.Add(' $acl.AddAccessRule($rule);[void][IO.Directory]::CreateDirectory($privateDir,$acl)');
       Lines.Add(' if(-not [IO.Directory]::GetAccessControl($privateDir).AreAccessRulesProtected){throw ''acl''}');
+// Copy and read the original Compose bytes locally and compare the hash with the server file.
+// Die urspruenglichen Compose-Bytes lokal kopieren und lesen; den Hash mit der Serverdatei vergleichen.
       Lines.Add(' $raw=Ssh (''cat -- ''+(ShArg $composeFile)) $null');
       Lines.Add(' if($raw.Length -eq 0){throw ''empty''}');
       Lines.Add(' $local=Join-Path $privateDir ''docker-compose.yml''');
@@ -198,10 +218,14 @@ begin
       Lines.Add(' $context=(Remote ''case x${DOCKER_HOST-} in x|xunix:///*) :;; *) exit 95;; esac; docker context inspect'');$context=$context|ConvertFrom-Json');
       Lines.Add(' if(-not $context -or -not $context[0].Endpoints.docker.Host.StartsWith(''unix:///'')){throw ''docker_remote''}');
       Lines.Add(' $dir=$composeFile.Substring(0,$composeFile.LastIndexOf(''/''));if(-not $dir){$dir=''/''}');
+// Normalize the locally read bytes on the server and parse the JSON in local memory.
+// Die lokal gelesenen Bytes auf dem Server aufloesen und das JSON lokal im Speicher auswerten.
       Lines.Add(' $cmd=''cd ''+(ShArg $dir)+'' && docker compose --project-directory ''+(ShArg $dir)+'' -f -''');
       Lines.Add(' if($project){$cmd+='' -p ''+(ShArg $project)}');
       Lines.Add(' $model=(Text (Ssh ($cmd+'' config --format json'') $localBytes))|ConvertFrom-Json');
       Lines.Add(' if(-not $model.services){throw ''services''}');
+// Resolve supported volume and bind sources; reject unsupported or inaccessible paths.
+// Unterstuetzte Volume- und Bind-Quellen aufloesen; nicht unterstuetzte oder unzugaengliche Pfade ablehnen.
       Lines.Add(' $paths=New-Object ''System.Collections.Generic.HashSet[string]'' ([StringComparer]::Ordinal)');
       Lines.Add(' foreach($service in $model.services.PSObject.Properties){foreach($mount in $service.Value.volumes){');
       Lines.Add('  if($null -eq $mount){continue};$source=[string]$mount.source');
@@ -224,6 +248,8 @@ begin
       Lines.Add('  [void]$paths.Add($path)');
       Lines.Add(' }}');
       Lines.Add(' if($paths.Count -eq 0){throw ''paths''}');
+// Avoid counting nested paths twice and estimate source size and available space.
+// Verschachtelte Pfade nicht doppelt zaehlen und Quellgroesse sowie freien Speicherplatz schaetzen.
       Lines.Add(' $chosen=New-Object ''System.Collections.Generic.List[string]''');
       Lines.Add(' foreach($path in ($paths|Sort-Object Length)){');
       Lines.Add('  $covered=$false;foreach($parent in $chosen){if($path.Equals($parent,[StringComparison]::Ordinal) -or $path.StartsWith($parent+''/'',[StringComparison]::Ordinal)){$covered=$true;break}}');
@@ -242,6 +268,8 @@ begin
       Lines.Add(' if($_.Exception.Message -eq ''changed''){$why=''Die Compose-Datei wurde während der Prüfung geändert. Bitte erneut prüfen.''}');
       Lines.Add(' if($_.Exception.Message -eq ''runtime'' -or $_.Exception.Message -eq ''server_link'' -or $_.Exception.Message -eq ''acl''){$why=''Der geschützte Server-Arbeitsordner konnte nicht sicher angelegt werden.''}');
       Lines.Add(' [Windows.Forms.MessageBox]::Show("Der Speicherplatz konnte nicht zuverlässig ermittelt werden.`r`nServer: $serverHost`r`n`r`n$why`r`n`r`nEs wurde kein Backup gestartet.",''Server-Backup: Prüfung fehlgeschlagen'',''OK'',''Warning'')|Out-Null');
+// Remove the temporary Compose copy and warn if cleanup fails.
+// Die temporaere Compose-Kopie entfernen und bei fehlgeschlagener Bereinigung warnen.
       Lines.Add('}finally{');
       Lines.Add(' $cleanupFailed=$false');
       Lines.Add(' if($local -and [IO.File]::Exists($local)){try{[IO.File]::Delete($local)}catch{$cleanupFailed=$true}}');

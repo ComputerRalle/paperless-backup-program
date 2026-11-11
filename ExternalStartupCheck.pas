@@ -35,11 +35,15 @@ implementation
 
 uses System.SysUtils, System.Classes, System.IOUtils;
 
+// Quote a value as a PowerShell single-quoted literal.
+// Einen Wert als einfach zitiertes PowerShell-Literal maskieren.
 function PsLiteral(const Value: string): string;
 begin
   Result := #39 + StringReplace(Value, #39, #39#39, [rfReplaceAll]) + #39;
 end;
 
+// Start the background SSH test and return its process handle and result-file path.
+// Den SSH-Test im Hintergrund starten und Prozesshandle sowie Ergebnisdateipfad zurueckgeben.
 procedure StartExternalStartupCheck(const Host, UserName: string; PortNumber: Integer;
   const KeyFile, SettingsPath, ExePath: string; UseKey: Boolean;
   out ProcessHandle: THandle; out ResultPath: string);
@@ -74,6 +78,8 @@ begin
     Lines.Add('$resultPath = ' + PsLiteral(ResultPath));
     Lines.Add('$cancelPath = $resultPath + ''.cancel''');
     Lines.Add('function Assert-Active { if (Test-Path -LiteralPath $cancelPath) { throw ''cancelled'' } }');
+// Require a known host key and configure the chosen authentication method.
+// Einen bekannten Hostschluessel verlangen und die gewaehlte Anmeldeart konfigurieren.
     Lines.Add('$baseArgs = @(''-o'', ''StrictHostKeyChecking=yes'', ''-o'', ''UpdateHostKeys=no'', ''-o'', ''ConnectTimeout=10'', ''-o'', ''NumberOfPasswordPrompts=1'', ''-p'', $port, ''-l'', $serverUser)');
     if UseKey then
       Lines.Add('$baseArgs += @(''-o'', ''IdentitiesOnly=yes'', ''-i'', ' + PsLiteral(KeyFile) + ')')
@@ -103,6 +109,8 @@ begin
     Lines.Add('  $result = Invoke-Check ''''');
     Lines.Add('  if ($result -eq ''unknown_host'') {');
     Lines.Add('    if (Test-Path -LiteralPath $savedKeys) { $result = Invoke-Check $savedKeys }');
+// Require independent fingerprint confirmation before testing an unknown server key.
+// Vor dem Test eines unbekannten Serverschluessels den unabhaengigen Fingerabdruckvergleich verlangen.
     Lines.Add('    if ($result -eq ''unknown_host'') {');
     Lines.Add('      Assert-Active');
     Lines.Add('      $knownBefore = if (Test-Path -LiteralPath $savedKeys) { [Convert]::ToBase64String([IO.File]::ReadAllBytes($savedKeys)) } else { $null }');
@@ -127,6 +135,8 @@ begin
     Lines.Add('          Assert-Active');
     Lines.Add('          if ($save -eq [Windows.Forms.DialogResult]::Cancel) { $result = ''cancelled'' }');
     Lines.Add('          else { $result = Invoke-Check $tempKeys }');
+// Save confirmed keys only after a successful login and an unchanged known_hosts file.
+// Bestaetigte Schluessel erst nach erfolgreicher Anmeldung und bei unveraenderter known_hosts-Datei speichern.
     Lines.Add('          if ($result -eq ''success'' -and $save -eq [Windows.Forms.DialogResult]::Yes) {');
     Lines.Add('            Assert-Active');
     Lines.Add('            try {');
@@ -151,6 +161,8 @@ begin
     Lines.Add('    }');
     Lines.Add('  }');
     Lines.Add('} catch { if (Test-Path -LiteralPath $cancelPath) { $result = ''cancelled'' } else { $result = ''unknown'' } }');
+// Publish the result unless cancelled, then remove temporary files.
+// Das Ergebnis ausser bei Abbruch bereitstellen und temporaere Dateien entfernen.
     Lines.Add('finally {');
     Lines.Add('  if (-not (Test-Path -LiteralPath $cancelPath)) { try { [IO.File]::WriteAllText($resultPath, $result, [Text.Encoding]::UTF8) } catch {} }');
     Lines.Add('  Remove-Item -LiteralPath $tempKeys -Force -ErrorAction SilentlyContinue');

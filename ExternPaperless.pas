@@ -73,6 +73,8 @@ begin
   Result := 'PaperlessBackup/' + ExpandFileName(SettingsPath) + '/' + SecretName;
 end;
 
+// Read the selected Windows credential; a missing entry returns an empty value.
+// Das gewaehlte Windows-Zugangsdatenfeld lesen; ein fehlender Eintrag liefert einen leeren Wert.
 function ReadServerSecret(const SettingsPath, SecretName: string): string;
 var
   CredData: PCREDENTIAL;
@@ -98,6 +100,8 @@ begin
   end;
 end;
 
+// Store the secret for this Windows user, or delete it when the value is empty.
+// Das Geheimnis fuer diesen Windows-Benutzer speichern oder bei leerem Wert loeschen.
 procedure WriteServerSecret(const SettingsPath, SecretName, Value: string);
 var
   CredData: Winapi.WinCred.CREDENTIALW;
@@ -138,6 +142,8 @@ var
   Line, Header, AddedText: string;
   Ch: Char;
 
+// Read a character using the detected INI byte width and byte order.
+// Ein Zeichen mit der erkannten Bytebreite und Byte-Reihenfolge der INI lesen.
   function ReadCharacter(Index: Integer): Char;
   begin
     if UnitSize = 1 then
@@ -201,6 +207,8 @@ begin
     if ((Length(Data) - Start) mod UnitSize) <> 0 then
       raise Exception.Create('Die Einstellungsdatei hat eine ungueltige Codierung.');
 
+// Find section boundaries without rewriting the original INI content.
+// Abschnittsgrenzen suchen, ohne den urspruenglichen INI-Inhalt umzuschreiben.
     HasPaperless := False;
     HasVersions := False;
     InPaperless := False;
