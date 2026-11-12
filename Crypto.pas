@@ -244,7 +244,7 @@ end;
 // Eine feste Anzahl Bytes lesen und den Offset weiterstellen.
 function ReadBytes(const Source: TBytes; var Offset: Integer; const Count: Integer): TBytes;
 begin
-  if (Count < 0) or (Offset + Count > Length(Source)) then
+  if (Offset < 0) or (Count < 0) or (Int64(Offset) + Count > Length(Source)) then
     raise Exception.Create('Verschluesselte Daten sind unvollstaendig.');
   SetLength(Result, Count);
   if Count > 0 then
@@ -471,6 +471,12 @@ begin
   SaltLength := ReadUInt32(EncryptedBytes, Offset);
   IvLength := ReadUInt32(EncryptedBytes, Offset);
   CipherLength := ReadUInt32(EncryptedBytes, Offset);
+  // Validate untrusted lengths before converting them to Integer or allocating buffers.
+  // Fremde Längenangaben vor der Integer-Umwandlung und Speicherbelegung prüfen.
+  if (SaltLength <> SaltSize) or (IvLength <> IvSize) or
+     (CipherLength = 0) or (CipherLength mod IvSize <> 0) or
+     (Int64(Offset) + SaltLength + IvLength + CipherLength + HmacKeySize <> Length(EncryptedBytes)) then
+    raise Exception.Create('Die verschlüsselte Datei enthält ungültige Längenangaben.');
   Salt := ReadBytes(EncryptedBytes, Offset, SaltLength);
   Iv := ReadBytes(EncryptedBytes, Offset, IvLength);
   CipherText := ReadBytes(EncryptedBytes, Offset, CipherLength);

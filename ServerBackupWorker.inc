@@ -27,6 +27,8 @@ begin
     Lines.Add('case "${DOCKER_HOST:-unix://$socket}" in "unix://$socket") ;; *) exit 1;; esac');
     Lines.Add('[ "$(docker context inspect --format ''{{.Endpoints.docker.Host}}'' 2>/dev/null)" = "unix://$socket" ]');
     Lines.Add('docker info >/dev/null 2>&1');
+    Lines.Add('profile=$(printf ''%s\n%s\n%s\n'' "$compose" "$project" "$target" | sha256sum)');
+    Lines.Add('profile=${profile%% *}');
     Lines.Add('');
     Lines.Add('# Use a fixed container name as a daemon-side lock and verify its ownership before reuse.');
     Lines.Add('# Einen festen Containernamen als Sperre verwenden und vor der Wiederverwendung das Label pruefen.');
@@ -42,7 +44,10 @@ begin
     Lines.Add('  [ "$(docker inspect --format ''{{index .Config.Labels "de.computerralle.paperless.backup"}}'' "$old" 2>/dev/null)" = pg18 ]');
     Lines.Add('  old_status=$(docker inspect --format ''{{.State.Status}}'' "$old" 2>/dev/null)');
     Lines.Add('  case "$old_status" in');
-    Lines.Add('    running|restarting|paused) printf ''%s\n'' ''OK: Vorhandener Backuplauf''; exit 0;;');
+    Lines.Add('    running|restarting|paused)');
+    Lines.Add('      [ "$(docker inspect --format ''{{index .Config.Labels "de.computerralle.paperless.backup.profile"}}'' "$old")" = "$profile" ] ||');
+    Lines.Add('        { stage=''Ein Backup mit einem anderen Compose-Profil oder Backupziel läuft bereits''; exit 1; }');
+    Lines.Add('      printf ''OK: %s\n'' "$old"; exit 0;;');
     Lines.Add('    created|exited|dead) ;;');
     Lines.Add('    *) exit 1;;');
     Lines.Add('  esac');
@@ -103,10 +108,18 @@ begin
     Lines.Add('[ -d "$target" ] && [ -w "$target" ]');
     Lines.Add('total=0');
     Lines.Add('db_size=0');
+    Lines.Add('stage=''Dateitypen der Paperless-Backupquellen prüfen''');
+    Lines.Add('for source in "$data" "$media" "$export_dir"; do');
+    Lines.Add('  unfinished=$(find "$source" -mindepth 1 -maxdepth 1 -name ''.paperless-restore-*'' -print -quit)');
+    Lines.Add('  [ -z "$unfinished" ] || { stage=''Arbeitsordner einer früheren Wiederherstellung zuerst prüfen''; exit 1; }');
+    Lines.Add('  unsupported=$(find "$source" -mindepth 1 ! -type f ! -type d -print -quit)');
+    Lines.Add('  [ -z "$unsupported" ] || { stage=''Backupquelle enthält eine Verknüpfung oder Spezialdatei, die nicht wiederhergestellt werden kann''; exit 1; }');
+    Lines.Add('done');
+    Lines.Add('stage=''Backupordner und freien Speicher pruefen''');
     Lines.Add('for source in "$data" "$media" "$export_dir" "$dbdata"; do');
     Lines.Add('  case "$target/" in "$source/"*) exit 1;; esac');
     Lines.Add('  case "$source/" in "$target/"*) exit 1;; esac');
-    Lines.Add('  measure=$(du -sb -- "$source")');
+    Lines.Add('  measure=$(du -sbl -- "$source")');
     Lines.Add('  bytes=${measure%%[!0-9]*}');
     Lines.Add('  case "$bytes" in ''''|*[!0-9]*) exit 1;; esac');
     Lines.Add('  total=$((total + bytes))');
@@ -128,7 +141,7 @@ begin
     Lines.Add('build_dir=$(mktemp -d)');
     Lines.Add('cat > "$build_dir/Dockerfile" <<''PAPERLESS_DOCKERFILE''');
     Lines.Add('FROM docker:cli');
-    Lines.Add('RUN command -v flock >/dev/null || apk add --no-cache flock');
+    Lines.Add('RUN apk add --no-cache tar && (command -v flock >/dev/null || apk add --no-cache flock)');
     Lines.Add('COPY worker.sh /paperless-backup.sh');
     Lines.Add('RUN ["/bin/sh", "-n", "/paperless-backup.sh"]');
     Lines.Add('ENTRYPOINT ["/bin/sh", "/paperless-backup.sh"]');
@@ -179,6 +192,7 @@ begin
     Lines.Add('');
     Lines.Add('# Restore services stopped by this run, even when an archive fails.');
     Lines.Add('# Die in diesem Lauf gestoppten Dienste auch bei Archivfehlern starten.');
+    AddServerPaperlessReadyCheck(Lines);
     Lines.Add('resume_services() {');
     Lines.Add('  if [ "$restart_db" -eq 1 ]; then');
     Lines.Add('    docker start "$db" >/dev/null 2>&1 || return 1');
@@ -192,7 +206,7 @@ begin
     Lines.Add('  fi');
     Lines.Add('  if [ "$restart_web" -eq 1 ]; then');
     Lines.Add('    docker start "$web" >/dev/null 2>&1 || return 1');
-    Lines.Add('    [ "$(docker inspect --format ''{{.State.Running}}'' "$web" 2>/dev/null)" = true ] || return 1');
+    Lines.Add('    wait_paperless "$web" || return 1');
     Lines.Add('    restart_web=0');
     Lines.Add('  fi');
     Lines.Add('}');
@@ -301,7 +315,15 @@ begin
     Lines.Add('  archive="$partial/${prefix}_$role.tar.gz"');
     Lines.Add('  archive_progress "$archive" "$role" 9>&- &');
     Lines.Add('  archive_progress_pid=$!');
-    Lines.Add('  tar -czf "$archive" -C "/source-$role" . 2>/dev/null');
+    Lines.Add('  if [ "$role" = db_data_18 ]; then');
+    Lines.Add('    tar -czf "$archive" -C "/source-$role" . 2>/dev/null');
+    Lines.Add('  else');
+    Lines.Add('    stage="Dateitypen im Volume $role prüfen"');
+    Lines.Add('    unsupported=$(find "/source-$role" -mindepth 1 ! -type f ! -type d -print -quit)');
+    Lines.Add('    if [ -n "$unsupported" ]; then stage="Volume $role enthält eine nicht wiederherstellbare Verknüpfung oder Spezialdatei"; exit 1; fi');
+    Lines.Add('    stage="Archiv $role schreiben"');
+    Lines.Add('    tar --hard-dereference -czf "$archive" -C "/source-$role" . 2>/dev/null');
+    Lines.Add('  fi');
     Lines.Add('  stop_archive_progress');
     Lines.Add('done');
     Lines.Add('');
@@ -333,6 +355,7 @@ begin
     Lines.Add('if [ -n "$old" ]; then docker rm "$old" >/dev/null 2>&1; fi');
     Lines.Add('set -- --detach --name "$job" --restart=no --network none --stop-timeout 240 --log-driver local \');
     Lines.Add('  --label de.computerralle.paperless.backup=pg18 \');
+    Lines.Add('  --label "de.computerralle.paperless.backup.profile=$profile" \');
     Lines.Add('  --label de.computerralle.paperless.maintenance=flock-v1 \');
     Lines.Add('  --mount type=volume,src=paperless-pg18-operation-lock,dst=/operation-lock \');
     Lines.Add('  --mount "type=bind,src=$socket,dst=/var/run/docker.sock" \');
@@ -348,12 +371,10 @@ begin
     Lines.Add('  set -- "$@" --mount "type=bind,src=$mail,dst=/source-mail.enc,readonly"');
     Lines.Add('fi');
     Lines.Add('stamp=$(date +%Y-%m-%d_%H-%M-%S)');
-    Lines.Add('if ! docker run "$@" "$image" "$web" "$db" "$run" "$prefix" "$broker" "$gotenberg" "$tika" "$target" "$required" "$stamp" >/dev/null 2>&1; then');
-    Lines.Add('  # Another launcher may have acquired the container name in the meantime.');
-    Lines.Add('  # Ein anderer Aufruf kann den Containernamen zwischenzeitlich belegt haben.');
-    Lines.Add('  [ "$(docker inspect --format ''{{index .Config.Labels "de.computerralle.paperless.backup"}}:{{.State.Running}}'' "$job" 2>/dev/null)" = pg18:true ]');
-    Lines.Add('fi');
-    Lines.Add('printf ''OK: Freier Speicher %s Bytes; geschaetzter Platzbedarf mit Reserve %s Bytes.\n'' "$space" "$required"');
+    Lines.Add('id=$(docker run "$@" "$image" "$web" "$db" "$run" "$prefix" "$broker" "$gotenberg" "$tika" "$target" "$required" "$stamp" 2>/dev/null)');
+    Lines.Add('case "$id" in ''''|*[!a-f0-9]*) exit 1;; esac');
+    Lines.Add('[ "${#id}" -eq 64 ]');
+    Lines.Add('printf ''OK: %s\n'' "$id"');
     Result := StringReplace(Lines.Text, sLineBreak, #10, [rfReplaceAll]);
   finally
     Lines.Free;

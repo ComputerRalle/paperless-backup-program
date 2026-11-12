@@ -213,14 +213,15 @@ type
     procedure FormShow(Sender: TObject);
     procedure StartPaperlessBackupScriptBtnClick(Sender: TObject);
     procedure RestorePaperlessBackupBtnClick(Sender: TObject);
-    procedure CreateRestoreScript(const ComposePath, BackupFolder: string);
+    procedure CreateRestoreScript(const ComposePath, BackupFolder, PreparedKey: string;
+      const RestoreMailBytes: TBytes; const HasRestoreMail: Boolean);
     procedure StartAndMonitorCmdScript;
     procedure ConsoleToFront(PID: DWORD);
     procedure TabControl1Change(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure SaveScheduleSettings;
     procedure CreateBackupPlanBtnClick(Sender: TObject);
-    procedure CreateBackupPlanScript(const ComposePath: string; const CleanupAllowed: Boolean);
+    procedure CreateBackupPlanScript(const ComposePath: string);
     procedure CreateRestartScript(const ComposePath: string);
     procedure StartBackupPlanScriptSilent;
     procedure LoadScheduleSettings;
@@ -268,7 +269,7 @@ type
     function GetExeVersion: string;
     procedure ProgramUpdateLblClick(Sender: TObject);
     procedure ChangelogBtnClick(Sender: TObject);
-    function VersionToInt(const V: string): string;
+    function TryCompareProgramVersions(const LeftVersion, RightVersion: string; out Comparison: Integer): Boolean;
 
   private
     FServerBackupCheckActive: Boolean;
@@ -300,7 +301,8 @@ type
     // OnClick-Rekursion beim Laden, Abbrechen und Zurücksetzen nach Fehlern unterdrücken.
     FLoadingCustomFileProtection: Boolean;
     FManualBackupSucceeded: Boolean;
-    FManualBackupCancelled: Boolean;
+    FLocalRestoreActive, FLocalRestoreSucceeded: Boolean;
+    FLocalRestoreLogPath: string;
     FRetentionRestartChoice: Integer;
     FRetentionUpdateRequested: Boolean;
     FRetentionUpdateSucceeded: Boolean;
@@ -345,7 +347,7 @@ type
     procedure BeginScriptBusyState;
     procedure EndScriptBusyState;
     procedure SaveAndDisableInteractiveControls(const ParentControl: TWinControl);
-    function EncryptEmailEnvForBackup(const TargetBackupPath: string): Boolean;
+    function EncryptEmailEnvForBackup(out EncryptedMailPath: string): Boolean;
     function RestoreEmailEnvFromBackup(const SourceBackupPath: string; out MailBytes: TBytes; out HasMail: Boolean): Boolean;
     function ValidateRestoreBackupFolder(const BackupFolder: string): Boolean;
   public
@@ -582,7 +584,7 @@ end;
 
 // Prepare the restore key; protected Compose files remain authoritative.
 // Restore-Schlüssel vorbereiten; bei Dateischutz ist die Compose-Datei maßgeblich.
-function ApplyPaperlessSecretKeyForRestore(const BackupFolder: string; out Cancelled: Boolean; out PreparedKey: string): Boolean;
+function ApplyPaperlessSecretKeyForRestore(const BackupFolder, RestoreComposeFile: string; out Cancelled: Boolean; out PreparedKey: string): Boolean;
 var
   SecretKey, ComposeKey, SecretKeyFilePath, ProtectedComposePath: string;
   ProtectedCompose, KeyProblem: Boolean;
@@ -592,7 +594,7 @@ begin
   PreparedKey := '';
   SecretKeyFilePath := IncludeTrailingPathDelimiter(BackupFolder) + PaperlessSecretKeyFileName;
   try
-    ProtectedComposePath := IncludeTrailingPathDelimiter(AppDataFolder) + DockerComposeFileName;
+    ProtectedComposePath := RestoreComposeFile;
     ProtectedCompose := CustomFileProtected(ProtectedComposePath);
     SecretKey := '';
     KeyProblem := not FileExists(SecretKeyFilePath);
@@ -683,66 +685,61 @@ begin
     Ini.Free;
   end;
 end;
-// update.ini vom Webserver laden und anzeigen, ob ein Programmupdate verfügbar ist.
+// Only report an update result for a successful HTTP response and valid version numbers.
+// Den Updatestatus nur bei erfolgreicher HTTP-Antwort und gültigen Versionsnummern anzeigen.
 procedure TMainformFrm.LoadUpdateIniFile();
 var
-  Ss: TStringStream;
-  Sl: TStringList;
-  ProgramVersion: String;
-  VersionInIni: String;
+  ResponseStream: TStringStream;
+  Lines: TStringList;
+  Response: IHTTPResponse;
+  ProgramVersion, DownloadVersion: string;
+  Comparison: Integer;
 begin
   ProgramVersion := GetExeVersion;
+  ProgramUpdateLbl.Caption := 'Update-Status unbekannt';
   LogInfo('Checking program update. Current version: ' + ProgramVersion);
-  if not FileExists(IncludeTrailingPathDelimiter(AppDataFolder) + UpdateIniFileName) then
-  VersionInIni := ProgramVersion;
-
   try
-    Ss := TStringStream.Create;
+    ResponseStream := TStringStream.Create;
     try
-      NetHTTPClient1.Get(UpdateInfoUrl, Ss);
-      Ss.SaveToFile(IncludeTrailingPathDelimiter(AppDataFolder) + UpdateIniFileName);
+      Response := NetHTTPClient1.Get(UpdateInfoUrl, ResponseStream);
+      if (Response.StatusCode < 200) or (Response.StatusCode >= 300) then
+        raise Exception.CreateFmt('HTTP-Status %d', [Response.StatusCode]);
+      ResponseStream.Position := 0;
+      Lines := TStringList.Create;
+      try
+        Lines.LoadFromStream(ResponseStream, TEncoding.UTF8);
+        if Lines.Count = 0 then
+          raise Exception.Create('Die Versionsdatei ist leer.');
+        DownloadVersion := Trim(Lines[0]);
+        if not TryCompareProgramVersions(DownloadVersion, ProgramVersion, Comparison) then
+          raise Exception.Create('Ungültige Versionsangabe.');
+      finally
+        Lines.Free;
+      end;
+      ResponseStream.SaveToFile(IncludeTrailingPathDelimiter(AppDataFolder) + UpdateIniFileName);
     finally
-      Ss.Free;
+      ResponseStream.Free;
     end;
   except
-    VersionInIni := ProgramVersion; // No update check result when the server is unavailable.
-    // Kein Ergebnis der Update-Prüfung, wenn der Server nicht erreichbar ist.
-    LogWarning('Update check failed. Server update.ini could not be loaded.');
-    Exit;
+    on E: Exception do
+    begin
+      LogWarning('Program update check failed: ' + E.Message);
+      Exit;
+    end;
   end;
 
-  if FileExists(IncludeTrailingPathDelimiter(AppDataFolder) + UpdateIniFileName) then
-    begin
-      Sl := TStringList.Create;
-      try
-        Sl.LoadFromFile(IncludeTrailingPathDelimiter(AppDataFolder) + UpdateIniFileName);
-        if (Sl.Count = 0) or (Trim(Sl[0]) = '') then
-        begin
-          LogWarning('Update check skipped. update.ini contains no version.');
-          Exit;
-        end;
-        VersionInIni := Trim(Sl[0]);
-        LogInfo('Update version read from update.ini: ' + VersionInIni);
-      finally
-        Sl.Free;
-      end;
-    end;
-
-
-  if VersionToInt(VersionInIni) > VersionToInt(ProgramVersion) then
+  ProgramUpdateLbl.ParentColor := False;
+  ProgramUpdateLbl.StyleElements := StyleElements - [seFont];
+  ProgramUpdateLbl.Font.Color := clYellow;
+  if Comparison > 0 then
   begin
-    ProgramUpdateLbl.ParentColor := False;
     ProgramUpdateLbl.Caption := 'Update vorhanden - hier klicken';
-    ProgramUpdateLbl.StyleElements := StyleElements - [seFont];
-    ProgramUpdateLbl.Font.Color := clYellow;
     ProgramUpdateLbl.Font.Style := [fsBold];
-    LogInfo('Program update available.');
-  end else
+    LogInfo('Program update available: ' + DownloadVersion);
+  end
+  else
   begin
-    ProgramUpdateLbl.ParentColor := False;
     ProgramUpdateLbl.Caption := 'Programm aktuell';
-    ProgramUpdateLbl.StyleElements := StyleElements - [seFont];
-    ProgramUpdateLbl.Font.Color := clYellow;
     LogInfo('Program is up to date.');
   end;
 end;
@@ -767,6 +764,7 @@ begin
     Ini.WriteString(IniSectionVersions, IniKeyTikaVersion, DefaultTikaVersion);
     Ini.WriteString(IniSectionVersions, IniKeyAlpineVersion, DefaultAlpineVersion);
     Ini.WriteString(IniSectionVersions, IniKeyBusyboxVersion, DefaultBusyboxVersion);
+    Ini.WriteString('Einrichtung', 'Installation abgeschlossen', 'Ja');
     Ini.UpdateFile;
   finally
     Ini.Free;
@@ -823,10 +821,7 @@ end;
 procedure TMainformFrm.CancelPaperlessInstallation;
 var
   ComposeFilePath, CleanupOutput: string;
-  Images: TStringList;
   Ini: TAppSettingsIni;
-  I: Integer;
-  ImageName: string;
 begin
   if not IsPaperlessInstallation then Exit;
   InstallCancelRequested := True;
@@ -851,39 +846,14 @@ begin
     if CleanupOutput.Trim <> '' then
       LogInfo('Installation process termination output: ' + CleanupOutput);
   end;
+  // Do not delete volumes or images from a cancelled or repeated setup.
+  // Bei abgebrochener oder wiederholter Einrichtung Volumes und Images erhalten.
   ComposeFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + DockerComposeFileName;
   if FileExists(ComposeFilePath) then
   begin
-    if Assigned(SetupFrm) then
-    begin
-      SetupFrm.InstallLbl.Caption := 'Docker-Images werden entfernt. Bitte warten ...';
-      Application.ProcessMessages;
-    end;
-    CleanupOutput := ExecuteShellCommand(
-      'docker',
-      'compose -f "' + ComposeFilePath + '" down --rmi all --volumes --remove-orphans');
+    CleanupOutput := ExecuteShellCommand('docker', 'compose -f "' + ComposeFilePath + '" stop');
     if CleanupOutput.Trim <> '' then
-      LogInfo('Docker compose cleanup output: ' + CleanupOutput);
-    CleanupOutput := ExecuteShellCommand('docker', 'compose -f "' + ComposeFilePath + '" config --images');
-    Images := TStringList.Create;
-    try
-      Images.Text := CleanupOutput;
-      for I := 0 to Images.Count - 1 do
-      begin
-        ImageName := Images[I].Trim;
-        if ImageName <> '' then
-        begin
-          CleanupOutput := ExecuteShellCommand('docker', 'image rm -f "' + ImageName + '"');
-          if CleanupOutput.Trim <> '' then
-            LogInfo('Docker image remove output for ' + ImageName + ': ' + CleanupOutput);
-        end;
-      end;
-    finally
-      Images.Free;
-    end;
-    CleanupOutput := ExecuteShellCommand('docker', 'image prune -f');
-    if CleanupOutput.Trim <> '' then
-      LogInfo('Docker image prune output: ' + CleanupOutput);
+      LogInfo('Docker compose stop output: ' + CleanupOutput);
   end;
 end;
 // Interaktive Steuerelemente während eines laufenden Skripts merken und sperren.
@@ -1344,40 +1314,48 @@ begin
       UpdateScriptProgress(CurrentStatusText);
   end;
 end;
-// email-versand.env für das aktuelle Backup verschlüsseln und eine vorbereitete lokale Kopie behalten.
-function TMainformFrm.EncryptEmailEnvForBackup(const TargetBackupPath: string): Boolean;
+// Prepare a private mail snapshot for this run and refresh the scheduled copy atomically.
+// Eine eigene Mailkopie für diesen Lauf vorbereiten und die geplante Kopie atomar ersetzen.
+function TMainformFrm.EncryptEmailEnvForBackup(out EncryptedMailPath: string): Boolean;
 var
-  SourceEnvPath, TargetEncryptedPath, LocalEncryptedPath, Password: string;
+  SourceEnvPath, LocalEncryptedPath, LocalStage, Password: string;
   PasswordResult: Integer;
 begin
+  EncryptedMailPath := '';
   Result := True;
   SourceEnvPath := IncludeTrailingPathDelimiter(AppDataFolder) + EmailEnvFileName;
-  if not FileExists(SourceEnvPath) then
-    Exit;
+  if not FileExists(SourceEnvPath) then Exit;
   PasswordResult := RequestPasswordDialog(
     'Mail-Einstellungen verschlüsseln',
     'Die Datei email-versand.env enthält Mailkontodaten und wird für das Backup verschlüsselt.' + sLineBreak + sLineBreak +
     'Bitte bewahren Sie Ihr Passwort sicher auf, z.B. in KeePass. Wenn Sie das Passwort verlieren, kann die Mail-Einstellungsdatei nicht wiederhergestellt werden.',
-    True,
-    Password,
-    'Backup ohne Mail-Einstellungen durchführen');
+    True, Password, 'Backup ohne Mail-Einstellungen durchführen');
   if PasswordResult = mrIgnore then
   begin
     LogInfo('Encrypted email env backup skipped by user.');
     Exit;
   end;
   if PasswordResult <> mrOk then Exit(False);
-  if not System.SysUtils.DirectoryExists(TargetBackupPath) then
-    System.SysUtils.ForceDirectories(TargetBackupPath);
-  TargetEncryptedPath := IncludeTrailingPathDelimiter(TargetBackupPath) + EmailEnvEncryptedFileName;
-  LocalEncryptedPath := IncludeTrailingPathDelimiter(AppDataFolder) + EmailEnvEncryptedFileName;
+  EncryptedMailPath := TPath.Combine(AppDataFolder, TPath.GetRandomFileName);
+  LocalEncryptedPath := TPath.Combine(AppDataFolder, EmailEnvEncryptedFileName);
+  LocalStage := TPath.Combine(AppDataFolder, TPath.GetRandomFileName);
   try
-    EncryptFileWithPassword(SourceEnvPath, TargetEncryptedPath, Password);
-    EncryptFileWithPassword(SourceEnvPath, LocalEncryptedPath, Password);
-    LogInfo('Encrypted email env file written to backup.');
-  except
-    on E: Exception do
-    CenteredShowMessage('Mail-Einstellungen konnten nicht verschlüsselt werden: ' + E.Message);
+    try
+      EncryptFileWithPassword(SourceEnvPath, EncryptedMailPath, Password);
+      TFile.Copy(EncryptedMailPath, LocalStage, False);
+      if not Winapi.Windows.MoveFileEx(PChar(LocalStage), PChar(LocalEncryptedPath),
+        MOVEFILE_REPLACE_EXISTING or MOVEFILE_WRITE_THROUGH) then RaiseLastOSError;
+    except
+      on E: Exception do
+      begin
+        System.SysUtils.DeleteFile(EncryptedMailPath);
+        EncryptedMailPath := '';
+        Result := CenteredMessageDlg('Mail-Einstellungen konnten nicht verschlüsselt oder gespeichert werden: ' +
+          E.Message + sLineBreak + 'Backup ohne Mail-Einstellungen fortsetzen?', mtWarning, [mbYes, mbNo], 0) = mrYes;
+      end;
+    end;
+  finally
+    if FileExists(LocalStage) then System.SysUtils.DeleteFile(LocalStage);
   end;
 end;
 // Verschluesselte Mail-Einstellungen aus dem Backup wiederherstellen, wenn der Benutzer das Passwort eingibt.
@@ -1455,25 +1433,19 @@ begin
     LogWarning('Restore precheck failed. Backup folder does not exist: ' + BackupFolder);
     Exit;
   end;
-  if (PaperlessDBName.Trim = '') or (Volume_data.Trim = '') or (Volume_media.Trim = '') or (Volume_export.Trim = '') then
-  begin
-    CenteredShowMessage('Die Docker-Container- oder Volume-Namen konnten nicht vollständig ermittelt werden.');
-    LogWarning('Restore precheck failed. Missing container or volume names.');
-    Exit;
-  end;
   BasePath := IncludeTrailingPathDelimiter(BackupFolder);
   MissingFiles := TStringList.Create;
   try
-    RequireFile(PaperlessDBName + '_backup.sql');
-    RequireFile(Volume_data + '.tar.gz');
-    RequireFile(Volume_media + '.tar.gz');
-    RequireFile(Volume_export + '.tar.gz');
+    RequireFile(ComposeProjectName + '-db-1_backup.sql');
+    RequireFile(ComposeProjectName + '_data.tar.gz');
+    RequireFile(ComposeProjectName + '_media.tar.gz');
+    RequireFile(ComposeProjectName + '_export.tar.gz');
     if MissingFiles.Count > 0 then
     begin
-      if FileExists(BasePath + StringReplace(PaperlessDBName, '-pg18', '', []) + '_backup.sql') and
-         FileExists(BasePath + StringReplace(Volume_data, '-pg18', '', []) + '.tar.gz') and
-         FileExists(BasePath + StringReplace(Volume_media, '-pg18', '', []) + '.tar.gz') and
-         FileExists(BasePath + StringReplace(Volume_export, '-pg18', '', []) + '.tar.gz') then
+      if FileExists(BasePath + 'paperless-ngx-db-1_backup.sql') and
+         FileExists(BasePath + 'paperless-ngx_data.tar.gz') and
+         FileExists(BasePath + 'paperless-ngx_media.tar.gz') and
+         FileExists(BasePath + 'paperless-ngx_export.tar.gz') then
       begin
         if CenteredMessageDlg(
           'Dieses Backup stammt aus einer älteren Paperless-Version mit der PostgreSQL-Datenbank 17.' +
@@ -2938,7 +2910,9 @@ begin
     'Backup: ' + BackupFolder + sLineBreak + sLineBreak +
     'Die aktuelle Paperless-Datenbank und die Ordner data, media und export werden überschrieben. ' +
     'Paperless übernimmt den Schlüssel aus dem Backup. Fehlt er, wird der Legacy-Schlüssel des Programms verwendet. ' +
-    'Paperless ist während der Wiederherstellung vorübergehend nicht erreichbar.',
+    'Paperless ist während der Wiederherstellung vorübergehend nicht erreichbar.' + sLineBreak + sLineBreak +
+    'Bestätigen Sie nur, wenn das Backup aus einer vertrauenswürdigen Quelle stammt. ' +
+    'Der SQL-Dump wird mit den Rechten des Datenbankbenutzers ausgeführt.',
     'Server-Wiederherstellung starten?', MB_YESNO or MB_ICONWARNING or MB_DEFBUTTON2) = IDYES;
 end;
 
@@ -3038,7 +3012,7 @@ var
   PathChoice: Integer;
 begin
   ProgramUpdateLbl.Hide;
-  if FServerBackupCheckActive then Exit;
+  if ScriptBusy or FServerBackupCheckActive or ApplicationClosing then Exit;
   if LocalInstallationSelected = ExternalInstallationSelected then
   begin
     CenteredShowMessage('Die Betriebsart ist nicht eindeutig. Bitte die Einstellungen prüfen.');
@@ -3065,196 +3039,213 @@ begin
     end;
     Exit;
   end;
-  if ComposePath.Trim = '' then
+  if System.SysUtils.DirectoryExists(ComposePath) then
+    ComposePath := TPath.Combine(ComposePath, DockerComposeFileName);
+  if not FileExists(ComposePath) then
   begin
     CenteredShowMessage('Bitte zuerst den Paperless-Ordner auswählen.');
     Exit;
   end;
-  WriteComposeContainerAndVolumeInfo(ComposePath);
   StartPaperlessBackupBtn.Enabled := False;
   RestorePaperlessBackupBtn.Enabled := False;
-  ReadContainerNamesFromFile;
-  IsPaperlessInstallation := False;
-
-  Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
-    Ini.WriteString('Pfade', 'DockerComposePfad', ExtractFilePath(ComposePath));
-    Ini.UpdateFile; // Write immediately.
-    // Sofort schreiben.
-  finally
-    Ini.Free;
-  end;
-
-  IsBackup := True;
-
-  DefaultFolder := IncludeTrailingPathDelimiter(GetEnvironmentVariable('USERPROFILE')) + 'Desktop\' + PaperlessBackupFolderName;
-  if not System.SysUtils.DirectoryExists(DefaultFolder) then System.SysUtils.ForceDirectories(DefaultFolder);
-
-  // Migrate the old backup target text file into the INI file.
-  // Die alte Textdatei mit dem Backup-Ziel in die INI-Datei migrieren.
-  TextFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + BackupTargetFileName;
-  if FileExists(TextFilePath) then
-  begin
-    StoredPath := TFile.ReadAllText(TextFilePath, TEncoding.UTF8).Trim;
-    Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
     try
-      Ini.WriteString('Pfade', 'BackupZiel', StoredPath);
-      Ini.UpdateFile; // Write immediately.
-      // Sofort schreiben.
-      // Read the value back from the INI file.
-      // Den Wert wieder aus der INI-Datei lesen.
-      StoredPath := Ini.ReadString('Pfade', 'BackupZiel', '').Trim;
-    finally
-      Ini.Free;
-    end;
-    // Delete the old text file after a successful migration.
-    // Die alte Textdatei nach erfolgreicher Migration löschen.
-    if StoredPath <> '' then DeleteFile(TextFilePath);
-  end;
+      IsPaperlessInstallation := False;
 
-  // Read the last backup folder from the INI file.
-  // Den letzten Backup-Ordner aus der INI-Datei lesen.
-  Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
-  try
-    LastBackupFolder := Ini.ReadString('Pfade', 'BackupZiel', '').Trim;
-  finally
-    Ini.Free;
-  end;
-
-  Sleep(500);
-
-  if LastBackupFolder <> '' then
-  begin
-    PathChoice := mrYes;
-    if not IsAutostart then
-      PathChoice := CenteredMessageDlg('Es wurde folgender voreingestellter Pfad gefunden:' + sLineBreak + LastBackupFolder + sLineBreak + sLineBreak +
-                   'Soll das Backup hier gespeichert werden?', mtConfirmation, [mbYes, mbNo], 0);
-    if (PathChoice <> mrYes) and (PathChoice <> mrNo) then
-    begin
-      StartPaperlessBackupBtn.Enabled := True;
-      RestorePaperlessBackupBtn.Enabled := True;
-      Exit;
-    end;
-    if PathChoice = mrYes then
-    begin
-      BackupPath := IncludeTrailingPathDelimiter(LastBackupFolder) + FormatDateTime('yyyy-mm-dd_hh-mm-ss', Now);
-    end
-    else
-    begin
-      FolderDialog := TFileOpenDialog.Create(nil);
+      Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
       try
-        FolderDialog.Options := [fdoPickFolders];
-        FolderDialog.Title := 'Wählen Sie einen Backup-Ziel-Ordner aus.';
-        FolderDialog.DefaultFolder := DefaultFolder;
-        if CenteredFolderDialogExecute(FolderDialog) then
+        Ini.WriteString('Pfade', 'DockerComposePfad', ComposePath);
+        Ini.UpdateFile; // Write immediately.
+        // Sofort schreiben.
+      finally
+        Ini.Free;
+      end;
+
+      IsBackup := True;
+
+      DefaultFolder := IncludeTrailingPathDelimiter(GetEnvironmentVariable('USERPROFILE')) + 'Desktop\' + PaperlessBackupFolderName;
+      if not System.SysUtils.DirectoryExists(DefaultFolder) then System.SysUtils.ForceDirectories(DefaultFolder);
+
+      // Migrate the old backup target text file into the INI file.
+      // Die alte Textdatei mit dem Backup-Ziel in die INI-Datei migrieren.
+      TextFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + BackupTargetFileName;
+      if FileExists(TextFilePath) then
+      begin
+        StoredPath := TFile.ReadAllText(TextFilePath, TEncoding.UTF8).Trim;
+        Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
+        try
+          Ini.WriteString('Pfade', 'BackupZiel', StoredPath);
+          Ini.UpdateFile; // Write immediately.
+          // Sofort schreiben.
+          // Read the value back from the INI file.
+          // Den Wert wieder aus der INI-Datei lesen.
+          StoredPath := Ini.ReadString('Pfade', 'BackupZiel', '').Trim;
+        finally
+          Ini.Free;
+        end;
+        // Delete the old text file after a successful migration.
+        // Die alte Textdatei nach erfolgreicher Migration löschen.
+        if StoredPath <> '' then DeleteFile(TextFilePath);
+      end;
+
+      // Read the last backup folder from the INI file.
+      // Den letzten Backup-Ordner aus der INI-Datei lesen.
+      Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
+      try
+        LastBackupFolder := Ini.ReadString('Pfade', 'BackupZiel', '').Trim;
+      finally
+        Ini.Free;
+      end;
+
+      Sleep(500);
+
+      if LastBackupFolder <> '' then
+      begin
+        PathChoice := mrYes;
+        if not IsAutostart then
+          PathChoice := CenteredMessageDlg('Es wurde folgender voreingestellter Pfad gefunden:' + sLineBreak + LastBackupFolder + sLineBreak + sLineBreak +
+                       'Soll das Backup hier gespeichert werden?', mtConfirmation, [mbYes, mbNo], 0);
+        if (PathChoice <> mrYes) and (PathChoice <> mrNo) then
         begin
-          BackupPath := IncludeTrailingPathDelimiter(FolderDialog.FileName) + FormatDateTime('yyyy-mm-dd_hh-mm-ss', Now);
-
-
-
-          if not SameText(FolderDialog.FileName, DefaultFolder) then
-          begin
-            TFile.AppendAllText(
-              IncludeTrailingPathDelimiter(DefaultFolder) + 'Wo ist mein Paperless Backup.txt',
-              'Backup am ' + FormatDateTime('dd.mm.yyyy "um" hh:nn:ss', Now) +
-              ' wurde in folgendem Ordner gespeichert:' + sLineBreak +
-              BackupPath + sLineBreak + sLineBreak);
-          end;
-        end
-        else
-        begin
-          CenteredShowMessage('Es wurde kein Ordner gewählt. Backupvorgang abgebrochen.');
           StartPaperlessBackupBtn.Enabled := True;
           RestorePaperlessBackupBtn.Enabled := True;
           Exit;
         end;
-      finally
-        FolderDialog.Free;
-      end;
-    end;
-  end
-  else
-  begin
-    FolderDialog := TFileOpenDialog.Create(nil);
-    try
-      FolderDialog.Options := [fdoPickFolders];
-      FolderDialog.Title := 'Wählen Sie einen Backup-Ziel-Ordner aus.';
-      FolderDialog.DefaultFolder := DefaultFolder;
-      if CenteredFolderDialogExecute(FolderDialog) then
-      begin
-        BackupPath := IncludeTrailingPathDelimiter(FolderDialog.FileName) + FormatDateTime('yyyy-mm-dd_hh-mm-ss', Now);
-        if not SameText(FolderDialog.FileName, DefaultFolder) then
+        if PathChoice = mrYes then
         begin
-          TFile.AppendAllText(
-            IncludeTrailingPathDelimiter(DefaultFolder) + 'Wo ist mein Paperless Backup.txt',
-            'Backup am ' + FormatDateTime('dd.mm.yyyy "um" hh:nn:ss', Now) +
-            ' wurde in folgendem Ordner gespeichert:' + sLineBreak +
-            BackupPath + sLineBreak + sLineBreak);
+          BackupPath := IncludeTrailingPathDelimiter(LastBackupFolder) + FormatDateTime(BackupTimestampFormat, Now);
+        end
+        else
+        begin
+          FolderDialog := TFileOpenDialog.Create(nil);
+          try
+            FolderDialog.Options := [fdoPickFolders];
+            FolderDialog.Title := 'Wählen Sie einen Backup-Ziel-Ordner aus.';
+            FolderDialog.DefaultFolder := DefaultFolder;
+            if CenteredFolderDialogExecute(FolderDialog) then
+            begin
+              BackupPath := IncludeTrailingPathDelimiter(FolderDialog.FileName) + FormatDateTime(BackupTimestampFormat, Now);
+
+
+
+            end
+            else
+            begin
+              CenteredShowMessage('Es wurde kein Ordner gewählt. Backupvorgang abgebrochen.');
+              StartPaperlessBackupBtn.Enabled := True;
+              RestorePaperlessBackupBtn.Enabled := True;
+              Exit;
+            end;
+          finally
+            FolderDialog.Free;
+          end;
         end;
       end
       else
       begin
-        CenteredShowMessage('Es wurde kein Ordner gewählt. Backupvorgang abgebrochen.');
-        StartPaperlessBackupBtn.Enabled := True;
-        RestorePaperlessBackupBtn.Enabled := True;
-        Exit;
+        FolderDialog := TFileOpenDialog.Create(nil);
+        try
+          FolderDialog.Options := [fdoPickFolders];
+          FolderDialog.Title := 'Wählen Sie einen Backup-Ziel-Ordner aus.';
+          FolderDialog.DefaultFolder := DefaultFolder;
+          if CenteredFolderDialogExecute(FolderDialog) then
+          begin
+            BackupPath := IncludeTrailingPathDelimiter(FolderDialog.FileName) + FormatDateTime(BackupTimestampFormat, Now);
+          end
+          else
+          begin
+            CenteredShowMessage('Es wurde kein Ordner gewählt. Backupvorgang abgebrochen.');
+            StartPaperlessBackupBtn.Enabled := True;
+            RestorePaperlessBackupBtn.Enabled := True;
+            Exit;
+          end;
+        finally
+          FolderDialog.Free;
+        end;
       end;
-    finally
-      FolderDialog.Free;
+
+      Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
+      try
+        Ini.WriteString('Pfade', 'BackupZiel', ExtractFileDir(BackupPath));
+        Ini.UpdateFile; // Write immediately.
+        // Sofort schreiben.
+      finally
+        Ini.Free;
+      end;
+
+      CreateBackupScript(ComposePath);
+      if FManualBackupSucceeded then
+      begin
+        if not SameText(ExcludeTrailingPathDelimiter(ExtractFilePath(BackupPath)),
+          ExcludeTrailingPathDelimiter(DefaultFolder)) then
+        begin
+          try
+            TFile.AppendAllText(IncludeTrailingPathDelimiter(DefaultFolder) + 'Wo ist mein Paperless Backup.txt',
+              'Backup gespeichert in: ' + BackupPath + sLineBreak);
+          except
+            on E: Exception do LogWarning('Backup location note could not be written: ' + E.Message);
+          end;
+        end;
+        CreateBackupPlanScript(ComposePath);
+      end;
+      // Delete the old marker file if it still exists.
+      // Die alte Markerdatei löschen, falls sie noch existiert.
+      TextFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + ComposePathFileName;
+      if FileExists(TextFilePath) then DeleteFile(TextFilePath);
+    except
+      on E: Exception do
+      begin
+        LogWarning('Backup could not be prepared: ' + E.Message);
+        CenteredShowMessage('Das Backup konnte nicht vorbereitet werden: ' + E.Message);
+      end;
     end;
-  end;
-
-  Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
-  try
-    Ini.WriteString('Pfade', 'BackupZiel', ExtractFileDir(BackupPath));
-    Ini.UpdateFile; // Write immediately.
-    // Sofort schreiben.
   finally
-    Ini.Free;
+    StartPaperlessBackupBtn.Enabled := True;
+    RestorePaperlessBackupBtn.Enabled := True;
   end;
-
-  CreateBackupScript(ExtractFilePath(ComposePath));
-  if not FManualBackupCancelled then
-    CreateBackupPlanScript(ExtractFilePath(ComposePath), FManualBackupSucceeded);
-  StartPaperlessBackupBtn.Enabled := True;
-  RestorePaperlessBackupBtn.Enabled := True;
-  // Delete the old marker file if it still exists.
-  // Die alte Markerdatei löschen, falls sie noch existiert.
-  TextFilePath := IncludeTrailingPathDelimiter(AppDataFolder) + ComposePathFileName;
-  if FileExists(TextFilePath) then DeleteFile(TextFilePath);
 end;
-// paperless-backup.ps1 für ein manuelles Backup erstellen.
-// Das Skript erstellt zuerst einen PostgreSQL-Dump und archiviert danach die Docker-Volumes.
+
+// Create the manual worker without pre-creating the final backup directory.
+// Den manuellen Worker erstellen, ohne den endgültigen Backupordner vorzeitig anzulegen.
 procedure TMainformFrm.CreateBackupScript(const ComposePath: string);
 var
-  Volumes: TDockerVolumeNames;
+  EncryptedMailPath, WorkerPath: string;
 begin
   FManualBackupSucceeded := False;
-  FManualBackupCancelled := False;
-  if ComposePath.Trim = '' then
+  if not FileExists(ComposePath) then
   begin
-    CenteredShowMessage('Fehler: Es wurde kein gültiger Compose-Pfad gewählt.');
+    CenteredShowMessage('Fehler: Die gespeicherte Compose-Datei wurde nicht gefunden.');
     Exit;
   end;
-
-  if not EncryptEmailEnvForBackup(BackupPath) then
-  begin
-    FManualBackupCancelled := True;
-    Exit;
+  if not EncryptEmailEnvForBackup(EncryptedMailPath) then Exit;
+  WorkerPath := '';
+  try
+    WorkerPath := ReserveTimestampedScript(ExtractFilePath(ComposePath));
+    CreateManualBackupCmdScript(WorkerPath, ComposePath, BackupPath, AppDataFolder, EncryptedMailPath,
+      KeepBackupsSpE.Value);
+    CmdTargetPath := WorkerPath;
+    StartAndMonitorCmdScript;
+  finally
+    if WorkerPath <> '' then DeleteGeneratedScriptFile(WorkerPath);
+    if EncryptedMailPath <> '' then System.SysUtils.DeleteFile(EncryptedMailPath);
   end;
-  if not System.SysUtils.DirectoryExists(BackupPath) then System.SysUtils.ForceDirectories(BackupPath);
-  CmdTargetPath := IncludeTrailingPathDelimiter(ComposePath) + 'paperless-backup.ps1';
-  Volumes.Data := Volume_data;
-  Volumes.DbData := Volume_db_data;
-  Volumes.ExportData := Volume_export;
-  Volumes.Media := Volume_media;
-  CreateManualBackupCmdScript(CmdTargetPath, ComposePath, BackupPath, AppDataFolder, PaperlessDBName, Volumes);
-  StartAndMonitorCmdScript;
 end;
 
 // Die Anwendung vom Hauptformular aus schließen.
 procedure TMainformFrm.FormClose(Sender: TObject; var Action: TCloseAction);
 begin
+  if ScriptBusy and IsBackup then
+  begin
+    Action := caNone;
+    CenteredShowMessage('Das Backup läuft noch. Bitte warten Sie auf das Ergebnis.');
+    Exit;
+  end;
+  if FLocalRestoreActive then
+  begin
+    Action := caNone;
+    CenteredShowMessage('Die lokale Wiederherstellung läuft noch. Bitte warten Sie auf das Ergebnis.');
+    Exit;
+  end;
   // Keep the installer connected until the server reports its final status.
   // Die Installationsverbindung bis zum abschließenden Serverstatus offen halten.
   if FServerBackupCheckActive and (FServerBackupAction = sbaInstallPaperless) and
@@ -3781,7 +3772,7 @@ begin
   begin
     NewComposePath := IncludeTrailingPathDelimiter(AppDataFolder) + DockerComposeFileName;
 
-    if not FileExists(NewComposePath) then
+    if not (ApplicationClosing or Application.Terminated) then
     begin
       CenteredMessageBox(
         'Bitte beachten: Es wird nun eine neue, für das Programm optimierte docker-compose.yml angelegt.' + #13#10 +
@@ -3987,7 +3978,7 @@ begin
     CenteredShowMessage('Externe Serveraktionen sind noch nicht verfügbar.');
     Exit;
   end;
-  CreateBackupScript(ExtractFilePath(ComposePath));
+  CreateBackupScript(ComposePath);
 end;
 
 // Switch between the main panels and refresh panel-specific settings.
@@ -4174,7 +4165,6 @@ procedure TMainformFrm.SaveRetentionBtnClick(Sender: TObject);
 var
   Ini: TAppSettingsIni;
   ComposeFile, ComposeDir, PlannedScript, BackupBase: string;
-  Volumes: TDockerVolumeNames;
 begin
   ProgramUpdateLbl.Hide;
   if LocalInstallationSelected and FLocalStartupPending then
@@ -4213,7 +4203,6 @@ begin
   finally
     FRetentionUpdateRequested := False;
   end;
-  ReadContainerNamesFromFile;
   // Update only the existing planned script, without running retention here.
   // Nur das vorhandene geplante Skript aktualisieren, ohne hier aufzuräumen.
   if (ComposeFile <> '') and System.SysUtils.DirectoryExists(ComposeFile) then
@@ -4224,25 +4213,13 @@ begin
     PlannedScript := IncludeTrailingPathDelimiter(ComposeDir) + 'paperless-backup-geplant.ps1';
     if FileExists(PlannedScript) then
     begin
-      if (PaperlessDBName.Trim = '') or (Volume_data.Trim = '') or
-              (Volume_media.Trim = '') or (Volume_export.Trim = '') then
-        CenteredShowMessage('Die Anzahl wurde gespeichert. Das geplante Backup-Skript konnte nicht aktualisiert werden, da Container- oder Volumenamen fehlen. Bitte führen Sie zuerst ein reguläres Backup durch.')
-      else
-      begin
-        if BackupBase = '' then
-          BackupBase := IncludeTrailingPathDelimiter(GetEnvironmentVariable('USERPROFILE')) + 'Desktop\FallbackBackup\'
-        else
-          BackupBase := IncludeTrailingPathDelimiter(BackupBase);
-        Volumes.Data := Volume_data;
-        Volumes.DbData := Volume_db_data;
-        Volumes.ExportData := Volume_export;
-        Volumes.Media := Volume_media;
-        try
-          CreatePlannedBackupCmdScript(PlannedScript, ComposeDir, BackupBase, AppDataFolder, PaperlessDBName, Volumes, KeepBackupsSpE.Value);
-        except
-          on E: Exception do
-            CenteredShowMessage('Die Anzahl wurde gespeichert. Das geplante Backup-Skript konnte nicht aktualisiert werden: ' + E.Message);
-        end;
+      if BackupBase = '' then
+        BackupBase := IncludeTrailingPathDelimiter(GetEnvironmentVariable('USERPROFILE')) + 'Desktop\FallbackBackup\';
+      try
+        CreatePlannedBackupCmdScript(PlannedScript, ComposeFile, BackupBase, AppDataFolder, KeepBackupsSpE.Value);
+      except
+        on E: Exception do
+          CenteredShowMessage('Die Anzahl wurde gespeichert. Das geplante Backup-Skript konnte nicht aktualisiert werden: ' + E.Message);
       end;
     end;
   end;
@@ -4401,6 +4378,7 @@ end;
 procedure TMainformFrm.LoadScheduleSettings;
 var
   Ini: TAppSettingsIni;
+  ComposeFile, PlannedScript: string;
 begin
   Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
@@ -4430,9 +4408,31 @@ begin
     except
       KeepBackupsSpE.Value := 0;
     end;
-
+    ComposeFile := Ini.ReadString('Pfade', 'DockerComposePfad', '').Trim;
   finally
     Ini.Free;
+  end;
+
+  // Upgrade an existing generated task script in place before its next scheduled run.
+  // Ein vorhandenes Aufgabenskript vor dem nächsten geplanten Lauf am selben Pfad aktualisieren.
+  if LocalInstallationSelected and not ExternalInstallationSelected and InstallationPathReady then
+  begin
+    if System.SysUtils.DirectoryExists(ComposeFile) then
+      ComposeFile := TPath.Combine(ComposeFile, DockerComposeFileName);
+    if FileExists(ComposeFile) then
+    begin
+      PlannedScript := TPath.Combine(ExtractFilePath(ComposeFile), 'paperless-backup-geplant.ps1');
+      try
+        if FileExists(PlannedScript) and not TFile.ReadAllText(PlannedScript, TEncoding.UTF8).StartsWith(LocalBackupScriptMarker) then
+          CreateBackupPlanScript(ComposeFile);
+      except
+        on E: Exception do
+        begin
+          LogWarning('Planned backup script could not be refreshed: ' + E.Message);
+          CenteredShowMessage('Das vorhandene Aufgabenskript konnte nicht aktualisiert werden: ' + E.Message);
+        end;
+      end;
+    end;
   end;
 
   // Update the UI after loading settings.
@@ -5054,135 +5054,29 @@ end;
 
 // Erzeugt das geplante PS1-Skript aus gespeicherten Einstellungen und führt die lokale Aufbewahrungsbereinigung aus.
 // Zusätzlich bereinigt das geplante Skript nach erfolgreichem Lauf.
-procedure TMainformFrm.CreateBackupPlanScript(const ComposePath: string; const CleanupAllowed: Boolean);
+procedure TMainformFrm.CreateBackupPlanScript(const ComposePath: string);
 var
-  BackupFolderList: TArray<string>;
-  ValidBackupFolderList: TList<string>;
-  MaxBackupFolders: Integer;
   Ini: TAppSettingsIni;
-  Volumes: TDockerVolumeNames;
-  BackupFolder: string;
-  // Convert a timestamped backup folder name into a date for retention sorting.
-  // Einen Zeitstempel-Backupordnernamen für die Aufbewahrungssortierung in ein Datum umwandeln.
-  function FolderNameToDateTime(const Folder: string): TDateTime;
-  var
-    Name: string;
-    Year, Month, Day, Hour, Minute, Second: Word;
-  begin
-    Result := 0;
-    Name := ExtractFileName(Folder);
-    if (Length(Name) <> 19) or
-       (Name[5] <> '-') or
-       (Name[8] <> '-') or
-       (Name[11] <> '_') or
-       (Name[14] <> '-') or
-       (Name[17] <> '-') then
-      Exit;
-    try
-      Year   := StrToInt(Copy(Name, 1, 4));
-      Month  := StrToInt(Copy(Name, 6, 2));
-      Day    := StrToInt(Copy(Name, 9, 2));
-      Hour := StrToInt(Copy(Name, 12, 2));
-      Minute := StrToInt(Copy(Name, 15, 2));
-      Second:= StrToInt(Copy(Name, 18, 2));
-      Result := EncodeDateTime(Year, Month, Day, Hour, Minute, Second, 0);
-    except
-      Result := 0;
-    end;
-  end;
+  ScriptPath, BackupBase: string;
 begin
-  // Stop when no compose path was provided.
-  // Abbrechen, wenn kein Compose-Pfad übergeben wurde.
-  if ComposePath.Trim = '' then
-  begin
-    CenteredShowMessage('Fehler: Es wurde kein gültiger Compose-Pfad gewählt.');
-    Exit;
-  end;
-
-  // Prepare a compose name without spaces.
-  // Einen Compose-Namen ohne Leerzeichen vorbereiten.
-  ComposeName := StringReplace(
-                   ExtractFileName(ExcludeTrailingPathDelimiter(ComposePath)),
-                   ' ', '-', [rfReplaceAll]);
-
-  // Build the path for the planned backup PowerShell file.
-  // Den Pfad zur geplanten Backup-PowerShell-Datei erstellen.
-  CmdTargetPath := IncludeTrailingPathDelimiter(ComposePath) +
-                 'paperless-backup-geplant.ps1';
-  // Use the saved backup folder, or fall back to Desktop\FallbackBackup.
-  // Den gespeicherten Backup-Ordner verwenden oder auf Desktop\FallbackBackup zurückfallen.
+  if not FileExists(ComposePath) then Exit;
   Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
-    LastBackupFolder := Ini.ReadString('Pfade', 'BackupZiel', '').Trim;
+    BackupBase := Ini.ReadString('Pfade', 'BackupZiel', '').Trim;
   finally
     Ini.Free;
   end;
-  if LastBackupFolder = '' then
-    BackupPath := IncludeTrailingPathDelimiter(GetEnvironmentVariable('USERPROFILE')) + 'Desktop\FallbackBackup\'
-  else
-    BackupPath := IncludeTrailingPathDelimiter(LastBackupFolder);
-  Volumes.Data := Volume_data;
-  Volumes.DbData := Volume_db_data;
-  Volumes.ExportData := Volume_export;
-  Volumes.Media := Volume_media;
-  CreatePlannedBackupCmdScript(CmdTargetPath, ComposePath, BackupPath, AppDataFolder, PaperlessDBName, Volumes, KeepBackupsSpE.Value);
-  // Delete old backup folders when a retention limit is set.
-  // Alte Backup-Ordner löschen, wenn eine Aufbewahrungsgrenze gesetzt ist.
-  MaxBackupFolders := KeepBackupsSpE.Value;
-  if CleanupAllowed and not ApplicationClosing and not Application.Terminated and
-     (MaxBackupFolders > 0) then
-  begin
-    if not System.SysUtils.DirectoryExists(BackupPath) then
-    begin
-      LogWarning('Backup folder is unavailable for cleanup: ' + BackupPath);
-      CenteredMessageDlg('Der Backupordner ist für das Aufräumen nicht erreichbar:' +
-        sLineBreak + BackupPath, mtWarning, [mbOK], 0);
-      Exit;
-    end;
-    ValidBackupFolderList := TList<string>.Create;
-    try
-      try
-        BackupFolderList := TDirectory.GetDirectories(BackupPath);
-        for BackupFolder in BackupFolderList do
-        begin
-          if FolderNameToDateTime(BackupFolder) > 0 then
-            ValidBackupFolderList.Add(BackupFolder);
-        end;
-        BackupFolderList := ValidBackupFolderList.ToArray;
-        TArray.Sort<string>(BackupFolderList); // Ascending: oldest first.
-        // Aufsteigend: älteste zuerst.
-        if Length(BackupFolderList) > MaxBackupFolders then
-        begin
-          for var i := 0 to Length(BackupFolderList) - MaxBackupFolders - 1 do
-          begin
-            try
-              TDirectory.Delete(BackupFolderList[i], True); // Delete oldest folders.
-              // Die ältesten Ordner löschen.
-            except
-              on E: Exception do
-              begin
-                LogWarning('Could not delete old planned backup folder "' + BackupFolderList[i] + '": ' + E.Message);
-                CenteredMessageDlg('Der alte Backupordner konnte nicht gelöscht werden:' + sLineBreak +
-                  BackupFolderList[i] + sLineBreak + E.Message, mtWarning, [mbOK], 0);
-              end;
-            end;
-          end;
-        end;
-      except
-        on E: Exception do
-        begin
-          LogWarning('Could not clean planned backup folders: ' + E.Message);
-          CenteredMessageDlg('Die Backupordner konnten nicht aufgeräumt werden:' + sLineBreak +
-            E.Message, mtWarning, [mbOK], 0);
-        end;
-      end;
-    finally
-      ValidBackupFolderList.Free;
-    end;
+  if BackupBase = '' then
+    BackupBase := IncludeTrailingPathDelimiter(GetEnvironmentVariable('USERPROFILE')) + 'Desktop\FallbackBackup\';
+  ScriptPath := IncludeTrailingPathDelimiter(ExtractFilePath(ComposePath)) + 'paperless-backup-geplant.ps1';
+  try
+    CreatePlannedBackupCmdScript(ScriptPath, ComposePath, BackupBase, AppDataFolder, KeepBackupsSpE.Value);
+  except
+    on E: Exception do
+      CenteredShowMessage('Das geplante Backup-Skript konnte nicht aktualisiert werden: ' + E.Message);
   end;
 end;
 
-// Das geplante Backup-Skript ohne sichtbares Konsolenfenster ausführen.
 procedure TMainformFrm.StartBackupPlanScriptSilent;
 var
   SI: TStartupInfo;
@@ -5236,7 +5130,7 @@ var
   RestoreMailBytes: TBytes;
 begin
   ProgramUpdateLbl.Hide;
-  if ScriptBusy or FServerBackupCheckActive or ApplicationClosing then Exit;
+  if ScriptBusy or FLocalRestoreActive or FServerBackupCheckActive or ApplicationClosing then Exit;
   if LocalInstallationSelected = ExternalInstallationSelected then
   begin
     CenteredShowMessage('Die Betriebsart ist nicht eindeutig. Bitte die Einstellungen prüfen.');
@@ -5267,124 +5161,105 @@ begin
     Exit;
   end;
   ClearRestoreProgressState;
-  WriteComposeContainerAndVolumeInfo(ExtractFilePath(ComposePath));
   StartPaperlessBackupBtn.Enabled := False;
   RestorePaperlessBackupBtn.Enabled := False;
-  ReadContainerNamesFromFile;
-  IsBackup := False;
-  IsPaperlessInstallation := False;
-  // Clear stale update state before a new restore run starts.
-  // Veralteten Update-Zustand vor einer neuen Wiederherstellung zurücksetzen.
-  IsUpdate := False;
-  PaperlessUpdate := False;
-  IsRestoreApplyingSettings := False;
-  if ComposePath = '' then
-  begin
-    CenteredShowMessage('Bitte zuerst den Paperless-Ordner auswählen.');
-    StartPaperlessBackupBtn.Enabled := True;
-    RestorePaperlessBackupBtn.Enabled := True;
-    Exit;
-  end;
-  // Start the restore folder picker in the last known backup target folder.
-  // Die Ordnerauswahl für die Wiederherstellung im zuletzt bekannten Backup-Zielordner starten.
-  RestoreDefaultFolder := GetEnvironmentVariable('USERPROFILE');
-  Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
-    LastBackupFolder := Ini.ReadString('Pfade', 'BackupZiel', '').Trim;
-    if (LastBackupFolder <> '') and System.SysUtils.DirectoryExists(LastBackupFolder) then
-      RestoreDefaultFolder := LastBackupFolder;
-  finally
-    Ini.Free;
-  end;
-  FolderDialog := TFileOpenDialog.Create(nil);
-  try
-    FolderDialog.Options := [fdoPickFolders];
-    FolderDialog.Title := 'Bitte den Ordner mit Ihrem Paperless-Backup auswählen.';
-    FolderDialog.DefaultFolder := RestoreDefaultFolder;
-    if CenteredFolderDialogExecute(FolderDialog) then
-    begin
-      BackupFolder := FolderDialog.FileName;
-      BackupWiederherProgNeuStartLbl.Visible := True;
-      BackupWiederherProgNeuStartLbl.Caption := 'Backup wird geprüft. Bitte warten ...';
-      Application.ProcessMessages;
-      BackupSizeBytes := GetDirectorySizeBytes(BackupFolder);
-      RestoreEstimatedSeconds := EstimateRestoreDurationSeconds(BackupSizeBytes);
-      RestoreEstimateText := 'Restore estimate available';
-      RestoreEstimateLogText := Format('Backup-Größe: %s. Geschätzte Wiederherstellungsdauer: %s.',
-        [FormatByteSize(BackupSizeBytes), EstimateRestoreDurationText(BackupSizeBytes)]);
-      BackupWiederherProgNeuStartLbl.Caption := 'Wiederherstellung wird vorbereitet. Bitte warten ...';
-      LogInfo('Restore estimate for "' + BackupFolder + '": ' + RestoreEstimateLogText);
-      Application.ProcessMessages;
-      if ValidateRestoreBackupFolder(BackupFolder) then
+    try
+      IsBackup := False;
+      IsPaperlessInstallation := False;
+      // Clear stale update state before a new restore run starts.
+      // Veralteten Update-Zustand vor einer neuen Wiederherstellung zurücksetzen.
+      IsUpdate := False;
+      PaperlessUpdate := False;
+      IsRestoreApplyingSettings := False;
+      if ComposePath = '' then
       begin
-        KeyPrepared := ApplyPaperlessSecretKeyForRestore(BackupFolder, KeyPreparationCancelled, PreparedKey);
-        if not KeyPreparationCancelled then
-          KeyPreparationCancelled := not RestoreEmailEnvFromBackup(BackupFolder, RestoreMailBytes, HasRestoreMail);
-        if KeyPreparationCancelled then
+        CenteredShowMessage('Bitte zuerst den Paperless-Ordner auswählen.');
+        StartPaperlessBackupBtn.Enabled := True;
+        RestorePaperlessBackupBtn.Enabled := True;
+        Exit;
+      end;
+      // Start the restore folder picker in the last known backup target folder.
+      // Die Ordnerauswahl für die Wiederherstellung im zuletzt bekannten Backup-Zielordner starten.
+      RestoreDefaultFolder := GetEnvironmentVariable('USERPROFILE');
+      Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
+      try
+        LastBackupFolder := Ini.ReadString('Pfade', 'BackupZiel', '').Trim;
+        if (LastBackupFolder <> '') and System.SysUtils.DirectoryExists(LastBackupFolder) then
+          RestoreDefaultFolder := LastBackupFolder;
+      finally
+        Ini.Free;
+      end;
+      FolderDialog := TFileOpenDialog.Create(nil);
+      try
+        FolderDialog.Options := [fdoPickFolders];
+        FolderDialog.Title := 'Bitte den Ordner mit Ihrem Paperless-Backup auswählen.';
+        FolderDialog.DefaultFolder := RestoreDefaultFolder;
+        if CenteredFolderDialogExecute(FolderDialog) then
         begin
-          ClearRestoreProgressState;
-          BackupWiederherProgNeuStartLbl.Caption := 'Wiederherstellung abgebrochen.';
-          StartPaperlessBackupBtn.Enabled := True;
-          RestorePaperlessBackupBtn.Enabled := True;
-          Exit;
-        end;
-        if KeyPrepared then
-        begin
-          try
-            SaveRestoreSecretKey(PreparedKey);
-          except
-            on E: Exception do
+          BackupFolder := FolderDialog.FileName;
+          BackupWiederherProgNeuStartLbl.Visible := True;
+          BackupWiederherProgNeuStartLbl.Caption := 'Backup wird geprüft. Bitte warten ...';
+          Application.ProcessMessages;
+          BackupSizeBytes := GetDirectorySizeBytes(BackupFolder);
+          RestoreEstimatedSeconds := EstimateRestoreDurationSeconds(BackupSizeBytes);
+          RestoreEstimateText := 'Restore estimate available';
+          RestoreEstimateLogText := Format('Backup-Größe: %s. Geschätzte Wiederherstellungsdauer: %s.',
+            [FormatByteSize(BackupSizeBytes), EstimateRestoreDurationText(BackupSizeBytes)]);
+          BackupWiederherProgNeuStartLbl.Caption := 'Wiederherstellung wird vorbereitet. Bitte warten ...';
+          LogInfo('Restore estimate for "' + BackupFolder + '": ' + RestoreEstimateLogText);
+          Application.ProcessMessages;
+          if ValidateRestoreBackupFolder(BackupFolder) then
+          begin
+            if CenteredMessageDlg(
+              'Verwenden Sie nur ein Backup, dessen Herkunft Sie kennen und dem Sie vertrauen. ' +
+              'Die enthaltene SQL-Datei wird von PostgreSQL ausgeführt.' + sLineBreak + sLineBreak +
+              'Paperless wird während der Wiederherstellung angehalten. Jetzt fortfahren?',
+              mtWarning, [mbYes, mbNo], 0) <> mrYes then
             begin
-              LogWarning('Paperless secret key preparation failed.');
-              if CenteredMessageDlg('Der Schlüssel konnte nicht gespeichert werden. Die Wiederherstellung kann mit der vorhandenen Konfiguration fortgesetzt werden.' +
-                sLineBreak + sLineBreak + 'Wollen Sie das Backup dennoch wiederherstellen?',
-                mtWarning, [mbYes, mbNo], 0) <> mrYes then
-              begin
-                ClearRestoreProgressState;
-                BackupWiederherProgNeuStartLbl.Caption := 'Wiederherstellung abgebrochen.';
-                StartPaperlessBackupBtn.Enabled := True;
-                RestorePaperlessBackupBtn.Enabled := True;
-                Exit;
-              end;
-              KeyPrepared := False;
+              ClearRestoreProgressState;
+              Exit;
             end;
+            KeyPrepared := ApplyPaperlessSecretKeyForRestore(BackupFolder, ComposePath, KeyPreparationCancelled, PreparedKey);
+            if not KeyPreparationCancelled then
+              KeyPreparationCancelled := not RestoreEmailEnvFromBackup(BackupFolder, RestoreMailBytes, HasRestoreMail);
+            if KeyPreparationCancelled then
+            begin
+              ClearRestoreProgressState;
+              BackupWiederherProgNeuStartLbl.Caption := 'Wiederherstellung abgebrochen.';
+              StartPaperlessBackupBtn.Enabled := True;
+              RestorePaperlessBackupBtn.Enabled := True;
+              Exit;
+            end;
+            if not KeyPrepared then PreparedKey := '';
+            CreateRestoreScript(ComposePath, BackupFolder, PreparedKey, RestoreMailBytes, HasRestoreMail);
+          end
+          else
+          begin
+            ClearRestoreProgressState;
+            BackupWiederherProgNeuStartLbl.Visible := True;
+            BackupWiederherProgNeuStartLbl.Caption := 'Wiederherstellung abgebrochen.';
           end;
-        end;
-        if KeyPrepared then
+        end
+        else
         begin
-          ShouldWriteNewCompose := True;
-          try
-            CreateDockerComposeWithSetupForm;
-          finally
-            ShouldWriteNewCompose := False;
-          end;
+          CenteredShowMessage('Wiederherstellung abgebrochen – kein Backup-Ordner gewählt.');
         end;
-        if HasRestoreMail then
-        begin
-          TFile.WriteAllBytes(IncludeTrailingPathDelimiter(ExtractFilePath(ComposePath)) + EmailEnvFileName, RestoreMailBytes);
-          LogInfo('Encrypted email env file restored.');
-        end;
-        SaveEmptyEnvFile;
-        CreateRestoreScript(ComposePath, BackupFolder);
-      end
-      else
+      finally
+        FolderDialog.Free;
+      end;
+    except
+      on E: Exception do
       begin
         ClearRestoreProgressState;
-        BackupWiederherProgNeuStartLbl.Visible := True;
-        BackupWiederherProgNeuStartLbl.Caption := 'Wiederherstellung abgebrochen.';
+        LogWarning('Local restore could not be started: ' + E.Message);
+        CenteredShowMessage('Die Wiederherstellung konnte nicht gestartet werden: ' + E.Message);
       end;
-    end
-    else
-    begin
-      CenteredShowMessage('Wiederherstellung abgebrochen – kein Backup-Ordner gewählt.');
     end;
   finally
-    FolderDialog.Free;
+    StartPaperlessBackupBtn.Enabled := True;
+    RestorePaperlessBackupBtn.Enabled := True;
   end;
-  // Update the form state.
-  // Den Formularzustand aktualisieren.
-  StartPaperlessBackupBtn.Enabled := True;
-  RestorePaperlessBackupBtn.Enabled := True;
 end;
 
 // Den E-Mail-Speichern-Button aktivieren, nachdem der Benutzer den abgeschlossenen Update-Schritt bestätigt hat.
@@ -5437,28 +5312,61 @@ begin
   if NativeInt(ShellExecute(Handle, 'open', PChar(BrowserUrl), nil, nil, SW_SHOWNORMAL)) <= 32 then
     CenteredShowMessage('Paperless konnte nicht im Browser geöffnet werden.');
 end;
-// Create paperless-restore.ps1 for the selected backup folder.
-// paperless-restore.ps1 für den ausgewählten Backup-Ordner erstellen.
-// The script restores the database dump and all Paperless Docker volumes.
-// Das Skript stellt den Datenbank-Dump und alle Paperless-Docker-Volumes wieder her.
-procedure TMainformFrm.CreateRestoreScript(const ComposePath, BackupFolder: string);
+// Stage key and mail files separately; the worker applies them inside the restore lock.
+// Schlüssel und Maildatei vorbereiten. Der Worker übernimmt sie innerhalb der Wiederherstellungssperre.
+procedure TMainformFrm.CreateRestoreScript(const ComposePath, BackupFolder, PreparedKey: string;
+  const RestoreMailBytes: TBytes; const HasRestoreMail: Boolean);
 var
-  Volumes: TDockerVolumeNames;
+  WorkDir, KeyPath, MailPath, LogFolder: string;
+  ApplyKey: Boolean;
 begin
-  // Stop when no compose path was provided.
-  // Abbrechen, wenn kein Compose-Pfad übergeben wurde.
-  if ComposePath.Trim = '' then
-  begin
-    CenteredShowMessage('Fehler: Es wurde kein gültiger Compose-Pfad gewählt.');
-    Exit;
+  WorkDir := TPath.Combine(TPath.GetTempPath, 'Paperless-Restore-' + TGUID.NewGuid.ToString);
+  TDirectory.CreateDirectory(WorkDir);
+  KeyPath := TPath.Combine(WorkDir, 'requested-key.txt');
+  MailPath := TPath.Combine(WorkDir, 'requested-mail.env');
+  ApplyKey := (PreparedKey <> '') and not CustomFileProtected(ComposePath);
+  FLocalRestoreLogPath := '';
+  FLocalRestoreActive := True;
+  FLocalRestoreSucceeded := False;
+  try
+    if ApplyKey then TFile.WriteAllText(KeyPath, PreparedKey, TEncoding.UTF8);
+    if HasRestoreMail then TFile.WriteAllBytes(MailPath, RestoreMailBytes);
+    LogFolder := TPath.Combine(AppDataFolder, 'Logs');
+    TDirectory.CreateDirectory(LogFolder);
+    CmdTargetPath := ReserveTimestampedScript(ExtractFilePath(ComposePath), LogFolder);
+    FLocalRestoreLogPath := TPath.Combine(LogFolder, ChangeFileExt(ExtractFileName(CmdTargetPath), '.log'));
+    try
+      CreateRestoreCmdScript(CmdTargetPath, ComposePath, BackupFolder, WorkDir, FLocalRestoreLogPath,
+        ApplyKey, HasRestoreMail, FRestoreLegacyNames);
+      StartAndMonitorCmdScript;
+    finally
+      DeleteGeneratedScriptFile(CmdTargetPath);
+    end;
+    if FLocalRestoreSucceeded then
+    begin
+      if PreparedKey <> '' then
+        try
+          SaveRestoreSecretKey(PreparedKey);
+        except
+          on E: Exception do
+          begin
+            LogWarning('Restore completed, but the key could not be saved in the settings.');
+            CenteredShowMessage('Paperless wurde wiederhergestellt. Der Schlüssel konnte nicht zusätzlich ' +
+              'in der Einstellungen.ini gespeichert werden. Bitte prüfen Sie dies vor dem nächsten Update.');
+          end;
+        end;
+      if HasRestoreMail then LoadEmailSettings;
+      CenteredShowMessage('Wiederherstellung abgeschlossen. Die Paperless-Weboberfläche ist erreichbar.' +
+        sLineBreak + sLineBreak + 'Logdatei: ' + FLocalRestoreLogPath);
+    end;
+  finally
+    FLocalRestoreActive := False;
+    if FileExists(KeyPath) then System.SysUtils.DeleteFile(KeyPath);
+    if FileExists(MailPath) then System.SysUtils.DeleteFile(MailPath);
+    // Retain diagnostics and recovery files when the worker could not complete.
+    // Diagnose- und Rückfalldateien bei einem Fehler aufbewahren.
+    System.SysUtils.RemoveDir(WorkDir);
   end;
-  CmdTargetPath := IncludeTrailingPathDelimiter(ExtractFilePath(ComposePath)) + 'paperless-restore.ps1';
-  Volumes.Data := Volume_data;
-  Volumes.DbData := Volume_db_data;
-  Volumes.ExportData := Volume_export;
-  Volumes.Media := Volume_media;
-  CreateRestoreCmdScript(CmdTargetPath, ComposePath, BackupFolder, PaperlessDBName, Volumes, FRestoreLegacyNames);
-  StartAndMonitorCmdScript;
 end;
 
 // Startet das erzeugte Skript verdeckt, verfolgt Status und Exitcode und führt die passende Erfolgs-/Fehlerauswertung aus.
@@ -5573,15 +5481,16 @@ begin
               'Bitte geben Sie Paperless Zeit zum starten.',
               'Info', MB_OK or MB_ICONINFORMATION or MB_TOPMOST);
             end;
-            WriteImageVersionWithSetupForm(BackupPath);
-          end
-          else
-          begin
-            if not IsAutostart = True then
-            begin
-              IsRestoreApplyingSettings := True;
-              SaveSettingsBtnClick(nil);
+            try
+              WriteImageVersionWithSetupForm(BackupPath);
+            except
+              on E: Exception do LogWarning('Backup image versions could not be written: ' + E.Message);
             end;
+          end
+          else if FLocalRestoreActive then
+          begin
+            FLocalRestoreSucceeded := True;
+            FinishScriptProgress('Wiederherstellung abgeschlossen.', True);
           end;
         end
         else
@@ -5591,14 +5500,22 @@ begin
             FinishScriptProgress('Installation abgebrochen.', False);
             if Assigned(SetupFrm) then
               SetupFrm.HinweisVerstandenBtn.Enabled := True;
-            CenteredShowMessage('Installation wurde abgebrochen. Bereits geladene Docker-Images wurden entfernt.');
+            CenteredShowMessage('Installation wurde abgebrochen. Vorhandene Docker-Volumes und Images wurden erhalten.');
             IsPaperlessInstallation := False;
             InstallCancelRequested := False;
           end
           else
           begin
             FinishScriptProgress('Vorgang fehlgeschlagen.', False);
-            CenteredShowMessage(ScriptFailureMessage(OutputLogPath, ExitCode));
+            if FLocalRestoreActive and FileExists(FLocalRestoreLogPath) then
+              CenteredShowMessage('Wiederherstellung fehlgeschlagen. Das Protokoll enthält das Ergebnis ' +
+                'der Rückkehr und gegebenenfalls den Pfad zu den Rückfalldateien.' +
+                sLineBreak + sLineBreak + 'Logdatei: ' + FLocalRestoreLogPath)
+            else if IsBackup then
+              CenteredShowMessage(ScriptFailureMessage(OutputLogPath, ExitCode) + sLineBreak + sLineBreak +
+                'Backup-Protokoll: ' + TPath.Combine(AppDataFolder, 'Backup.log'))
+            else
+              CenteredShowMessage(ScriptFailureMessage(OutputLogPath, ExitCode));
           end;
           ClearRestoreProgressState;
         end;
@@ -6202,23 +6119,47 @@ begin
   end;
 end;
 
-// Eine gepunktete Version (x.x.x.x) in eine sortierbare Zeichenkette fester Breite umwandeln.
-function TMainformFrm.VersionToInt(const V: string): string;
+// Compare up to four numeric components. Omitted trailing components are zero.
+// Bis zu vier numerische Segmente vergleichen. Fehlende Endsegmente zählen als null.
+function TMainformFrm.TryCompareProgramVersions(const LeftVersion, RightVersion: string;
+  out Comparison: Integer): Boolean;
+type
+  TVersionParts = array[0..3] of Integer;
 var
-  P: TArray<string>;
-  I, Part: Integer;
-begin
-  P := Trim(V).Split(['.']);
-  Result := '';
-  for I := 0 to 3 do
+  LeftParts, RightParts: TVersionParts;
+  Index: Integer;
+
+  function Parse(const Value: string; out Parts: TVersionParts): Boolean;
+  var
+    Segments: TArray<string>;
+    Segment: string;
+    Ch: Char;
+    I: Integer;
   begin
-    Part := 0;
-    if I < Length(P) then
-      Part := StrToIntDef(P[I], 0);
-    if I = 0 then
-      Result := IntToStr(Part)
-    else
-      Result := Result + Format('%.3d', [Part]);
+    Result := False;
+    Parts := Default(TVersionParts);
+    Segments := Trim(Value).Split(['.']);
+    if (Length(Segments) = 0) or (Length(Segments) > Length(Parts)) then Exit;
+    for I := 0 to High(Segments) do
+    begin
+      Segment := Segments[I];
+      if Segment = '' then Exit;
+      for Ch in Segment do
+        if not CharInSet(Ch, ['0'..'9']) then Exit;
+      if not TryStrToInt(Segment, Parts[I]) or (Parts[I] > High(Word)) then Exit;
+    end;
+    Result := True;
   end;
+
+begin
+  Comparison := 0;
+  Result := Parse(LeftVersion, LeftParts) and Parse(RightVersion, RightParts);
+  if not Result then Exit;
+  for Index := Low(LeftParts) to High(LeftParts) do
+    if LeftParts[Index] <> RightParts[Index] then
+    begin
+      Comparison := LeftParts[Index] - RightParts[Index];
+      Exit;
+    end;
 end;
 end.

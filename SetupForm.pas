@@ -102,7 +102,7 @@ implementation
 {$R *.dfm}
 
 uses
-  Mainform, DockerComposeGenerator, AppConfig, AppLogger, AppDialogs;
+  Mainform, DockerComposeGenerator, ScriptGenerator, AppConfig, AppLogger, AppDialogs;
 // Ein erzeugtes Setup-PowerShell-Skript als versteckt markieren.
 procedure MarkSetupScriptHidden(const ScriptPath: string);
 var
@@ -434,7 +434,6 @@ end;
 procedure TSetupFrm.InstallPaperlessBtnClick(Sender: TObject);
 var
   ExitCode: Cardinal;
-  Ini:TAppSettingsIni;
 begin
   // Route the setup button through the same server installation as the settings button.
   // Den Einrichtungsbutton im Servermodus über denselben Ablauf wie in den Einstellungen führen.
@@ -521,19 +520,6 @@ begin
   end;
 
   if ApplicationClosing or Application.Terminated then Exit;
-  Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(Mainform.AppDataFolder) + SettingsFileName);
-  try
-     try
-      // Save the installation state before running the script.
-      // Den Installationsstatus speichern, bevor das Skript ausgeführt wird.
-      Ini.WriteString('Einrichtung', 'Installation abgeschlossen', 'Ja');
-     except
-       CenteredShowMessage('Einstellungen.ini kann nicht geschrieben werden. Rechte?');
-     end;
-  finally
-     Ini.Free;
-  end;
-
   CreateDockerComposeFile;
   InstallationCancelBtn.Visible := False;
   InstallationCancelBtn.Enabled := False;
@@ -694,7 +680,7 @@ end;
 // Je nach Modus entsteht das Installations-/Updateskript oder ein Neustart. Diese Methode kann echte Docker-Aktionen anstoßen.
 procedure TSetupFrm.CreateDockerComposeFile;
 var
-  ComposePath, ComposeContent: string;
+  ComposePath, ComposeContent, CandidatePath: string;
   PaperlessSecretKey: string;
   CmdFile: TStringList;
   Ini: TAppSettingsIni;
@@ -767,7 +753,14 @@ begin
 
   // Write docker-compose.yml.
   // docker-compose.yml schreiben.
-  SaveDockerComposeFile(ComposePath, ComposeContent);
+  CandidatePath := ComposePath;
+  if IsUpdate and not CustomFileProtected(ComposePath) then
+  begin
+    if not FileExists(ComposePath) then
+      raise Exception.Create('Die bisherige Compose-Datei fehlt.');
+    CandidatePath := TPath.Combine(AppDataFolder, '.paperless-update-' + TGUID.NewGuid.ToString + '.yml');
+  end;
+  SaveDockerComposeFile(CandidatePath, ComposeContent);
 
   // Write the compose path marker file. It is migrated into the INI on startup.
   // Die Markerdatei für den Compose-Pfad schreiben. Sie wird beim Start in die INI migriert.
@@ -789,7 +782,9 @@ begin
     try
       CmdFile.Add('$ErrorActionPreference = ''Stop''');
       CmdFile.Add('');
+      CmdFile.Add('$ComposeDir = $PSScriptRoot');
       CmdFile.Add('try {');
+      AddLocalOperationLock(CmdFile);
       CmdFile.Add('    $ComposeFile = Join-Path $PSScriptRoot ''docker-compose.yml''');
       CmdFile.Add('    $EmailFile = Join-Path $PSScriptRoot ''email-versand.env''');
       CmdFile.Add('');
@@ -830,21 +825,25 @@ begin
       CmdFile.Add('        throw "Containerstart fehlgeschlagen. ExitCode: $LASTEXITCODE"');
       CmdFile.Add('    }');
       CmdFile.Add('');
+      CmdFile.Add('    $webReady = $false');
+      CmdFile.Add('    $deadline = [DateTime]::UtcNow.AddMinutes(3)');
+      CmdFile.Add('    $probe = "import http.client,sys; c=http.client.HTTPConnection(''127.0.0.1'',8000,timeout=3); c.request(''GET'',''/''); r=c.getresponse(); sys.exit(0 if 200 <= r.status < 400 or r.status in (401,403) else 1)"');
+      CmdFile.Add('    $oldPreference = $ErrorActionPreference');
       CmdFile.Add('    try {');
-      CmdFile.Add('        docker image prune -f');
-      CmdFile.Add('        if ($LASTEXITCODE -ne 0) {');
-      CmdFile.Add('            Write-Warning "Image-Bereinigung fehlgeschlagen: $LASTEXITCODE"');
-      CmdFile.Add('        }');
-      CmdFile.Add('    } catch {');
-      CmdFile.Add('        Write-Warning $_.Exception.Message');
-      CmdFile.Add('    }');
-      CmdFile.Add('');
-      CmdFile.Add('    Write-Host ''Container gestartet. Paperless benötigt möglicherweise noch Zeit.''');
-      CmdFile.Add('    Write-Host ''Adresse: http://localhost:8001''');
+      CmdFile.Add('      $ErrorActionPreference = ''Continue''');
+      CmdFile.Add('      do {');
+      CmdFile.Add('        docker compose -f $ComposeFile exec -T paperless python3 -c $probe 2>$null | Out-Null');
+      CmdFile.Add('        if ($LASTEXITCODE -eq 0) { $webReady = $true; break }');
+      CmdFile.Add('        Start-Sleep -Seconds 2');
+      CmdFile.Add('      } while ([DateTime]::UtcNow -lt $deadline)');
+      CmdFile.Add('    } finally { $ErrorActionPreference = $oldPreference }');
+      CmdFile.Add('    if (-not $webReady) { throw ''Die Paperless-Weboberfläche wurde nicht bereit.'' }');
       CmdFile.Add('    exit 0');
       CmdFile.Add('} catch {');
       CmdFile.Add('    Write-Host (''PAPERLESS_FEHLER: '' + $_.Exception.Message) -ForegroundColor Red');
       CmdFile.Add('    exit 1');
+      CmdFile.Add('} finally {');
+      CmdFile.Add('    if ($OperationLock) { $OperationLock.Dispose() }');
       CmdFile.Add('}');
       CmdFile.SaveToFile(CmdTargetPath, TEncoding.UTF8);
       MarkSetupScriptHidden(CmdTargetPath);
@@ -876,55 +875,68 @@ begin
         CmdFile.Add('function Wait-Countdown([int]$Seconds) {');
         CmdFile.Add('  for ($i = $Seconds; $i -ge 1; $i--) { Write-Host $i; Start-Sleep -Seconds 1 }');
         CmdFile.Add('}');
+
+        CmdFile.Add('$ActiveCompose = ' + #39 +
+          StringReplace(ComposePath, #39, #39#39, [rfReplaceAll]) + #39);
+        CmdFile.Add('$Candidate = ' + #39 + StringReplace(CandidatePath, #39, #39#39, [rfReplaceAll]) + #39);
+        CmdFile.Add('$ComposeDir = Split-Path -Parent $ActiveCompose');
+        CmdFile.Add('$activate = $false');
+        CmdFile.Add('$MigrationMayHaveRun = $false');
         CmdFile.Add('try {');
-        CmdFile.Add('  Set-Location -LiteralPath ''' + StringReplace(AppDataFolder, '''', '''''', [rfReplaceAll]) + '''');
-        CmdFile.Add('  Invoke-Step { docker compose -f docker-compose.yml down } "Fehler beim Stoppen der Container."');
-        CmdFile.Add('  Write-Host "Neustart wird kurz abgewartet ..."');
-        CmdFile.Add('  Wait-Countdown 5');
-        // Pull updated images here.
-        // Hier aktualisierte Images herunterladen.
-        CmdFile.Add('  Invoke-Step { docker compose --progress plain -f docker-compose.yml pull } "Fehler beim Herunterladen aktualisierter Images."');
-        // Reapply execution permissions after updates without replacing script contents.
-        // Ausführungsrechte nach Updates erneut setzen, ohne den Skriptinhalt zu ersetzen.
-          CmdFile.Add('  Invoke-Step { docker compose -f docker-compose.yml run --rm --no-deps -T --user 0 --entrypoint /bin/sh paperless -c "chmod 755 /usr/src/paperless/scripts/master_pre_consume.sh ' +
-          '&& test -x /usr/src/paperless/scripts/master_pre_consume.sh" } ' +
-            '"Skript-Ausfuehrungsrechte konnten nicht gesetzt werden."');
-        CmdFile.Add('  Invoke-Step { docker compose --progress plain -f docker-compose.yml up -d } "Fehler beim Starten der Container."');
-        // Wait for PostgreSQL in this Compose project to accept connections after the restart.
-        // Nach dem Neustart warten, bis PostgreSQL in diesem Compose-Projekt Verbindungen annimmt.
-        CmdFile.Add('  Write-Host "Warte auf PostgreSQL..."');
-        CmdFile.Add('  $DatabaseReady = $false');
-        CmdFile.Add('  for ($Attempt = 0; $Attempt -lt 60; $Attempt++) {');
-        CmdFile.Add('    docker compose -f docker-compose.yml exec -T db pg_isready -q -U paperless -d paperless');
-        CmdFile.Add('    if ($LASTEXITCODE -eq 0) { $DatabaseReady = $true; break }');
+        AddLocalOperationLock(CmdFile);
+        CmdFile.Add('  Set-Location -LiteralPath $ComposeDir');
+        CmdFile.Add('  Invoke-Step { docker compose -f $Candidate config --quiet } ''Die vorbereitete Compose-Datei ist ungültig.''');
+        CmdFile.Add('  Invoke-Step { docker compose --progress plain -f $Candidate pull } ''Aktualisierte Images konnten nicht geladen werden.''');
+        CmdFile.Add('  Invoke-Step { docker compose -f $Candidate run --rm --no-deps -T --user 0 --entrypoint chmod paperless 755 /usr/src/paperless/scripts/master_pre_consume.sh } ''Skript-Ausführungsrechte konnten nicht gesetzt werden.''');
+        CmdFile.Add('  $activate = $true');
+        CmdFile.Add('  Invoke-Step { docker compose -f $ActiveCompose stop paperless } ''Paperless konnte nicht gestoppt werden.''');
+        CmdFile.Add('  Invoke-Step { docker compose --progress plain -f $Candidate up -d db broker gotenberg tika } ''Die Basisdienste konnten nicht gestartet werden.''');
+        CmdFile.Add('  $ready = $false');
+        CmdFile.Add('  for ($i = 0; $i -lt 60; $i++) {');
+        CmdFile.Add('    docker compose -f $Candidate exec -T db pg_isready -q -U paperless -d paperless');
+        CmdFile.Add('    if ($LASTEXITCODE -eq 0) { $ready = $true; break }');
         CmdFile.Add('    Start-Sleep -Seconds 2');
         CmdFile.Add('  }');
-        CmdFile.Add('  if (-not $DatabaseReady) { throw "PostgreSQL wurde innerhalb von 120 Sekunden nicht bereit." }');
-        CmdFile.Add('  Write-Host "Aktualisiere Django-Datenbankstruktur..."');
-        CmdFile.Add('  docker compose -f docker-compose.yml exec -T paperless python3 manage.py migrate');
-        CmdFile.Add('  if ($LASTEXITCODE -ne 0) {');
-        CmdFile.Add('    Write-Host "Hinweis: Django-Datenbankmigration konnte jetzt nicht abgeschlossen werden. Das Skript laeuft weiter." -ForegroundColor Yellow');
-        CmdFile.Add('    $global:LASTEXITCODE = 0');
+        CmdFile.Add('  if (-not $ready) { throw ''PostgreSQL wurde innerhalb von 120 Sekunden nicht bereit.'' }');
+        CmdFile.Add('  $MigrationMayHaveRun = $true');
+        CmdFile.Add('  Invoke-Step { docker compose -f $Candidate run --rm --no-deps -T --entrypoint python3 paperless /usr/src/paperless/src/manage.py migrate --noinput } ''Django-Migration fehlgeschlagen.''');
+        CmdFile.Add('  Invoke-Step { docker compose -f $Candidate exec -T db psql -X -w -U paperless -d paperless -v ON_ERROR_STOP=1 -c ''ALTER DATABASE paperless REFRESH COLLATION VERSION;'' } ''PostgreSQL-Collation konnte nicht aktualisiert werden.''');
+        CmdFile.Add('  Invoke-Step { docker compose -f $Candidate up -d paperless } ''Paperless konnte nicht gestartet werden.''');
+        CmdFile.Add('  $webReady = $false');
+        CmdFile.Add('  $deadline = [DateTime]::UtcNow.AddMinutes(3)');
+        CmdFile.Add('  $probe = "import http.client,sys; c=http.client.HTTPConnection(''127.0.0.1'',8000,timeout=3); c.request(''GET'',''/''); r=c.getresponse(); sys.exit(0 if 200 <= r.status < 400 or r.status in (401,403) else 1)"');
+        CmdFile.Add('  $oldPreference = $ErrorActionPreference');
+        CmdFile.Add('  try {');
+        CmdFile.Add('    $ErrorActionPreference = ''Continue''');
+        CmdFile.Add('    do {');
+        CmdFile.Add('      docker compose -f $Candidate exec -T paperless python3 -c $probe 2>$null | Out-Null');
+        CmdFile.Add('      if ($LASTEXITCODE -eq 0) { $webReady = $true; break }');
+        CmdFile.Add('      Start-Sleep -Seconds 2');
+        CmdFile.Add('    } while ([DateTime]::UtcNow -lt $deadline)');
+        CmdFile.Add('  } finally { $ErrorActionPreference = $oldPreference }');
+        CmdFile.Add('  if (-not $webReady) { throw ''Die Paperless-Weboberfläche wurde nicht bereit.'' }');
+        CmdFile.Add('  if ($Candidate -ne $ActiveCompose) {');
+        CmdFile.Add('    $previous = $Candidate + ''.old''');
+        CmdFile.Add('    [IO.File]::Replace($Candidate, $ActiveCompose, $previous)');
+        CmdFile.Add('    Remove-Item -LiteralPath $previous -Force -ErrorAction SilentlyContinue');
         CmdFile.Add('  }');
-        CmdFile.Add('  Write-Host "Aktualisiere PostgreSQL Collation Version..."');
-        // Resolve the db service through Compose and make psql report SQL errors as failures.
-        // Den db-Dienst über Compose auflösen und SQL-Fehler von psql als Fehlschlag melden.
-        CmdFile.Add('  Invoke-Step { docker compose -f docker-compose.yml exec -T db psql -X -w -U paperless -d paperless -v ON_ERROR_STOP=1 -c "ALTER DATABASE paperless REFRESH COLLATION VERSION;" } "Fehler beim Aktualisieren der PostgreSQL Collation Version."');
-        CmdFile.Add('  Write-Host "Nicht mehr verwendete Volumes werden geloescht"');
-        CmdFile.Add('  Wait-Countdown 3');
-        CmdFile.Add('  Invoke-Step { docker volume prune -f } "Fehler beim Bereinigen nicht verwendeter Volumes."');
-        CmdFile.Add('  Wait-Countdown 3');
-        CmdFile.Add('  Write-Host "Nicht mehr verwendete Docker-Images werden geloescht"');
-        CmdFile.Add('  Wait-Countdown 3');
-        CmdFile.Add('  Invoke-Step { docker image prune -f } "Fehler beim Bereinigen nicht verwendeter Docker-Images."');
-        CmdFile.Add('  Wait-Countdown 3');
-        CmdFile.Add('  Write-Host "Systeme starten. Fenster wird gleich geschlossen ..."');
-        CmdFile.Add('  Wait-Countdown 10');
+        CmdFile.Add('  exit 0');
         CmdFile.Add('} catch {');
-        CmdFile.Add('  Write-Host (''PAPERLESS_FEHLER: '' + $_.Exception.Message) -ForegroundColor Red');
+        CmdFile.Add('  $detail = $_.Exception.Message');
+        CmdFile.Add('  if ($activate -and -not $MigrationMayHaveRun) {');
+        CmdFile.Add('    try { Invoke-Step { docker compose -f $ActiveCompose up -d --pull never } ''Bisherige Dienste konnten nicht wieder gestartet werden.'' }');
+        CmdFile.Add('    catch { $detail += '' '' + $_.Exception.Message }');
+        CmdFile.Add('  } elseif ($MigrationMayHaveRun) {');
+        CmdFile.Add('    $detail += '' Die Datenbank könnte bereits migriert sein. Die bisherige Compose-Datei wurde für die Fehlerbehebung erhalten.''');
+        CmdFile.Add('  }');
+        CmdFile.Add('  Write-Host (''PAPERLESS_FEHLER: '' + $detail) -ForegroundColor Red');
         CmdFile.Add('  exit 1');
+        CmdFile.Add('} finally {');
+        CmdFile.Add('  if ($OperationLock) { $OperationLock.Dispose() }');
+        CmdFile.Add('  if ($Candidate -ne $ActiveCompose -and [IO.File]::Exists($Candidate)) {');
+        CmdFile.Add('    Remove-Item -LiteralPath $Candidate -Force -ErrorAction SilentlyContinue');
+        CmdFile.Add('  }');
         CmdFile.Add('}');
-        CmdFile.Add('exit 0');
         CmdFile.SaveToFile(CmdTargetPath, TEncoding.UTF8);
         MarkSetupScriptHidden(CmdTargetPath);
       finally

@@ -26,6 +26,8 @@ unit ScriptGenerator;
 
 interface
 
+uses System.Classes;
+
 type
   // Docker volume names used by the backup and restore scripts.
   // Docker-Volume-Namen, die von den Backup- und Wiederherstellungsskripten verwendet werden.
@@ -36,17 +38,19 @@ type
     Media: string;
   end;
 
+const
+  LocalBackupScriptMarker = '# Paperless local backup v2';
+
+procedure AddLocalOperationLock(const Lines: TStrings);
 procedure CreateManualBackupCmdScript(
-  const TargetPath, ComposePath, BackupPath, AppDataFolder, DatabaseContainerName: string;
-  const Volumes: TDockerVolumeNames);
+  const TargetPath, ComposePath, BackupPath, AppDataFolder, MailFile: string; MaxBackupFolders: Integer);
 
 procedure CreatePlannedBackupCmdScript(
-  const TargetPath, ComposePath, BackupBasePath, AppDataFolder, DatabaseContainerName: string;
-  const Volumes: TDockerVolumeNames; MaxBackupFolders: Integer);
+  const TargetPath, ComposePath, BackupBasePath, AppDataFolder: string; MaxBackupFolders: Integer);
 
 procedure CreateRestoreCmdScript(
-  const TargetPath, ComposePath, BackupFolder, DatabaseContainerName: string;
-  const Volumes: TDockerVolumeNames; const UseLegacyBackupNames: Boolean = False);
+  const TargetPath, ComposePath, BackupFolder, WorkDir, LogPath: string;
+  const ApplyKey, ApplyMail, UseLegacyBackupNames: Boolean);
 
 procedure CreateRestartCmdScript(const TargetPath, ComposePath: string);
 procedure CreateDeleteBackupScheduleCmdScript(const TargetPath: string);
@@ -56,7 +60,7 @@ procedure CreateBackupScheduleCmdScript(
 implementation
 
 uses
-  System.Classes, System.SysUtils, Winapi.Windows, AppConfig;
+  System.SysUtils, Winapi.Windows, AppConfig;
 
 // Einen Wert sicher als einfach gequotete PowerShell-Zeichenkette schreiben.
 function PsQuote(const Value: string): string;
@@ -69,6 +73,7 @@ end;
 procedure AddPsHeader(const Lines: TStringList);
 begin
   Lines.Add('$ErrorActionPreference = ''Stop''');
+  Lines.Add('$OperationLock = $null');
   Lines.Add('');
   Lines.Add('function Invoke-DockerStep {');
   Lines.Add('  param([scriptblock]$Command, [string]$ErrorMessage)');
@@ -83,6 +88,73 @@ begin
   Lines.Add('');
 end;
 
+// Wait for an HTTP response inside the running Paperless container.
+// Auf eine HTTP-Antwort im gestarteten Paperless-Container warten.
+procedure AddLocalPaperlessReadiness(const Lines: TStringList);
+begin
+  Lines.Add('function Wait-LocalPaperless([string]$id) {');
+  Lines.Add('  $probe = "import http.client,sys; c=http.client.HTTPConnection(''127.0.0.1'',8000,timeout=3); c.request(''GET'',''/''); r=c.getresponse(); sys.exit(0 if 200 <= r.status < 400 or r.status in (401,403) else 1)"');
+  Lines.Add('  $deadline = [DateTime]::UtcNow.AddMinutes(3)');
+  Lines.Add('  $oldPreference = $ErrorActionPreference');
+  Lines.Add('  $ErrorActionPreference = ''Continue''');
+  Lines.Add('  try {');
+  Lines.Add('    do {');
+  Lines.Add('      docker exec $id python3 -c $probe 2>$null | Out-Null');
+  Lines.Add('      if ($LASTEXITCODE -eq 0) { return }');
+  Lines.Add('      Start-Sleep -Seconds 2');
+  Lines.Add('    } while ([DateTime]::UtcNow -lt $deadline)');
+  Lines.Add('  } finally { $ErrorActionPreference = $oldPreference }');
+  Lines.Add('  throw ''Die Paperless-Weboberfläche wurde nicht bereit.''');
+  Lines.Add('}');
+end;
+
+// Check the archive format before backup publication and before a restore.
+// Das Archivformat vor der Backupfreigabe und vor dem Restore prüfen.
+procedure AddLocalArchiveValidation(const Lines: TStringList);
+begin
+  Lines.Add('function Assert-PaperlessBackupArchives([string]$CheckDir, [string]$Image, [string]$SqlName, [string[]]$ArchiveNames) {');
+  Lines.Add('  $validator = @''');
+  Lines.Add('import gzip');
+  Lines.Add('import pathlib');
+  Lines.Add('import sys');
+  Lines.Add('import tarfile');
+  Lines.Add('');
+  Lines.Add('root = pathlib.Path("/paperless-check")');
+  Lines.Add('for archive_name in sys.argv[2:]:');
+  Lines.Add('    with gzip.open(root / archive_name, "rb") as compressed:');
+  Lines.Add('        with tarfile.open(fileobj=compressed, mode="r|") as archive:');
+  Lines.Add('            for member in archive:');
+  Lines.Add('                name = pathlib.PurePosixPath(member.name)');
+  Lines.Add('                if name.is_absolute() or ".." in name.parts or not (member.isfile() or member.isdir()):');
+  Lines.Add('                    raise ValueError(f"Unsafe archive member in {archive_name}")');
+  Lines.Add('        while compressed.read(1024 * 1024):');
+  Lines.Add('            pass');
+  Lines.Add('with open(root / sys.argv[1], encoding="utf-8-sig") as dump:');
+  Lines.Add('    if not dump.read(4096).strip():');
+  Lines.Add('        raise ValueError("Empty SQL dump")');
+  Lines.Add('    while dump.read(1024 * 1024):');
+  Lines.Add('        pass');
+  Lines.Add('''@');
+  Lines.Add('  $validatorName = ''.paperless-check-'' + [guid]::NewGuid().ToString(''N'') + ''.py''');
+  Lines.Add('  $validatorPath = Join-Path $CheckDir $validatorName');
+  Lines.Add('  try {');
+  Lines.Add('    [IO.File]::WriteAllText($validatorPath, $validator, [Text.UTF8Encoding]::new($false))');
+  Lines.Add('    Invoke-DockerStep { docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges -v "$($CheckDir):/paperless-check:ro" --entrypoint python3 $Image "/paperless-check/$validatorName" $SqlName @ArchiveNames } ''Die Sicherungsdateien sind nicht vollständig lesbar oder enthalten nicht unterstützte Archiveinträge.''');
+  Lines.Add('  } finally {');
+  Lines.Add('    if ([IO.File]::Exists($validatorPath)) { [IO.File]::Delete($validatorPath) }');
+  Lines.Add('  }');
+  Lines.Add('}');
+end;
+
+// Coordinate GUI and scheduled operations through the same Compose directory.
+// GUI und Aufgabenplanung über dieselbe Sperre im Compose-Ordner koordinieren.
+procedure AddLocalOperationLock(const Lines: TStrings);
+begin
+  Lines.Add('  try {');
+  Lines.Add('    $OperationLock = [IO.File]::Open((Join-Path $ComposeDir ''.paperless-operation.lock''), [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)');
+  Lines.Add('  } catch { throw (''Die lokale Paperless-Installation ist belegt oder die Vorgangssperre konnte nicht geöffnet werden: '' + $_.Exception.Message) }');
+end;
+
 // Den gemeinsamen PowerShell-catch-Block und den Erfolgs-Exitcode hinzufügen.
 procedure AddPsFooter(const Lines: TStringList);
 begin
@@ -91,66 +163,44 @@ begin
   Lines.Add('  Write-Host ""');
   Lines.Add('  Write-Host (''PAPERLESS_FEHLER: '' + $_.Exception.Message) -ForegroundColor Red');
   Lines.Add('  exit 1');
+  Lines.Add('} finally {');
+  Lines.Add('  if ($OperationLock) { $OperationLock.Dispose() }');
   Lines.Add('}');
   Lines.Add('');
   Lines.Add('exit 0');
 end;
 
-// Save PS1 as UTF-8 with BOM and mark them hidden.
-// PS1 als UTF-8 mit BOM speichern und verstecken.
-// Clear Hidden/ReadOnly on existing targets before replacement.
-// Bei vorhandenen Zielen vor dem Ersetzen Hidden/ReadOnly entfernen.
+// Write the complete UTF-8 PS1 before replacing an existing task script.
+// Das vollständige UTF-8-Skript schreiben, bevor eine vorhandene Aufgabendatei ersetzt wird.
 procedure SavePsScript(const Lines: TStringList; const TargetPath: string);
 var
-  // Preserve all other Windows attributes when changing hidden/read-only flags.
-  // Alle anderen Windows-Attribute beim Ändern von Hidden/ReadOnly erhalten.
-  Attributes: DWORD;
+  TemporaryPath: string;
+  Attributes, NewAttributes: DWORD;
+  Saved: Boolean;
 begin
-  if FileExists(TargetPath) then
-  begin
-    Attributes := Winapi.Windows.GetFileAttributes(PChar(TargetPath));
-    if Attributes <> INVALID_FILE_ATTRIBUTES then
-      Winapi.Windows.SetFileAttributes(PChar(TargetPath), Attributes and not FILE_ATTRIBUTE_HIDDEN and not FILE_ATTRIBUTE_READONLY);
-    System.SysUtils.DeleteFile(TargetPath);
-  end;
-  Lines.SaveToFile(TargetPath, TEncoding.UTF8);
+  TemporaryPath := TargetPath + '.' + GUIDToString(TGUID.NewGuid) + '.tmp';
   Attributes := Winapi.Windows.GetFileAttributes(PChar(TargetPath));
-  if Attributes <> INVALID_FILE_ATTRIBUTES then
-    Winapi.Windows.SetFileAttributes(PChar(TargetPath), Attributes or FILE_ATTRIBUTE_HIDDEN);
-end;
-
-// Befehle hinzufügen, die ein Docker-Volume in den Backup-Ordner archivieren.
-procedure AddVolumeBackup(const Lines: TStringList; const VolumeName, DisplayName: string);
-begin
-  Lines.Add(Format('  Write-Host "Backup: %s"', [DisplayName]));
-  Lines.Add('  Write-Host "Bitte warten, Backup kann sehr lange dauern."');
-  Lines.Add(Format('  Invoke-DockerStep { docker run --rm -v "%s:/data" -v "$BackupDir`:/backup" alpine tar czvf "/backup/%s.tar.gz" -C /data . } "Fehler beim Sichern von %s"', [VolumeName, VolumeName, DisplayName]));
-  Lines.Add('');
-end;
-
-// Trennt PG18-Zielvolume und Archivnamen, damit alte Backups ohne Umbenennen der Quelldateien eingespielt werden.
-// Das erzeugte rm -rf /data/* entfernt keine Dotfiles; dieser bestehende Ablauf wird hier nicht geändert.
-procedure AddVolumeRestore(const Lines: TStringList; const VolumeName, DisplayName, ArchiveVolumeName: string);
-begin
-  Lines.Add(Format('  Write-Host "Wiederherstellen Volume: %s."', [DisplayName]));
-  Lines.Add('  Write-Host "Bitte warten, Wiederherstellung kann sehr lange dauern."');
-  Lines.Add(Format('  $Archive = Join-Path $BackupDir %s', [PsQuote(ArchiveVolumeName + '.tar.gz')]));
-  Lines.Add('  if (-not (Test-Path -LiteralPath $Archive)) { throw "Fehler: Archiv fehlt: $Archive" }');
-  Lines.Add(Format('  Invoke-DockerStep { docker run --rm -v "%s:/data" -v "$BackupDir`:/backup" alpine sh -c "rm -rf /data/* && tar xzvf /backup/%s.tar.gz -C /data" } "Fehler beim Wiederherstellen von %s"', [VolumeName, ArchiveVolumeName, DisplayName]));
-  Lines.Add('');
-end;
-
-// Einen Best-Effort-Kopierschritt für die verschluesselte E-Mail-Einstellungsdatei hinzufügen.
-procedure AddEncryptedEmailEnvBackup(const Lines: TStringList);
-begin
-  Lines.Add('  $EncryptedEmailEnvFile = Join-Path $ComposeDir "email-versand.env.enc"');
-  Lines.Add('  if (Test-Path -LiteralPath $EncryptedEmailEnvFile) {');
-  Lines.Add('    Copy-Item -LiteralPath $EncryptedEmailEnvFile -Destination (Join-Path $BackupDir "email-versand.env.enc") -Force');
-  Lines.Add('    Write-Host "Verschluesselte email-versand.env wurde ins Backup kopiert."');
-  Lines.Add('  } else {');
-  Lines.Add('    Write-Host "Hinweis: Verschluesselte email-versand.env nicht vorhanden. Schritt wird uebersprungen."');
-  Lines.Add('  }');
-  Lines.Add('');
+  Saved := False;
+  try
+    Lines.SaveToFile(TemporaryPath, TEncoding.UTF8);
+    if Attributes <> INVALID_FILE_ATTRIBUTES then
+    begin
+      NewAttributes := Attributes and not (FILE_ATTRIBUTE_HIDDEN or FILE_ATTRIBUTE_READONLY);
+      if NewAttributes = 0 then NewAttributes := FILE_ATTRIBUTE_NORMAL;
+      if not Winapi.Windows.SetFileAttributes(PChar(TargetPath), NewAttributes) then RaiseLastOSError;
+    end;
+    if not Winapi.Windows.MoveFileEx(PChar(TemporaryPath), PChar(TargetPath),
+      MOVEFILE_REPLACE_EXISTING or MOVEFILE_WRITE_THROUGH) then RaiseLastOSError;
+    Saved := True;
+    Winapi.Windows.SetFileAttributes(PChar(TargetPath), FILE_ATTRIBUTE_HIDDEN);
+  finally
+    if not Saved then
+    begin
+      if Attributes <> INVALID_FILE_ATTRIBUTES then
+        Winapi.Windows.SetFileAttributes(PChar(TargetPath), Attributes);
+      System.SysUtils.DeleteFile(TemporaryPath);
+    end;
+  end;
 end;
 
 // Einen nicht-fatalen Django-Migrationsschritt hinzufügen, damit Skripte weiterlaufen, wenn Paperless noch nicht bereit ist.
@@ -193,223 +243,277 @@ begin
   Lines.Add('  }');
 end;
 
-// Save the key configured in the running Paperless container.
-// Den Schlüssel aus dem laufenden Paperless-Container sichern.
-procedure AddActivePaperlessSecretKeyBackup(const Lines: TStringList);
-begin
-  Lines.Add('  try {');
-  Lines.Add('    $PaperlessContainer = @(docker compose ps -q paperless)');
-  Lines.Add('    if ($LASTEXITCODE -ne 0 -or $PaperlessContainer.Count -ne 1 -or [string]::IsNullOrWhiteSpace($PaperlessContainer[0])) { throw "Paperless-Container nicht gefunden." }');
-  Lines.Add('    $KeyLines = @(docker inspect --format ''{{range .Config.Env}}{{println .}}{{end}}'' $PaperlessContainer[0] | Where-Object { $_.StartsWith("PAPERLESS_SECRET_KEY=") })');
-  Lines.Add('    if ($LASTEXITCODE -ne 0 -or $KeyLines.Count -ne 1 -or $KeyLines[0].Length -le "PAPERLESS_SECRET_KEY=".Length) { throw "Secret Key nicht gefunden." }');
-  Lines.Add('    [IO.File]::WriteAllText((Join-Path $BackupDir ''paperless_secret_key.txt''), ($KeyLines[0] + [Environment]::NewLine), (New-Object System.Text.UTF8Encoding($true)))');
-  Lines.Add('  } catch { Write-Warning "Secret Key konnte nicht gesichert werden. Das Backup wird fortgesetzt." }');
-end;
-
-// Erzeugt SQL-Dump vor compose down, danach Archive einschließlich DB-Volume und den anschließenden Neustart.
-// Imageversions-Metadaten ergänzt die Delphi-Erfolgsauswertung. Bei Abbruch nach down ist kein garantierter Neustart vorgesehen.
-procedure CreateManualBackupCmdScript(
-  const TargetPath, ComposePath, BackupPath, AppDataFolder, DatabaseContainerName: string;
-  const Volumes: TDockerVolumeNames);
+// Stage and verify the backup before giving it a timestamp name.
+// Die Sicherung vor der Freigabe unter ihrem Zeitstempelnamen vorbereiten und prüfen.
+procedure CreateLocalBackupScript(const TargetPath, ComposePath, BackupTarget, AppDataFolder, MailFile: string;
+  MaxBackupFolders: Integer; Manual: Boolean);
 var
   Lines: TStringList;
+  LogName: string;
 begin
   Lines := TStringList.Create;
   try
-    // Decode native console output as UTF-8 in Windows PowerShell 5.1.
-    // Native Konsolenausgaben in Windows PowerShell 5.1 als UTF-8 lesen.
+    if Manual then LogName := 'Backup.log'
+    else LogName := 'GeplanterBackup.log';
+    Lines.Add(LocalBackupScriptMarker);
     Lines.Add('[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)');
     AddPsHeader(Lines);
+    AddLocalPaperlessReadiness(Lines);
+    AddLocalArchiveValidation(Lines);
+    Lines.Add('$ComposeFile = ' + PsQuote(ExpandFileName(ComposePath)));
+    Lines.Add('$ComposeDir = Split-Path -Parent $ComposeFile');
+    Lines.Add('$BackupLog = ' + PsQuote(IncludeTrailingPathDelimiter(AppDataFolder) + LogName));
+    Lines.Add('$MailFile = ' + PsQuote(MailFile));
+    Lines.Add(Format('$MaxBackupFolders = %d', [MaxBackupFolders]));
+    Lines.Add('$DumpName = ' + PsQuote(ComposeProjectName + '-db-1_backup.sql'));
+    Lines.Add('$DataName = ' + PsQuote(ComposeProjectName + '_data.tar.gz'));
+    Lines.Add('$MediaName = ' + PsQuote(ComposeProjectName + '_media.tar.gz'));
+    Lines.Add('$ExportName = ' + PsQuote(ComposeProjectName + '_export.tar.gz'));
+    Lines.Add('$DbDataName = ' + PsQuote(ComposeProjectName + '_db_data_18.tar.gz'));
+    if Manual then
+    begin
+      Lines.Add('$Manual = $true');
+      Lines.Add('$FinalBackupDir = ' + PsQuote(ExpandFileName(BackupTarget)));
+      Lines.Add('$BackupBase = Split-Path -Parent $FinalBackupDir');
+    end
+    else
+    begin
+      Lines.Add('$Manual = $false');
+      Lines.Add('$BackupBase = ' + PsQuote(ExpandFileName(BackupTarget)));
+      Lines.Add('$FinalBackupDir = Join-Path $BackupBase (Get-Date -Format ''yyyy-MM-dd_HH-mm-ss'')');
+    end;
+    Lines.Add('function Write-BackupLog([string]$Message) {');
+    Lines.Add('  try { Add-Content -LiteralPath $BackupLog -Encoding UTF8 -Value ((Get-Date -Format s) + '' '' + $Message) }');
+    Lines.Add('  catch { Write-Warning (''Backup-Protokoll konnte nicht geschrieben werden: '' + $_.Exception.Message) }');
+    Lines.Add('}');
+    Lines.Add('function Get-BackupContainer([string]$Service) {');
+    Lines.Add('  $ids = @(docker compose -f $ComposeFile ps --all -q $Service)');
+    Lines.Add('  if ($LASTEXITCODE -ne 0 -or $ids.Count -ne 1 -or $ids[0] -notmatch ''^[0-9a-f]{12,64}$'') {');
+    Lines.Add('    throw "Für $Service wurde kein eindeutiger Container gefunden."');
+    Lines.Add('  }');
+    Lines.Add('  $details = (docker inspect $ids[0] --format ''{{json .}}'') -join [Environment]::NewLine');
+    Lines.Add('  if ($LASTEXITCODE -ne 0 -or -not $details) { throw "Container $Service konnte nicht geprüft werden." }');
+    Lines.Add('  return $details | ConvertFrom-Json');
+    Lines.Add('}');
+    Lines.Add('function Assert-BackupMount($Container, [string]$Path) {');
+    Lines.Add('  $mount = @($Container.Mounts | Where-Object { $_.Destination -ceq $Path -and $_.Type -in @(''volume'',''bind'') })');
+    Lines.Add('  if ($mount.Count -ne 1 -or -not $mount[0].Source) { throw "Keine eindeutige Sicherungsquelle für $Path." }');
+    Lines.Add('}');
+    Lines.Add('function Save-BackupArchive([string]$ContainerId, [string]$Source, [string]$Name) {');
+    Lines.Add('  Write-Host "Sichere $Name. Bitte warten."');
+    Lines.Add('  Invoke-DockerStep { docker run --rm --network none --volumes-from ($ContainerId + '':ro'') -v ($BackupDir + '':/backup'') alpine tar -czvf "/backup/$Name" -C $Source . } "Fehler beim Sichern von $Name."');
+    Lines.Add('  if ($Name -eq $DbDataName) {');
+    Lines.Add('    Invoke-DockerStep { docker run --rm --network none -v ($BackupDir + '':/backup:ro'') alpine tar -tzf "/backup/$Name" | Out-Null } "Fehler beim Prüfen von $Name."');
+    Lines.Add('  }');
+    Lines.Add('}');
+    Lines.Add('function Remove-OldVerifiedBackups {');
+    Lines.Add('  if ($MaxBackupFolders -le 0) { return }');
+    Lines.Add('  $folders = @(Get-ChildItem -LiteralPath $BackupBase -Directory | Where-Object {');
+    Lines.Add('    $stamp = [datetime]::MinValue');
+    Lines.Add('    if (($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -or');
+    Lines.Add('        -not [datetime]::TryParseExact($_.Name, ''yyyy-MM-dd_HH-mm-ss'', [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::None, [ref]$stamp)) { return $false }');
+    Lines.Add('    $folder = $_.FullName');
+    Lines.Add('    $marker = Get-Item -LiteralPath (Join-Path $folder ''.paperless-backup-complete'') -ErrorAction SilentlyContinue');
+    Lines.Add('    if (-not $marker -or $marker.PSIsContainer -or ($marker.Attributes -band [IO.FileAttributes]::ReparsePoint) -or');
+    Lines.Add('        (Get-Content -LiteralPath $marker.FullName -Raw) -cne $BackupMarker) { return $false }');
+    Lines.Add('    $foreign = @(Get-ChildItem -LiteralPath $folder -Force | Where-Object { $_.PSIsContainer -or ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) })');
+    Lines.Add('    if ($foreign.Count) { return $false }');
+    Lines.Add('    foreach ($name in @($DumpName, $DataName, $MediaName, $ExportName)) {');
+    Lines.Add('      $item = Get-Item -LiteralPath (Join-Path $folder $name) -ErrorAction SilentlyContinue');
+    Lines.Add('      if (-not $item -or $item.PSIsContainer -or $item.Length -le 0 -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { return $false }');
+    Lines.Add('    }');
+    Lines.Add('    return $true');
+    Lines.Add('  } | Sort-Object Name -Descending)');
+    Lines.Add('  # Preserve the current backup even if the clock has been set back.');
+    Lines.Add('  # Aktuelles Backup auch bei zurückgestellter Uhr erhalten.');
+    Lines.Add('  $folders | Where-Object { $_.FullName -ne $FinalBackupDir } |');
+    Lines.Add('    Select-Object -Skip ($MaxBackupFolders - 1) | ForEach-Object {');
+    Lines.Add('      try { Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction Stop }');
+    Lines.Add('      catch { Write-BackupLog (''Aufräumen fehlgeschlagen: '' + $_.Exception.Message); Write-Warning $_.Exception.Message }');
+    Lines.Add('    }');
+    Lines.Add('}');
+    Lines.Add('$BackupDir = $null');
+    Lines.Add('$TargetLock = $null');
+    Lines.Add('$BackupMarker = ''Paperless Backup Programm PG18 - checked archive set v1''');
     Lines.Add('try {');
-    Lines.Add('  Write-Host "PowerShell Backup-Skript wird gestartet... Bitte warten"');
-    Lines.Add(Format('  $ComposeDir = %s', [PsQuote(ExtractFilePath(ComposePath))]));
-    Lines.Add(Format('  $BackupDir = %s', [PsQuote(BackupPath)]));
-    Lines.Add(Format('  $DatabaseContainer = %s', [PsQuote(DatabaseContainerName)]));
-    Lines.Add(Format('  $BackupLog = %s', [PsQuote(IncludeTrailingPathDelimiter(AppDataFolder) + 'Backup.log')]));
+    AddLocalOperationLock(Lines);
+    // Keep the source containers so Docker reuses their exact mounts.
+    // Quellcontainer behalten, damit Docker genau deren Mounts verwendet.
+    Lines.Add('  if (-not (Test-Path -LiteralPath $ComposeFile -PathType Leaf)) { throw ''Die gespeicherte Compose-Datei fehlt.'' }');
     Lines.Add('  Set-Location -LiteralPath $ComposeDir');
-    Lines.Add('  if (-not (Test-Path -LiteralPath $BackupDir)) { New-Item -ItemType Directory -Path $BackupDir | Out-Null }');
-    AddActivePaperlessSecretKeyBackup(Lines);
-    Lines.Add('  $DumpFile = Join-Path $BackupDir ($DatabaseContainer + "_backup.sql")');
-    Lines.Add('  Write-Host "PostgreSQL-Dump wird erstellt..."');
+    Lines.Add('  [void][IO.Directory]::CreateDirectory($BackupBase)');
+    Lines.Add('  $TargetLock = [IO.File]::Open((Join-Path $BackupBase ''.paperless-backup-target.lock''), [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)');
+    Lines.Add('  if (Test-Path -LiteralPath $FinalBackupDir) { throw ''Der Backup-Zeitstempel ist bereits belegt. Bitte erneut versuchen.'' }');
+    Lines.Add('  $BackupDir = Join-Path $BackupBase (''.paperless-incomplete-'' + [Guid]::NewGuid().ToString(''N''))');
+    Lines.Add('  [void][IO.Directory]::CreateDirectory($BackupDir)');
+    Lines.Add('  $Paperless = Get-BackupContainer ''paperless''');
+    Lines.Add('  $Database = Get-BackupContainer ''db''');
+    Lines.Add('  $DatabaseContainer = $Database.Id');
+    Lines.Add('  if (-not $Database.State.Running) { throw ''Der PostgreSQL-Container ist nicht gestartet.'' }');
+    Lines.Add('  foreach ($path in @(''/usr/src/paperless/data'',''/usr/src/paperless/media'',''/usr/src/paperless/export'')) { Assert-BackupMount $Paperless $path }');
+    Lines.Add('  Assert-BackupMount $Database ''/var/lib/postgresql''');
+    Lines.Add('  $version = (docker exec $DatabaseContainer psql -U paperless -d paperless -At -v ON_ERROR_STOP=1 -c ''SHOW server_version_num'') -join ''''');
+    Lines.Add('  if ($LASTEXITCODE -ne 0 -or $version.Trim() -notmatch ''^18[0-9]{4}$'') { throw ''Eine laufende PostgreSQL-18-Datenbank wird benötigt.'' }');
+    Lines.Add('  $alpineImage = @(docker image ls -q alpine:latest)');
+    Lines.Add('  if ($LASTEXITCODE -ne 0) { throw ''Docker-Images konnten nicht geprüft werden.'' }');
+    Lines.Add('  if (-not $alpineImage.Count) { Invoke-DockerStep { docker pull alpine } ''Das Archivierungsimage konnte nicht geladen werden.'' }');
+    Lines.Add('  $DumpFile = Join-Path $BackupDir $DumpName');
+    Lines.Add('  $keys = @($Paperless.Config.Env | Where-Object { $_.StartsWith(''PAPERLESS_SECRET_KEY='') -and $_.Length -gt ''PAPERLESS_SECRET_KEY=''.Length })');
+    Lines.Add('  if ($keys.Count -eq 1) { [IO.File]::WriteAllText((Join-Path $BackupDir ''paperless_secret_key.txt''), ($keys[0] + [Environment]::NewLine), [Text.UTF8Encoding]::new($true)) }');
+    Lines.Add('  else { Write-BackupLog ''WARNUNG: Secret Key wurde nicht gesichert.''; Write-Warning ''Secret Key wurde nicht gesichert.'' }');
+    Lines.Add('  if ($MailFile) {');
+    Lines.Add('    if (Test-Path -LiteralPath $MailFile -PathType Leaf) { Copy-Item -LiteralPath $MailFile -Destination (Join-Path $BackupDir ''email-versand.env.enc'') }');
+    Lines.Add('    elseif ($Manual) { throw ''Die vorbereitete verschlüsselte Maildatei fehlt.'' }');
+    Lines.Add('  }');
+    Lines.Add('  $RestartPaperless = $false');
+    Lines.Add('  $RestartDatabase = $false');
+    Lines.Add('  $BackupError = $null');
+    Lines.Add('  $RestartError = $null');
+    Lines.Add('  try {');
+    Lines.Add('    if ($Paperless.State.Running) {');
+    Lines.Add('      $RestartPaperless = $true');
+    Lines.Add('      Invoke-DockerStep { docker stop --time 60 $Paperless.Id } ''Paperless konnte nicht angehalten werden.''');
+    Lines.Add('    }');
+    Lines.Add('    Write-Host ''Erstelle den PostgreSQL-Dump.''');
     AddUtf8DatabaseDump(Lines);
-    Lines.Add('  Write-Host "Stoppe Docker-Container..."');
-    Lines.Add('  Invoke-DockerStep { docker compose down } "Fehler beim Stoppen der Container. Abbruch."');
-    Lines.Add('');
-    AddVolumeBackup(Lines, Volumes.Data, 'data');
-    AddVolumeBackup(Lines, Volumes.DbData, 'db_data');
-    AddVolumeBackup(Lines, Volumes.ExportData, 'export');
-    AddVolumeBackup(Lines, Volumes.Media, 'media');
-    AddEncryptedEmailEnvBackup(Lines);
-    Lines.Add('  Write-Host "Starte Docker-Container neu..."');
-    Lines.Add('  Invoke-DockerStep { docker compose up -d } "Fehler beim Starten der Container. Manuell pruefen."');
-    Lines.Add('  Write-Host "Nicht mehr verwendete Volumes werden geloescht"');
-    Lines.Add('  Wait-Countdown 3');
-    Lines.Add('  Invoke-DockerStep { docker volume prune -f } "Fehler beim Bereinigen nicht verwendeter Volumes."');
-    Lines.Add('  Wait-Countdown 3');
-    AddDanglingImagePrune(Lines);
-    Lines.Add('  Write-Host "-----------------------------------------"');
-    Lines.Add('  Write-Host "Backup abgeschlossen: $(Get-Date)"');
-    Lines.Add('  Write-Host "Dateien gespeichert in: $BackupDir"');
-    // Write new log entries as UTF-8; existing legacy log bytes are not converted.
-    // Neue Logeinträge als UTF-8 schreiben; vorhandene alte Logbytes werden nicht konvertiert.
-    Lines.Add('  Add-Content -LiteralPath $BackupLog -Encoding UTF8 -Value ("Backup abgeschlossen: " + (Get-Date))');
-    Lines.Add('  Add-Content -LiteralPath $BackupLog -Encoding UTF8 -Value ("Backup-Ziel: " + $BackupDir)');
-    Lines.Add('  Write-Host "Systeme starten. Fenster wird gleich geschlossen ..."');
-    Lines.Add('  Wait-Countdown 10');
-    AddPsFooter(Lines);
-    SavePsScript(Lines, TargetPath);
-  finally
-    Lines.Free;
-  end;
-end;
-
-// Erzeugt das direkt von der Aufgabenplanung ausgeführte Backup: SQL-Dump sowie data-, media- und export-Archive.
-// Kein physisches DB-Volume-Archiv und keine Imageversions-Metadaten.
-procedure CreatePlannedBackupCmdScript(
-  const TargetPath, ComposePath, BackupBasePath, AppDataFolder, DatabaseContainerName: string;
-  const Volumes: TDockerVolumeNames; MaxBackupFolders: Integer);
-var
-  Lines: TStringList;
-begin
-  Lines := TStringList.Create;
-  try
-    // Decode native console output as UTF-8 in Windows PowerShell 5.1.
-    // Native Konsolenausgaben in Windows PowerShell 5.1 als UTF-8 lesen.
-    Lines.Add('[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)');
-    AddPsHeader(Lines);
-    Lines.Add('try {');
-    Lines.Add(Format('  $ComposeDir = %s', [PsQuote(ExtractFilePath(ComposePath))]));
-    Lines.Add(Format('  $BackupBase = %s', [PsQuote(BackupBasePath)]));
-    Lines.Add(Format('  $DatabaseContainer = %s', [PsQuote(DatabaseContainerName)]));
-    Lines.Add(Format('  $PlannedLog = %s', [PsQuote(IncludeTrailingPathDelimiter(AppDataFolder) + 'GeplanterBackup.log')]));
-    Lines.Add('  $BackupDir = Join-Path $BackupBase (Get-Date -Format "yyyy-MM-dd_HH-mm-ss")');
-    Lines.Add('  Set-Location -LiteralPath $ComposeDir');
-    Lines.Add('  if (-not (Test-Path -LiteralPath $BackupDir)) { New-Item -ItemType Directory -Path $BackupDir | Out-Null }');
-    AddActivePaperlessSecretKeyBackup(Lines);
-    AddBestEffortDjangoMigration(Lines);
-    Lines.Add('  $DumpFile = Join-Path $BackupDir ($DatabaseContainer + "_backup.sql")');
-    AddUtf8DatabaseDump(Lines);
-    Lines.Add('  Invoke-DockerStep { docker compose down } "Fehler beim Stoppen der Container."');
-    AddVolumeBackup(Lines, Volumes.Data, 'data');
-    AddVolumeBackup(Lines, Volumes.Media, 'media');
-    AddVolumeBackup(Lines, Volumes.ExportData, 'export');
-    AddEncryptedEmailEnvBackup(Lines);
-    Lines.Add('  Invoke-DockerStep { docker compose up -d } "Fehler beim Starten der Container."');
-    Lines.Add('  Invoke-DockerStep { docker volume prune -f } "Fehler beim Bereinigen nicht verwendeter Volumes."');
-    AddDanglingImagePrune(Lines);
-    // Write new log entries as UTF-8; existing legacy log bytes are not converted.
-    // Neue Logeinträge als UTF-8 schreiben; vorhandene alte Logbytes werden nicht konvertiert.
-    Lines.Add('  Add-Content -LiteralPath $PlannedLog -Encoding UTF8 -Value ("Backup abgeschlossen: " + (Get-Date))');
-    Lines.Add('  Add-Content -LiteralPath $PlannedLog -Encoding UTF8 -Value ("Backup-Ziel: " + $BackupDir)');
-    // Apply retention only after a successful backup; preserve the current folder.
-    // Aufbewahrung erst nach erfolgreichem Backup anwenden; aktuellen Ordner erhalten.
-    Lines.Add(Format('  $MaxBackupFolders = %d', [MaxBackupFolders]));
-    Lines.Add('  if ($MaxBackupFolders -gt 0) {');
+    Lines.Add('    if (-not (Get-Item -LiteralPath $DumpFile).Length -or');
+    Lines.Add('        -not (@(Get-Content -LiteralPath $DumpFile -Tail 12) -contains ''-- PostgreSQL database dump complete'')) {');
+    Lines.Add('      throw ''Der PostgreSQL-Dump ist unvollständig.''');
+    Lines.Add('    }');
+    Lines.Add('    Save-BackupArchive $Paperless.Id ''/usr/src/paperless/data'' $DataName');
+    Lines.Add('    Save-BackupArchive $Paperless.Id ''/usr/src/paperless/media'' $MediaName');
+    Lines.Add('    Save-BackupArchive $Paperless.Id ''/usr/src/paperless/export'' $ExportName');
+    Lines.Add('    if ($Manual) {');
+    Lines.Add('      $RestartDatabase = $true');
+    Lines.Add('      Invoke-DockerStep { docker stop --time 60 $DatabaseContainer } ''PostgreSQL konnte für das physische Archiv nicht angehalten werden.''');
+    Lines.Add('      Save-BackupArchive $DatabaseContainer ''/var/lib/postgresql'' $DbDataName');
+    Lines.Add('    }');
+    Lines.Add('  } catch { $BackupError = $_.Exception.Message }');
+    Lines.Add('  finally {');
     Lines.Add('    try {');
-    Lines.Add('      $folders = @(Get-ChildItem -LiteralPath $BackupBase -Directory -ErrorAction Stop | Where-Object {');
-    Lines.Add('        $date = [datetime]::MinValue');
-    Lines.Add('        -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -and [datetime]::TryParseExact($_.Name, ''yyyy-MM-dd_HH-mm-ss'', [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::None, [ref]$date)');
-    Lines.Add('      } | Sort-Object Name -Descending)');
-    Lines.Add('      $folders | Select-Object -Skip $MaxBackupFolders | Where-Object { $_.FullName -ne $BackupDir } | ForEach-Object {');
-    Lines.Add('        try { Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction Stop }');
-    Lines.Add('        catch { Write-Warning ("Aufräumen fehlgeschlagen: " + $_.Exception.Message) }');
+    Lines.Add('      if ($RestartDatabase) {');
+    Lines.Add('        Invoke-DockerStep { docker start $DatabaseContainer } ''PostgreSQL konnte nicht neu gestartet werden.''');
+    Lines.Add('        $ready = $false');
+    Lines.Add('        for ($attempt = 0; $attempt -lt 60; $attempt++) {');
+    Lines.Add('          docker exec $DatabaseContainer pg_isready -U paperless -d paperless | Out-Null');
+    Lines.Add('          if ($LASTEXITCODE -eq 0) { $ready = $true; break }');
+    Lines.Add('          Start-Sleep -Seconds 2');
+    Lines.Add('        }');
+    Lines.Add('        if (-not $ready) { throw ''PostgreSQL wurde nach dem Neustart nicht bereit.'' }');
     Lines.Add('      }');
-    Lines.Add('    } catch { Write-Warning ("Aufräumen fehlgeschlagen: " + $_.Exception.Message) }');
+    Lines.Add('      if ($RestartPaperless) {');
+    Lines.Add('        Invoke-DockerStep { docker start $Paperless.Id } ''Paperless konnte nicht neu gestartet werden.''');
+    Lines.Add('        Wait-LocalPaperless $Paperless.Id');
+    Lines.Add('      }');
+    Lines.Add('    } catch { $RestartError = $_.Exception.Message }');
     Lines.Add('  }');
-    AddPsFooter(Lines);
+    Lines.Add('  if ($BackupError -and $RestartError) { throw ($BackupError + '' Wiederanlauf fehlgeschlagen: '' + $RestartError) }');
+    Lines.Add('  if ($BackupError) { throw $BackupError }');
+    Lines.Add('  if ($RestartError) { throw $RestartError }');
+    Lines.Add('  Assert-PaperlessBackupArchives $BackupDir $Paperless.Image $DumpName @($DataName, $MediaName, $ExportName)');
+    Lines.Add('  $expectedFiles = @($DumpName, $DataName, $MediaName, $ExportName)');
+    Lines.Add('  if ($Manual) { $expectedFiles += $DbDataName }');
+    Lines.Add('  foreach ($name in $expectedFiles) {');
+    Lines.Add('    $file = Get-Item -LiteralPath (Join-Path $BackupDir $name)');
+    Lines.Add('    if ($file.PSIsContainer -or $file.Length -le 0) { throw "Die Sicherungsdatei $name fehlt oder ist leer." }');
+    Lines.Add('  }');
+    Lines.Add('  [IO.File]::WriteAllText((Join-Path $BackupDir ''.paperless-backup-complete''), $BackupMarker, [Text.Encoding]::ASCII)');
+    Lines.Add('  [IO.Directory]::Move($BackupDir, $FinalBackupDir)');
+    Lines.Add('  $BackupDir = $null');
+    Lines.Add('  Write-BackupLog "Backup abgeschlossen. Ziel: $FinalBackupDir"');
+    Lines.Add('  try { Remove-OldVerifiedBackups }');
+    Lines.Add('  catch { Write-BackupLog (''Aufräumen fehlgeschlagen: '' + $_.Exception.Message); Write-Warning $_.Exception.Message }');
+    Lines.Add('  Write-Host "Backup abgeschlossen: $FinalBackupDir"');
+    Lines.Add('} catch {');
+    Lines.Add('  $failure = $_.Exception.Message');
+    Lines.Add('  Write-BackupLog (''FEHLER: '' + $failure)');
+    Lines.Add('  Write-Host (''PAPERLESS_FEHLER: '' + $failure) -ForegroundColor Red');
+    Lines.Add('  exit 1');
+    Lines.Add('} finally {');
+    Lines.Add('  if ($BackupDir -and (Test-Path -LiteralPath $BackupDir -PathType Container)) {');
+    Lines.Add('    try { Remove-Item -LiteralPath $BackupDir -Recurse -Force -ErrorAction Stop }');
+    Lines.Add('    catch { Write-BackupLog (''Temporärer Backupordner konnte nicht entfernt werden: '' + $_.Exception.Message) }');
+    Lines.Add('  }');
+    Lines.Add('  if ($TargetLock) { $TargetLock.Dispose() }');
+    Lines.Add('  if ($OperationLock) { $OperationLock.Dispose() }');
+    Lines.Add('}');
+    Lines.Add('exit 0');
     SavePsScript(Lines, TargetPath);
   finally
     Lines.Free;
   end;
 end;
 
-// Erzeugt Restore für alte oder neue Quelldateinamen; die Ziele bleiben stets die übergebenen PG18-Container und -Volumes.
-// Startet zunächst DB/Broker, wartet auf pg_isready und importiert SQL mit UTF-8-Pipe und ON_ERROR_STOP.
-// Erkennt den Django-Migrationsstand, migriert Legacy-Daten nötigenfalls über Paperless 2.20.15 und danach auf die Zielversion.
-// Paperless startet erst nach erfolgreicher Migration. Das alte physische PostgreSQL-Volume wird nicht zurückgespielt.
+procedure CreateManualBackupCmdScript(
+  const TargetPath, ComposePath, BackupPath, AppDataFolder, MailFile: string; MaxBackupFolders: Integer);
+begin
+  CreateLocalBackupScript(TargetPath, ComposePath, BackupPath, AppDataFolder, MailFile, MaxBackupFolders, True);
+end;
+
+procedure CreatePlannedBackupCmdScript(
+  const TargetPath, ComposePath, BackupBasePath, AppDataFolder: string; MaxBackupFolders: Integer);
+begin
+  CreateLocalBackupScript(TargetPath, ComposePath, BackupBasePath, AppDataFolder,
+    IncludeTrailingPathDelimiter(AppDataFolder) + EmailEnvEncryptedFileName, MaxBackupFolders, False);
+end;
+
+procedure AddRestoreMigrations(const Lines: TStringList);
+begin
+  // Select the migration path from the imported Django markers.
+  // Den Migrationsweg anhand der importierten Django-Marker wählen.
+  Lines.Add('  $MigrationQuery = "SELECT CASE WHEN EXISTS (SELECT 1 FROM django_migrations WHERE app=''documents'' ' +
+    'AND name IN (''1075_workflowaction_order'',''0001_squashed'',''0002_squashed'')) THEN ''ready'' ' +
+    'WHEN EXISTS (SELECT 1 FROM django_migrations WHERE app=''documents'') THEN ''legacy'' ELSE ''unknown'' END;"');
+  Lines.Add('  $MigrationState = docker exec --user postgres $DatabaseContainer psql -X -w -U paperless -d paperless -v ON_ERROR_STOP=1 -At -c $MigrationQuery');
+  Lines.Add('  if ($LASTEXITCODE -ne 0) { throw "Migrationsstand konnte nicht gelesen werden." }');
+  Lines.Add('  $MigrationState = ($MigrationState -join '''').Trim()');
+  Lines.Add('  if ($MigrationState -eq ''legacy'') {');
+  Lines.Add('    Write-Host "Altes Backup: Zwischenmigration mit Paperless 2.20.15 erforderlich."');
+  Lines.Add('    $MigrationOverride = [IO.Path]::GetTempFileName()');
+  Lines.Add('    try {');
+  Lines.Add('      [IO.File]::WriteAllText($MigrationOverride, "services:`n  paperless:`n    image: ghcr.io/paperless-ngx/paperless-ngx:2.20.15`n", [Text.Encoding]::UTF8)');
+  Lines.Add('      Invoke-DockerStep { docker compose -f $ComposeFile -f $MigrationOverride pull paperless } "Paperless 2.20.15 konnte nicht geladen werden."');
+  Lines.Add('      Invoke-DockerStep { docker compose -f $ComposeFile -f $MigrationOverride run --rm --no-deps -T --entrypoint python3 paperless /usr/src/paperless/src/manage.py migrate --noinput } "Zwischenmigration mit Paperless 2.20.15 fehlgeschlagen."');
+  Lines.Add('    } finally { Remove-Item -LiteralPath $MigrationOverride -Force }');
+  Lines.Add('    $MigrationState = docker exec --user postgres $DatabaseContainer psql -X -w -U paperless -d paperless -v ON_ERROR_STOP=1 -At -c $MigrationQuery');
+  Lines.Add('    if ($LASTEXITCODE -ne 0 -or ($MigrationState -join '''').Trim() -ne ''ready'') { throw "Erforderlicher Migrationsstand nicht erreicht. Paperless bleibt gestoppt." }');
+  Lines.Add('  } elseif ($MigrationState -eq ''ready'') {');
+  Lines.Add('    Write-Host "Datenbank bereits kompatibel: Zwischenmigration wird uebersprungen."');
+  Lines.Add('  } else { throw "Unbekannter Paperless-Migrationsstand. Abbruch." }');
+  Lines.Add('  Write-Host "Migration auf die konfigurierte Paperless-Zielversion..."');
+  Lines.Add('  Invoke-DockerStep { docker compose -f $ComposeFile run --rm --no-deps -T --entrypoint python3 paperless /usr/src/paperless/src/manage.py migrate --noinput } "Migration auf die Zielversion fehlgeschlagen."');
+end;
+
+// Build the transactional restore worker with separate input and recovery files.
+// Den Restore-Worker mit separaten Eingabe- und Rückfalldateien erzeugen.
 procedure CreateRestoreCmdScript(
-  const TargetPath, ComposePath, BackupFolder, DatabaseContainerName: string;
-  const Volumes: TDockerVolumeNames; const UseLegacyBackupNames: Boolean);
+  const TargetPath, ComposePath, BackupFolder, WorkDir, LogPath: string;
+  const ApplyKey, ApplyMail, UseLegacyBackupNames: Boolean);
 var
   Lines: TStringList;
-  ArchiveVolumes: TDockerVolumeNames;
-  DumpContainerName: string;
+  Prefix: string;
 begin
-  // Nur die Quellnamen anpassen; Zielcontainer und Zielvolumes bleiben PG18.
-  ArchiveVolumes := Volumes;
-  DumpContainerName := DatabaseContainerName;
-  if UseLegacyBackupNames then
-  begin
-    ArchiveVolumes.Data := StringReplace(Volumes.Data, '-pg18', '', []);
-    ArchiveVolumes.Media := StringReplace(Volumes.Media, '-pg18', '', []);
-    ArchiveVolumes.ExportData := StringReplace(Volumes.ExportData, '-pg18', '', []);
-    DumpContainerName := StringReplace(DatabaseContainerName, '-pg18', '', []);
-  end;
+  if UseLegacyBackupNames then Prefix := 'paperless-ngx'
+  else Prefix := ComposeProjectName;
   Lines := TStringList.Create;
   try
+    Lines.Add('[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)');
     AddPsHeader(Lines);
-    Lines.Add('try {');
-    Lines.Add(Format('  $ComposeDir = %s', [PsQuote(ExtractFilePath(ComposePath))]));
-    Lines.Add(Format('  $BackupDir = %s', [PsQuote(BackupFolder)]));
-    Lines.Add(Format('  $DatabaseContainer = %s', [PsQuote(DatabaseContainerName)]));
-    Lines.Add(Format('  $DumpFile = Join-Path $BackupDir %s', [PsQuote(DumpContainerName + '_backup.sql')]));
-    Lines.Add('  if (-not (Test-Path -LiteralPath $DumpFile)) { throw "Fehler: Datenbank-Dump fehlt: $DumpFile" }');
-    Lines.Add('  Set-Location -LiteralPath $ComposeDir');
-    Lines.Add('  Write-Host "Stoppe Container..."');
-    Lines.Add('  Invoke-DockerStep { docker compose down } "Fehler beim Stoppen der Container."');
-    AddVolumeRestore(Lines, Volumes.Data, 'data', ArchiveVolumes.Data);
-    AddVolumeRestore(Lines, Volumes.Media, 'media', ArchiveVolumes.Media);
-    AddVolumeRestore(Lines, Volumes.ExportData, 'export', ArchiveVolumes.ExportData);
-    Lines.Add(Format('  $ComposeFile = %s', [PsQuote(ComposePath)]));
-    Lines.Add('  Write-Host "Starte Datenbank und Broker; Paperless bleibt bis nach der Migration gestoppt."');
-    Lines.Add('  Invoke-DockerStep { docker compose -f $ComposeFile up -d db broker } "Fehler beim Starten von Datenbank und Broker."');
-    // SQL-Reset/Import erst nach erfolgreicher Bereitschaftsprüfung ausführen.
-    Lines.Add('  $DatabaseReady = $false');
-    Lines.Add('  for ($Attempt = 0; $Attempt -lt 60; $Attempt++) {');
-    Lines.Add('    docker exec $DatabaseContainer pg_isready -U paperless -d paperless | Out-Null');
-    Lines.Add('    if ($LASTEXITCODE -eq 0) { $DatabaseReady = $true; break }');
-    Lines.Add('    Start-Sleep -Seconds 2');
-    Lines.Add('  }');
-    Lines.Add('  if (-not $DatabaseReady) { throw "PostgreSQL wurde innerhalb von 120 Sekunden nicht bereit." }');
-    Lines.Add('  Invoke-DockerStep { docker exec $DatabaseContainer psql -U paperless -d paperless -v ON_ERROR_STOP=1 -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" } "Fehler beim Zuruecksetzen des public Schemas."');
-    Lines.Add('  $OutputEncoding = New-Object System.Text.UTF8Encoding($false)');
-    Lines.Add('  Get-Content -LiteralPath $DumpFile -Encoding UTF8 | docker exec -i $DatabaseContainer psql -U paperless -d paperless -v ON_ERROR_STOP=1');
-    Lines.Add('  if ($LASTEXITCODE -ne 0) { throw "Fehler beim Wiederherstellen der PostgreSQL-Datenbank. (ExitCode $LASTEXITCODE)" }');
-    // Dateinamen bestimmen nicht den Migrationsweg: Maßgeblich sind die importierten Django-Marker.
-    Lines.Add('  $MigrationQuery = "SELECT CASE WHEN EXISTS (SELECT 1 FROM django_migrations WHERE app=''documents'' ' +
-      'AND name IN (''1075_workflowaction_order'',''0001_squashed'',''0002_squashed'')) THEN ''ready'' ' +
-      'WHEN EXISTS (SELECT 1 FROM django_migrations WHERE app=''documents'') THEN ''legacy'' ELSE ''unknown'' END;"');
-    Lines.Add('  $MigrationState = docker exec $DatabaseContainer psql -U paperless -d paperless -v ON_ERROR_STOP=1 -At -c $MigrationQuery');
-    Lines.Add('  if ($LASTEXITCODE -ne 0) { throw "Migrationsstand konnte nicht gelesen werden." }');
-    Lines.Add('  $MigrationState = ($MigrationState -join '''').Trim()');
-    Lines.Add('  if ($MigrationState -eq ''legacy'') {');
-    Lines.Add('    Write-Host "Altes Backup: Zwischenmigration mit Paperless 2.20.15 erforderlich."');
-    Lines.Add('    $MigrationOverride = [IO.Path]::GetTempFileName()');
-    Lines.Add('    try {');
-    Lines.Add('      [IO.File]::WriteAllText($MigrationOverride, "services:`n  paperless:`n    image: ghcr.io/paperless-ngx/paperless-ngx:2.20.15`n", [Text.Encoding]::UTF8)');
-    Lines.Add('      Invoke-DockerStep { docker compose -f $ComposeFile -f $MigrationOverride pull paperless } "Paperless 2.20.15 konnte nicht geladen werden."');
-    Lines.Add('      Invoke-DockerStep { docker compose -f $ComposeFile -f $MigrationOverride run --rm --no-deps -T --entrypoint python3 paperless /usr/src/paperless/src/manage.py migrate --noinput } "Zwischenmigration mit Paperless 2.20.15 fehlgeschlagen."');
-    Lines.Add('    } finally { Remove-Item -LiteralPath $MigrationOverride -Force }');
-    Lines.Add('    $MigrationState = docker exec $DatabaseContainer psql -U paperless -d paperless -v ON_ERROR_STOP=1 -At -c $MigrationQuery');
-    Lines.Add('    if ($LASTEXITCODE -ne 0 -or ($MigrationState -join '''').Trim() -ne ''ready'') { throw "Erforderlicher Migrationsstand nicht erreicht. Paperless bleibt gestoppt." }');
-    Lines.Add('  } elseif ($MigrationState -eq ''ready'') {');
-    Lines.Add('    Write-Host "Datenbank bereits kompatibel: Zwischenmigration wird uebersprungen."');
-    Lines.Add('  } else { throw "Unbekannter Paperless-Migrationsstand. Abbruch." }');
-    Lines.Add('  Write-Host "Migration auf die konfigurierte Paperless-Zielversion..."');
-    Lines.Add('  Invoke-DockerStep { docker compose -f $ComposeFile run --rm --no-deps -T --entrypoint python3 paperless /usr/src/paperless/src/manage.py migrate --noinput } "Migration auf die Zielversion fehlgeschlagen."');
-    Lines.Add('  Invoke-DockerStep { docker compose -f $ComposeFile up -d } "Fehler beim Starten der Container."');
-    Lines.Add('  Write-Host "Nicht mehr verwendete Volumes werden geloescht"');
-    Lines.Add('  Wait-Countdown 3');
-    Lines.Add('  Invoke-DockerStep { docker volume prune -f } "Fehler beim Bereinigen nicht verwendeter Volumes."');
-    Lines.Add('  Wait-Countdown 3');
-    AddDanglingImagePrune(Lines);
-    Lines.Add('  Write-Host "-----------------------------------------"');
-    Lines.Add('  Write-Host "Wiederherstellung abgeschlossen: $(Get-Date)"');
-    Lines.Add('  Write-Host "Dateien aus: $BackupDir"');
-    Lines.Add('  Write-Host "Bitte geben Sie Paperless Zeit, seine Dienste zu starten. Das kann Minuten dauern."');
-    Lines.Add('  Write-Host "-----------------------------------------"');
-    Lines.Add('  Write-Host "Systeme starten. Fenster wird gleich geschlossen ..."');
-    Lines.Add('  Wait-Countdown 10');
+    AddLocalPaperlessReadiness(Lines);
+    AddLocalArchiveValidation(Lines);
+    Lines.Add('$ComposeFile = ' + PsQuote(ComposePath));
+    Lines.Add('$ComposeDir = ' + PsQuote(ExtractFilePath(ComposePath)));
+    Lines.Add('$BackupDir = ' + PsQuote(BackupFolder));
+    Lines.Add('$RestoreWorkDir = ' + PsQuote(WorkDir));
+    Lines.Add('$RestoreLog = ' + PsQuote(LogPath));
+    Lines.Add('$DumpFile = Join-Path $BackupDir ' + PsQuote(Prefix + '-db-1_backup.sql'));
+    Lines.Add('$ArchiveNames = @{ data = ' + PsQuote(Prefix + '_data.tar.gz') +
+      '; media = ' + PsQuote(Prefix + '_media.tar.gz') + '; export = ' + PsQuote(Prefix + '_export.tar.gz') + ' }');
+    if ApplyKey then Lines.Add('$ApplyRestoreKey = $true')
+    else Lines.Add('$ApplyRestoreKey = $false');
+    if ApplyMail then Lines.Add('$ApplyRestoreMail = $true')
+    else Lines.Add('$ApplyRestoreMail = $false');
+{$I LocalRestoreWorker.inc}
     AddPsFooter(Lines);
     SavePsScript(Lines, TargetPath);
   finally
