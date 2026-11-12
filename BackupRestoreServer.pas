@@ -31,11 +31,13 @@ uses Winapi.Windows;
 
 type
   TServerBackupAction = (sbaCheckSpace, sbaStartBackup, sbaWatchBackup, sbaDownloadBackup,
-    sbaListBackups, sbaUploadBackup, sbaListRestoreBackups, sbaStartRestore, sbaWatchRestore);
+    sbaListBackups, sbaUploadBackup, sbaListRestoreBackups, sbaStartRestore, sbaWatchRestore,
+    sbaInstallPaperless);
 
 const
   ServerWorkerActions = [sbaStartBackup, sbaWatchBackup, sbaStartRestore, sbaWatchRestore];
 
+function IsValidHost(const Value: string): Boolean;
 function NormalizeServerBackupFolder(const Value: string): string;
 procedure StartServerBackup(out ProcessHandle: THandle; out ResultPath: string;
   const BackupFolder: string = ''; Action: TServerBackupAction = sbaCheckSpace;
@@ -48,7 +50,7 @@ implementation
 
 uses
   System.SysUtils, System.Classes, System.IOUtils, System.JSON,
-  Vcl.Forms, AppConfig, ExternPaperless;
+  Vcl.Forms, AppConfig, ExternPaperless, DockerComposeGenerator;
 
 // Quote a value as a PowerShell single-quoted literal.
 // Einen Wert als einfach zitiertes PowerShell-Literal maskieren.
@@ -554,6 +556,69 @@ end;
 
 // Start the requested server operation with the saved SSH profile.
 // Den gewählten Servervorgang mit dem gespeicherten SSH-Profil starten.
+// Send the Linux installer over SSH stdin. Credentials are created on Debian.
+// Das Linux-Installationsskript über SSH-stdin senden. Zugangsdaten entstehen auf Debian.
+procedure AddServerInstallation(const Lines: TStringList);
+var
+  Versions: TDockerImageVersions;
+  ComposeContent: string;
+begin
+  Versions := Default(TDockerImageVersions);
+  Versions.Paperless := DefaultPaperlessVersion;
+  Versions.Postgres := DefaultPostgresVersion;
+  Versions.Redis := DefaultRedisVersion;
+  Versions.Gotenberg := DefaultGotenbergVersion;
+  Versions.Tika := DefaultTikaVersion;
+  ComposeContent := CreateDockerComposeContent(Versions, './consume', '__PAPERLESS_SECRET_KEY__', 365, True);
+  Lines.Add(' $title=''Paperless-Installation fehlgeschlagen''');
+  Lines.Add(' $installStep=''SSH-Verbindung aufbauen''');
+  Lines.Add(' $installFailure=''''');
+  Lines.Add(' $installReady=$false');
+  Lines.Add(' $installConfigCreated=$false');
+  Lines.Add(' $nl=[Environment]::NewLine');
+  Lines.Add(' $logDir=Join-Path $runtimeDir ''Logs''');
+  Lines.Add(' $logPath=Join-Path $logDir ([IO.Path]::GetFileNameWithoutExtension($PSCommandPath)+''.log'')');
+  Lines.Add(' $log=$null');
+  Lines.Add(' try {');
+  Lines.Add('  [void][IO.Directory]::CreateDirectory($logDir)');
+  Lines.Add('  $log=[IO.StreamWriter]::new([IO.File]::Open($logPath,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::Read),[Text.UTF8Encoding]::new($false))');
+  Lines.Add('  $log.AutoFlush=$true');
+  Lines.Add('  $log.WriteLine("Server: $serverHost")');
+  Lines.Add('  $linuxScript=@''');
+  Lines.Add('target=' + ServerInstallFolder);
+  Lines.Add('project=' + ComposeProjectName);
+  Lines.Add('web_port=' + IntToStr(ServerInstallWebPort));
+{$I ServerInstallWorker.inc}
+  Lines.Add('''@');
+  Lines.Add('  $bytes=[Text.Encoding]::UTF8.GetBytes($linuxScript.Replace([string][char]13,'''')+[char]10)');
+  // Wait for the explicit completion marker from the installer.
+  // Die ausdrückliche Abschlussmarkierung des Installationsskripts abwarten.
+  Lines.Add('  $null=Ssh ''bash -s 2>&1'' $bytes 7200000');
+  Lines.Add('  if(-not $installReady){throw ''install_incomplete''}');
+  Lines.Add('  $urlHost=$serverHost');
+  Lines.Add('  $shareHost=$serverHost');
+  Lines.Add('  if($serverHost.Contains('':'')){');
+  Lines.Add('   $urlHost="[$serverHost]"');
+  Lines.Add('   $shareHost=$serverHost.Replace('':'',''-'')+''.ipv6-literal.net''');
+  Lines.Add('  }');
+  Lines.Add('  $title=''Paperless wurde erfolgreich installiert''');
+  Lines.Add('  $msg="Paperless wurde erfolgreich installiert."');
+  Lines.Add('  $msg+=$nl+$nl+"Weboberfläche: http://${urlHost}:' + IntToStr(ServerInstallWebPort) + '"');
+  Lines.Add('  $msg+=$nl+"Richten Sie den Paperless-Admin beim ersten Aufruf im Browser ein."');
+  Lines.Add('  $msg+=$nl+$nl+"Windows-Freigabe: \\$shareHost\paperless-consume"');
+  Lines.Add('  $backupCompleted=$true');
+  Lines.Add(' } catch {');
+  Lines.Add('  if($installFailure){$msg=$installFailure}else{$msg=CheckFailure $installStep $_.Exception}');
+  Lines.Add('  if($_.Exception.Message -eq ''ssh_exit_255''){');
+  Lines.Add('   $msg+=$nl+"Prüfen Sie die Serverdaten und den bestätigten SSH-Fingerabdruck unter Verbindung testen."');
+  Lines.Add('  }');
+  Lines.Add('  if($installConfigCreated){$msg+=$nl+''Die Compose-Datei liegt bereits unter ' + ServerInstallFolder + '. Prüfen Sie den letzten Schritt in der Logdatei.''}');
+  Lines.Add('  if($log){$log.WriteLine($msg)}');
+  Lines.Add(' } finally {');
+  Lines.Add('  if($log){$log.Dispose();$msg+=$nl+$nl+"Logdatei: $logPath"}');
+  Lines.Add(' }');
+end;
+
 procedure StartServerBackup(out ProcessHandle: THandle; out ResultPath: string;
   const BackupFolder: string; Action: TServerBackupAction; const LocalDownloadFolder: string);
 var
@@ -586,6 +651,8 @@ begin
     finally
       Ini.Free;
     end;
+    if (Action = sbaInstallPaperless) and (UserName <> 'root') then
+      raise Exception.Create('Für die Installation muss der SSH-Benutzer root gespeichert sein.');
     if not IsValidHost(Host) or not IsValidUser(UserName) then
       raise Exception.Create('Bitte gültigen Server und Benutzernamen speichern.');
     if (((BackupFolder = '') and (Action = sbaCheckSpace)) or
@@ -672,8 +739,12 @@ begin
       Lines.Add(' $a=@(''-T'',''-o'',''StrictHostKeyChecking=yes'',''-o'',''UpdateHostKeys=no'',''-o'',''ConnectTimeout=10'',''-o'',''NumberOfPasswordPrompts=1'',''-p'',$port,''-l'',$serverUser)');
       Lines.Add(' if($useKey){$a+=@(''-o'',''IdentitiesOnly=yes'',''-i'',$keyFile)}else{$a+=@(''-o'',''PreferredAuthentications=password'',''-o'',''PubkeyAuthentication=no'')}');
       Lines.Add(' if($outputPath -or $inputPath){$a+=@(''-o'',''ServerAliveInterval=15'',''-o'',''ServerAliveCountMax=3'')}');
+      if Action = sbaInstallPaperless then
+        Lines.Add(' $a+=@(''-o'',''ServerAliveInterval=15'',''-o'',''ServerAliveCountMax=3'')');
       Lines.Add(' $a+=@($serverHost,$cmd);$si.Arguments=(($a|ForEach-Object{WinArg $_}) -join '' '')');
       Lines.Add(' $si.UseShellExecute=$false;$si.CreateNoWindow=$true;$si.RedirectStandardOutput=$true;$si.RedirectStandardError=$true;$si.RedirectStandardInput=$true');
+      if Action = sbaInstallPaperless then
+        Lines.Add(' $si.StandardOutputEncoding=[Text.Encoding]::UTF8;$si.StandardErrorEncoding=[Text.Encoding]::UTF8');
 // Stream backup files directly to a new file and keep the bounded memory path for metadata.
 // Backupdateien direkt in eine neue Datei schreiben und Metadaten weiter im Speicher lesen.
       Lines.Add(' $p=New-Object Diagnostics.Process;$p.StartInfo=$si;$m=$null;$source=$null;$started=$false');
@@ -687,7 +758,9 @@ begin
       Lines.Add('  }');
       Lines.Add('  if(-not $p.Start()){throw ''ssh_start''}');
       Lines.Add('  $started=$true');
-      Lines.Add('  $err=$p.StandardError.ReadToEndAsync();$out=$p.StandardOutput.BaseStream.CopyToAsync($m)');
+      Lines.Add('  $err=$p.StandardError.ReadToEndAsync()');
+      if Action <> sbaInstallPaperless then
+        Lines.Add('  $out=$p.StandardOutput.BaseStream.CopyToAsync($m)');
       // Stream local archives through SSH stdin with a progress-based timeout.
       // Lokale Archive über SSH-stdin streamen und bei Stillstand abbrechen.
       Lines.Add('  if($source){');
@@ -710,20 +783,43 @@ begin
       Lines.Add('  $p.StandardInput.Close()');
       // Measure download progress and use an idle timeout so large active transfers can finish.
       // Downloadfortschritt messen und nur bei Stillstand abbrechen, damit große aktive Übertragungen fertig werden.
-      Lines.Add('  if($outputPath){');
-      Lines.Add('   $watch=[Diagnostics.Stopwatch]::StartNew();$received=0');
-      Lines.Add('   while(-not $p.WaitForExit(1000)){');
-      Lines.Add('    if(-not [IO.File]::Exists($progressPath)){throw ''download_cancelled''}');
-      Lines.Add('    if($out.IsFaulted){$out.GetAwaiter().GetResult()}');
-      Lines.Add('    $length=([IO.FileInfo]::new($outputPath)).Length');
-      Lines.Add('    if($length -gt $expectedBytes){throw ''download_length''}');
-      Lines.Add('    if($length -gt $received){');
-      Lines.Add('     $received=$length;$watch.Restart()');
-      Lines.Add('     if($expectedBytes -gt 0){SetProgress ("$step ("+[math]::Floor(100.0*$received/$expectedBytes)+" %)")}');
-      Lines.Add('    } elseif($watch.ElapsedMilliseconds -ge 300000){throw ''ssh_timeout''}');
-      Lines.Add('   }');
-      Lines.Add('  } elseif(-not $p.WaitForExit($timeoutMs)){throw ''ssh_timeout''}');
-      Lines.Add('  if(-not $out.Wait(10000) -or -not $err.Wait(10000)){throw ''ssh_read''}');
+      if Action = sbaInstallPaperless then
+      begin
+        // Read installation output live and keep detailed command output in the log.
+        // Installationsausgabe live lesen und technische Befehlsausgabe in der Logdatei behalten.
+        Lines.Add('  $watch=[Diagnostics.Stopwatch]::StartNew()');
+        Lines.Add('  while($true){');
+        Lines.Add('   $remaining=[int][math]::Max(1,$timeoutMs-$watch.ElapsedMilliseconds)');
+        Lines.Add('   $lineTask=$p.StandardOutput.ReadLineAsync()');
+        Lines.Add('   if(-not $lineTask.Wait($remaining)){throw ''ssh_timeout''}');
+        Lines.Add('   $line=$lineTask.Result;if($null -eq $line){break}');
+        Lines.Add('   $log.WriteLine($line)');
+        Lines.Add('   if($line.StartsWith(''PAPERLESS_STEP:'')){');
+        Lines.Add('    $script:installStep=$line.Substring(15);SetProgress $script:installStep');
+        Lines.Add('   }elseif($line.StartsWith(''PAPERLESS_ERROR:'')){$script:installFailure=$line.Substring(16)}');
+        Lines.Add('   elseif($line -eq ''PAPERLESS_CONFIG_CREATED''){$script:installConfigCreated=$true}');
+        Lines.Add('   elseif($line -eq ''PAPERLESS_INSTALL_COMPLETE''){$script:installReady=$true}');
+        Lines.Add('  }');
+        Lines.Add('  if(-not $p.WaitForExit(10000) -or -not $err.Wait(10000)){throw ''ssh_timeout''}');
+        Lines.Add('  if($err.Result){$log.WriteLine($err.Result.Trim())}');
+      end
+      else
+      begin
+        Lines.Add('  if($outputPath){');
+        Lines.Add('   $watch=[Diagnostics.Stopwatch]::StartNew();$received=0');
+        Lines.Add('   while(-not $p.WaitForExit(1000)){');
+        Lines.Add('    if(-not [IO.File]::Exists($progressPath)){throw ''download_cancelled''}');
+        Lines.Add('    if($out.IsFaulted){$out.GetAwaiter().GetResult()}');
+        Lines.Add('    $length=([IO.FileInfo]::new($outputPath)).Length');
+        Lines.Add('    if($length -gt $expectedBytes){throw ''download_length''}');
+        Lines.Add('    if($length -gt $received){');
+        Lines.Add('     $received=$length;$watch.Restart()');
+        Lines.Add('     if($expectedBytes -gt 0){SetProgress ("$step ("+[math]::Floor(100.0*$received/$expectedBytes)+" %)")}');
+        Lines.Add('    } elseif($watch.ElapsedMilliseconds -ge 300000){throw ''ssh_timeout''}');
+        Lines.Add('   }');
+        Lines.Add('  } elseif(-not $p.WaitForExit($timeoutMs)){throw ''ssh_timeout''}');
+        Lines.Add('  if(-not $out.Wait(10000) -or -not $err.Wait(10000)){throw ''ssh_read''}');
+      end;
       Lines.Add('  if($p.ExitCode -ne 0){throw (''ssh_exit_''+$p.ExitCode)}');
       Lines.Add('  if($outputPath){$m.Flush();if($m.Length -ne $expectedBytes){throw ''download_length''};return}');
       Lines.Add('  if($m.Length -gt 16777216){throw ''size''}');
@@ -759,7 +855,12 @@ begin
       Lines.Add('$title=''Server-Backup: Prüfung fehlgeschlagen''');
       Lines.Add('$msg=''Die Speicherplatzprüfung konnte nicht abgeschlossen werden.''');
       Lines.Add('try {');
-      if Action = sbaUploadBackup then
+      if Action = sbaInstallPaperless then
+      begin
+        AddServerProgress(Lines);
+        AddServerInstallation(Lines);
+      end
+      else if Action = sbaUploadBackup then
         AddServerBackupUpload(Lines, ExpandFileName(LocalDownloadFolder), SavedBackupFolder, RunId)
       else if Action in [sbaListBackups, sbaListRestoreBackups] then
         AddServerBackupList(Lines, SavedBackupFolder)
@@ -924,7 +1025,7 @@ begin
       Lines.Add(' }');
       if Action in [sbaStartRestore, sbaWatchRestore] then
         Lines.Add(' if(-not $backupCompleted){$msg+="`r`n`r`nPowerShell-Skript: $PSCommandPath"}')
-      else
+      else if Action <> sbaInstallPaperless then
         Lines.Add(' $msg+="`r`n`r`nPowerShell-Skript: $PSCommandPath"');
       Lines.Add(' $json=@{ title=$title; message=$msg; backupCompleted=$backupCompleted; completedBackupFolder=$completedBackupFolder; availableBackupFolders=$availableBackupFolders } | ConvertTo-Json -Compress');
       Lines.Add(' $resultBytes=[Text.Encoding]::UTF8.GetBytes($json)');

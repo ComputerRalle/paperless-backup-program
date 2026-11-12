@@ -45,6 +45,11 @@ const
   AppStatusTitle = '#ComputerRalle - Paperless Backup Programm ';
   AppDataFolderName = 'Paperless Backup Programm PG18';
   ComposeProjectName = 'paperless-ngx-pg18';
+  ServerInstallFolder = '/opt/paperless';
+  // Share the installer port with the Compose generator and the browser default.
+  // Den Installationsport auch für Compose und als Vorgabe für den Browser verwenden.
+  ServerInstallWebPort = 8000;
+  IniKeyServerWebPort = 'Web-Port';
   // Default and settings key for the backup directory on the external Linux server.
   // Vorgabe und Einstellungsschlüssel für das Sicherungsverzeichnis auf dem externen Linux-Server.
   DefaultServerBackupFolder = '/srv/paperless_backup';

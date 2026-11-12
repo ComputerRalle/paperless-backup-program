@@ -138978,6 +138978,12 @@ object MainformFrm: TMainformFrm
           Height = 18
           Caption = 'SSH-Port'
         end
+        object ExternalWebPortLbl: TLabel
+          Left = 477
+          Top = 735
+          Caption = 'Paperless-Webport'
+          FocusControl = ExternalWebPortEdit
+        end
         object ExternalUserLbl: TLabel
           Left = 33
           Top = 775
@@ -139227,12 +139233,21 @@ object MainformFrm: TMainformFrm
           TabOrder = 16
           OnChange = ExternalConnectionSettingsChanged
         end
+        object ExternalWebPortEdit: TEdit
+          Left = 715
+          Top = 732
+          Width = 100
+          Height = 26
+          MaxLength = 5
+          NumbersOnly = True
+          TabOrder = 17
+        end
         object ExternalUserEdit: TEdit
           Left = 344
           Top = 772
           Width = 471
           Height = 26
-          TabOrder = 17
+          TabOrder = 18
           OnChange = ExternalConnectionSettingsChanged
         end
         object ExternalAuthRadioGroup: TRadioGroup
@@ -139246,7 +139261,7 @@ object MainformFrm: TMainformFrm
           Items.Strings = (
             'Passwort'
             'SSH-Key')
-          TabOrder = 18
+          TabOrder = 19
           OnClick = ExternalAuthRadioGroupClick
         end
         object ExternalKeyEdit: TEdit
@@ -139255,7 +139270,7 @@ object MainformFrm: TMainformFrm
           Top = 897
           Width = 471
           Height = 26
-          TabOrder = 19
+          TabOrder = 20
           OnChange = ExternalConnectionSettingsChanged
         end
         object ExternalKeyPassphraseEdit: TEdit
@@ -139265,7 +139280,7 @@ object MainformFrm: TMainformFrm
           Width = 471
           Height = 26
           PasswordChar = '*'
-          TabOrder = 20
+          TabOrder = 21
           OnChange = ExternalConnectionSettingsChanged
         end
         object ExternalPasswordEdit: TEdit
@@ -139274,7 +139289,7 @@ object MainformFrm: TMainformFrm
           Width = 471
           Height = 26
           PasswordChar = '*'
-          TabOrder = 21
+          TabOrder = 22
           OnChange = ExternalConnectionSettingsChanged
         end
         object ExternalComposePathEdit: TEdit
@@ -139282,7 +139297,7 @@ object MainformFrm: TMainformFrm
           Top = 1027
           Width = 471
           Height = 26
-          TabOrder = 22
+          TabOrder = 23
           OnChange = ExternalConnectionSettingsChanged
         end
         object ExternalComposeProjectEdit: TEdit
@@ -139290,7 +139305,7 @@ object MainformFrm: TMainformFrm
           Top = 1067
           Width = 471
           Height = 26
-          TabOrder = 23
+          TabOrder = 24
           OnChange = ExternalConnectionSettingsChanged
         end
         object ExternalBackupFolderEdit: TEdit
@@ -139298,7 +139313,7 @@ object MainformFrm: TMainformFrm
           Top = 1107
           Width = 471
           Height = 26
-          TabOrder = 24
+          TabOrder = 25
           Text = '/srv/paperless_backup'
         end
         object UseSavedSshCredentialCB: TCheckBox
@@ -139309,7 +139324,7 @@ object MainformFrm: TMainformFrm
           Caption = 'Gespeicherte Zugangsdaten verwenden'
           Checked = True
           State = cbChecked
-          TabOrder = 25
+          TabOrder = 26
           OnClick = ExternalConnectionSettingsChanged
         end
         object TestExternalConnectionBtn: TButton
@@ -139318,7 +139333,7 @@ object MainformFrm: TMainformFrm
           Width = 250
           Height = 60
           Caption = 'Verbindung testen'
-          TabOrder = 26
+          TabOrder = 27
           OnClick = TestExternalConnectionBtnClick
         end
         object CreateExternalBackupFolderBtn: TButton
@@ -139327,7 +139342,7 @@ object MainformFrm: TMainformFrm
           Width = 250
           Height = 60
           Caption = 'Backupordner anlegen'
-          TabOrder = 27
+          TabOrder = 28
           OnClick = CreateExternalBackupFolderBtnClick
         end
         object SaveExternalServerBtn: TButton
@@ -139338,7 +139353,17 @@ object MainformFrm: TMainformFrm
           Caption = 'Serverdaten Speichern'
           Enabled = False
           OnClick = SaveExternalServerBtnClick
-          TabOrder = 28
+          TabOrder = 29
+        end
+        object InstallServerPaperlessBtn: TButton
+          Left = 565
+          Top = 1232
+          Width = 250
+          Height = 60
+          Caption = 'Paperless installieren'
+          Visible = False
+          TabOrder = 30
+          OnClick = InstallServerPaperlessBtnClick
         end
       end
     end

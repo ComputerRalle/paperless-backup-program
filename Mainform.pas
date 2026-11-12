@@ -125,6 +125,7 @@ type
     ExternalServerTitleLbl: TLabel;
     ExternalHostLbl: TLabel;
     ExternalPortLbl: TLabel;
+    ExternalWebPortLbl: TLabel;
     ExternalUserLbl: TLabel;
     ExternalPasswordLbl: TLabel;
     ExternalKeyLbl: TLabel;
@@ -132,6 +133,7 @@ type
     ExternalComposeProjectLbl: TLabel;
     ExternalHostEdit: TEdit;
     ExternalPortEdit: TEdit;
+    ExternalWebPortEdit: TEdit;
     ExternalUserEdit: TEdit;
     ExternalPasswordEdit: TEdit;
     ExternalKeyEdit: TEdit;
@@ -144,6 +146,7 @@ type
     ExternalKeyPassphraseLbl: TLabel;
     ExternalKeyPassphraseEdit: TEdit;
     SaveExternalServerBtn: TButton;
+    InstallServerPaperlessBtn: TButton;
     TestExternalConnectionBtn: TButton;
     UseSavedSshCredentialCB: TCheckBox;
     ExternalConnectionStatusLbl: TLabel;
@@ -253,6 +256,7 @@ type
     procedure ExternalAuthRadioGroupClick(Sender: TObject);
     procedure CreateExternalBackupFolderBtnClick(Sender: TObject);
     procedure SaveExternalServerBtnClick(Sender: TObject);
+    procedure InstallServerPaperlessBtnClick(Sender: TObject);
     procedure TestExternalConnectionBtnClick(Sender: TObject);
     procedure ExternalConnectionSettingsChanged(Sender: TObject);
     procedure InstallationModeRadioGroupClick(Sender: TObject);
@@ -280,6 +284,7 @@ type
     FStartupCheckTimer: TTimer;
     FStartupCheckResultPath: string;
     FStartupCheckOnce: Boolean;
+    FStartupInstallHost: string;
     FStartupCheckInvalidated: Boolean;
     FExternalConnectionHeader: string;
     FExternalTestTimer: TTimer;
@@ -306,7 +311,9 @@ type
     function ReadNextServerWorkerStatus(const ProgressPath: string): Boolean;
     function ConfirmServerRestore(const BackupFolder: string): Boolean;
     procedure CancelExternalStartupCheck;
-    procedure BeginExternalStartupCheck;
+    procedure BeginExternalStartupCheck(ConfirmFingerprint: Boolean = False;
+      const InstallHost: string = '');
+    procedure ConfirmServerInstallation(const Host: string);
     procedure StartupCheckTimerTick(Sender: TObject);
     procedure ExternalTestTimerTick(Sender: TObject);
     procedure LoadStoredInstallationMode;
@@ -1157,7 +1164,9 @@ function TMainformFrm.BuildBusyWaitText(const StatusText: string): string;
 begin
   if FServerBackupProgressActive then
   begin
-    if FServerBackupAction = sbaDownloadBackup then
+    if FServerBackupAction = sbaInstallPaperless then
+      Result := 'Paperless wird auf dem Server installiert. Bitte warten ...'
+    else if FServerBackupAction = sbaDownloadBackup then
       Result := 'Backup wird heruntergeladen. Bitte warten ...'
     else if FServerBackupAction = sbaUploadBackup then
       Result := 'Backup wird zum Server gesendet. Bitte warten ...'
@@ -1612,6 +1621,8 @@ begin
   ServerMode := ExternalInstallationSelected and not LocalInstallationSelected;
   LoadServerBackupBtn.Enabled := ServerMode and not ScriptBusy and not FServerBackupCheckActive;
   SendServerBackupBtn.Enabled := LoadServerBackupBtn.Enabled;
+  InstallServerPaperlessBtn.Visible := ServerMode;
+  InstallServerPaperlessBtn.Enabled := LoadServerBackupBtn.Enabled and (FStartupCheckHandle = 0);
   LoadServerBackupHintPan.ShowHint := LocalMode;
   SendServerBackupHintPan.ShowHint := LocalMode;
 end;
@@ -1694,7 +1705,7 @@ var
   LocalCompose, Installed: string;
 begin
   if not InstallationPathReady or not DirectoryExists(AppDataFolder) then
-    raise Exception.Create('Der lokale Installationsordner ist nicht verfuegbar.');
+    raise Exception.Create('Der lokale Installationsordner ist nicht verfügbar.');
   Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
     Installed := Ini.ReadString('Einrichtung', 'Installation abgeschlossen', '');
@@ -1845,7 +1856,7 @@ begin
         finally
           FChangingInstallationMode := False;
         end;
-        CenteredMessageDlg('Es wurde keine vollstaendige lokale Installation mit Compose-Datei gefunden. Der Wechsel ist nicht moeglich.', mtWarning, [mbOK], 0);
+        CenteredMessageDlg('Es wurde keine vollständige lokale Installation mit Compose-Datei gefunden. Der Wechsel ist nicht möglich.', mtWarning, [mbOK], 0);
         Exit;
       end;
     except
@@ -1857,7 +1868,7 @@ begin
         finally
           FChangingInstallationMode := False;
         end;
-        CenteredMessageDlg('Die lokale Installation konnte nicht geprueft werden: ' + E.Message, mtWarning, [mbOK], 0);
+        CenteredMessageDlg('Die lokale Installation konnte nicht geprüft werden: ' + E.Message, mtWarning, [mbOK], 0);
         Exit;
       end;
     end;
@@ -1873,7 +1884,7 @@ begin
   try
     if VersionsChanged then
     begin
-      Choice := CenteredMessageDlg('Die Imageversionen wurden geaendert. Vor dem Wechsel speichern?',
+      Choice := CenteredMessageDlg('Die Imageversionen wurden geändert. Vor dem Wechsel speichern?',
         mtConfirmation, [mbYes, mbNo, mbCancel], 0);
       if (Choice <> mrYes) and (Choice <> mrNo) then
       begin
@@ -1983,28 +1994,45 @@ end;
 
 // Start one asynchronous SSH check using the loaded server profile.
 // Eine asynchrone SSH-Pruefung mit dem geladenen Serverprofil starten.
-procedure TMainformFrm.BeginExternalStartupCheck;
+procedure TMainformFrm.BeginExternalStartupCheck(ConfirmFingerprint: Boolean;
+  const InstallHost: string);
 var
-  Host, UserName, KeyFile, SettingsPath: string;
+  Ini: TAppSettingsIni;
+  Host, UserName, KeyFile, SettingsPath, PortText: string;
   PortNumber: Integer;
   Ch: Char;
   UseKey: Boolean;
 begin
-  if FStartupCheckOnce or not ExternalInstallationSelected then Exit;
-  FStartupCheckOnce := True;
-  Host := Trim(ExternalHostEdit.Text);
-  UserName := Trim(ExternalUserEdit.Text);
-  KeyFile := Trim(ExternalKeyEdit.Text);
-  UseKey := ExternalAuthRadioGroup.ItemIndex = 1;
-  if (Host = '') or (UserName = '') or (Trim(ExternalPortEdit.Text) = '') or
+  if ApplicationClosing or (FStartupCheckHandle <> 0) then Exit;
+  if not ConfirmFingerprint then
+  begin
+    if FStartupCheckOnce or not ExternalInstallationSelected then Exit;
+    FStartupCheckOnce := True;
+  end;
+  SettingsPath := IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName;
+  // Verify the profile that the installer and SSH credential helper will actually use.
+  // Das Profil prüfen, das Installation und SSH-Anmeldehelfer tatsächlich verwenden.
+  Ini := TAppSettingsIni.Create(SettingsPath);
+  try
+    Host := Trim(Ini.ReadString('Paperless Extern', 'Host', ''));
+    UserName := Trim(Ini.ReadString('Paperless Extern', 'Benutzer', ''));
+    KeyFile := Trim(Ini.ReadString('Paperless Extern', 'SSH-Key-Datei', ''));
+    PortText := Trim(Ini.ReadString('Paperless Extern', 'SSH-Port', ''));
+    UseKey := SameText(Ini.ReadString('Paperless Extern', 'Anmeldung', 'Passwort'), 'SSH-Key');
+  finally
+    Ini.Free;
+  end;
+  if (Host = '') or (UserName = '') or (PortText = '') or
      (UseKey and (KeyFile = '')) or
-     ((not UseKey) and (ExternalPasswordEdit.Text = '')) then
+     ((not UseKey) and (ReadServerSecret(SettingsPath, 'Passwort') = '')) then
   begin
     FExternalConnectionHeader := 'keine Verbindungsdaten';
     UpdateInstallationModeHeaders;
+    if ConfirmFingerprint then
+      CenteredShowMessage('Bitte zuerst die vollständigen SSH-Zugangsdaten speichern.');
     Exit;
   end;
-  if not TryStrToInt(Trim(ExternalPortEdit.Text), PortNumber) or
+  if not TryStrToInt(PortText, PortNumber) or
      (PortNumber < 1) or (PortNumber > 65535) then
   begin
     FExternalConnectionHeader := 'nicht verbunden';
@@ -2042,7 +2070,6 @@ begin
     CenteredShowMessage('Paperless extern: Die SSH-Key-Datei wurde nicht gefunden.');
     Exit;
   end;
-  SettingsPath := IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName;
   try
     if FStartupCheckTimer = nil then
     begin
@@ -2054,10 +2081,16 @@ begin
     FStartupCheckInvalidated := False;
     FExternalConnectionHeader := 'Verbindung wird geprüft';
     UpdateInstallationModeHeaders;
-    ExternalConnectionStatusLbl.Caption := 'Verbindung wird getestet ...';
+    if ConfirmFingerprint then
+      ExternalConnectionStatusLbl.Caption := 'SSH-Fingerabdruck wird abgefragt ...'
+    else
+      ExternalConnectionStatusLbl.Caption := 'Verbindung wird getestet ...';
     TestExternalConnectionBtn.Enabled := False;
     StartExternalStartupCheck(Host, UserName, PortNumber, KeyFile, SettingsPath,
-      Application.ExeName, UseKey, FStartupCheckHandle, FStartupCheckResultPath);
+      Application.ExeName, UseKey, ConfirmFingerprint, FStartupCheckHandle, FStartupCheckResultPath);
+    FStartupInstallHost := InstallHost;
+    SaveExternalServerBtn.Enabled := False;
+    UpdateServerBackupButtons;
     FStartupCheckTimer.Enabled := True;
   except
     on E: Exception do
@@ -2077,14 +2110,18 @@ end;
 // Ein Ergebnis nur fuer das unveraenderte Serverprofil uebernehmen.
 procedure TMainformFrm.StartupCheckTimerTick(Sender: TObject);
 var
-  TestResult: string;
+  TestResult, InstallHost: string;
 begin
   if FStartupCheckHandle = 0 then Exit;
   if WaitForSingleObject(FStartupCheckHandle, 0) <> WAIT_OBJECT_0 then Exit;
   FStartupCheckTimer.Enabled := False;
   CloseHandle(FStartupCheckHandle);
   FStartupCheckHandle := 0;
+  InstallHost := FStartupInstallHost;
+  FStartupInstallHost := '';
   TestExternalConnectionBtn.Enabled := True;
+  SaveExternalServerBtn.Enabled := True;
+  UpdateServerBackupButtons;
   TestResult := 'unknown';
   try
     if FileExists(FStartupCheckResultPath) then
@@ -2096,14 +2133,16 @@ begin
   if FileExists(FStartupCheckResultPath + '.cancel') then
     DeleteFile(FStartupCheckResultPath + '.cancel');
   FStartupCheckResultPath := '';
-  if FStartupCheckInvalidated or not ExternalInstallationSelected or ApplicationClosing then Exit;
+  if FStartupCheckInvalidated or ApplicationClosing then Exit;
   if (TestResult = 'success') or (TestResult = 'save_failed') then
   begin
     FExternalConnectionHeader := 'verbunden';
     ExternalConnectionStatusLbl.Caption := 'Verbindung hergestellt (SSH-Test)';
     UpdateInstallationModeHeaders;
     if TestResult = 'save_failed' then
-      CenteredShowMessage('Die SSH-Verbindung wurde hergestellt, der Server-Fingerabdruck konnte aber nicht gespeichert werden.');
+      CenteredShowMessage('Die SSH-Verbindung wurde hergestellt, der Server-Fingerabdruck konnte aber nicht gespeichert werden.')
+    else if (InstallHost <> '') and ExternalInstallationSelected then
+      ConfirmServerInstallation(InstallHost);
     Exit;
   end;
   FExternalConnectionHeader := 'nicht verbunden';
@@ -2117,6 +2156,12 @@ begin
     CenteredShowMessage('Paperless extern erreichbar, Anmeldung abgelehnt. Bitte prüfen Sie die Zugangsdaten und die Anmeldeart.')
   else if TestResult = 'changed_host' then
     CenteredShowMessage('Der gespeicherte Server-Fingerabdruck hat sich geändert. Bitte prüfen Sie den Server-Schlüssel unabhängig. Die Verbindung wurde abgebrochen.')
+  else if TestResult = 'fingerprint_tools' then
+    CenteredShowMessage('Der SSH-Fingerabdruck kann nicht ausgewertet werden. Im Windows-OpenSSH-Client fehlt ssh-keygen.exe.')
+  else if TestResult = 'fingerprint_scan' then
+    CenteredShowMessage('Der SSH-Hostschlüssel konnte nicht abgerufen werden. Bitte Serveradresse, SSH-Port und Erreichbarkeit prüfen.')
+  else if TestResult = 'fingerprint_unreadable' then
+    CenteredShowMessage('Der SSH-Hostschlüssel wurde abgerufen, sein Fingerabdruck konnte aber nicht ausgewertet werden.')
   else if (TestResult = 'hostkey') or (TestResult = 'unknown_host') then
     CenteredShowMessage('Der Server-Fingerabdruck konnte nicht bestätigt werden. Bitte prüfen Sie den Server-Schlüssel.')
   else
@@ -2136,9 +2181,13 @@ begin
   try
     ExternalHostEdit.Text := Ini.ReadString('Paperless Extern', 'Host', '');
     ExternalPortEdit.Text := Ini.ReadString('Paperless Extern', 'SSH-Port', '');
+    ExternalWebPortEdit.Text := Ini.ReadString('Paperless Extern', IniKeyServerWebPort,
+      IntToStr(ServerInstallWebPort));
     ExternalUserEdit.Text := Ini.ReadString('Paperless Extern', 'Benutzer', '');
     ExternalKeyEdit.Text := Ini.ReadString('Paperless Extern', 'SSH-Key-Datei', '');
     ExternalComposePathEdit.Text := ExternalComposeDirectory(Ini.ReadString('Paperless Extern', 'Compose-Datei', ''));
+    if ExternalComposePathEdit.Text = '' then
+      ExternalComposePathEdit.Text := ServerInstallFolder;
     ExternalComposeProjectEdit.Text := Ini.ReadString('Paperless Extern', 'Compose-Projekt', '');
     ExternalBackupFolderEdit.Text := Ini.ReadString('Paperless Extern', IniKeyServerBackupFolder, DefaultServerBackupFolder);
     Auth := Ini.ReadString('Paperless Extern', 'Anmeldung', 'Passwort');
@@ -2193,7 +2242,7 @@ begin
     FExternalTestTimer.Enabled := False;
     TestExternalConnectionBtn.Enabled := True;
     if FExternalTestInvalidated then
-      ExternalConnectionStatusLbl.Caption := 'Serverdaten geaendert - erneut testen'
+      ExternalConnectionStatusLbl.Caption := 'Serverdaten geändert - erneut testen'
     else if TestResult = 'success' then
     begin
       ExternalConnectionStatusLbl.Caption := 'Verbindung hergestellt (SSH-Test)';
@@ -2235,13 +2284,13 @@ begin
      not TryStrToInt(Trim(ExternalPortEdit.Text), PortNumber) or
      (PortNumber < 1) or (PortNumber > 65535) then
   begin
-    CenteredShowMessage('Bitte Host, SSH-Port (1 bis 65535), Benutzername und Compose-Ordner ausfuellen.');
+    CenteredShowMessage('Bitte Host, SSH-Port (1 bis 65535), Benutzername und Compose-Ordner ausfüllen.');
     Exit;
   end;
   for Ch in Host do
     if not CharInSet(Ch, ['A'..'Z', 'a'..'z', '0'..'9', '.', '-', ':', '_']) then
     begin
-      CenteredShowMessage('Host oder IP-Adresse enthaelt ungueltige Zeichen.');
+      CenteredShowMessage('Host oder IP-Adresse enthält ungültige Zeichen.');
       Exit;
     end;
   if Host[1] = '-' then
@@ -2252,13 +2301,13 @@ begin
   for Ch in UserName do
     if not CharInSet(Ch, ['A'..'Z', 'a'..'z', '0'..'9', '.', '-', '_']) then
     begin
-      CenteredShowMessage('Der Benutzername enthaelt ungueltige Zeichen.');
+      CenteredShowMessage('Der Benutzername enthält ungültige Zeichen.');
       Exit;
     end;
   for Ch in ComposeFile do
     if Ord(Ch) < 32 then
     begin
-      CenteredShowMessage('Der Compose-Dateipfad enthaelt ungueltige Steuerzeichen.');
+      CenteredShowMessage('Der Compose-Dateipfad enthält ungültige Steuerzeichen.');
       Exit;
     end;
   if ComposeFile[1] <> '/' then
@@ -2306,7 +2355,7 @@ begin
     except
       on E: Exception do
       begin
-        CenteredShowMessage('Die gespeicherten Serverdaten konnten nicht geprueft werden: ' + E.Message);
+        CenteredShowMessage('Die gespeicherten Serverdaten konnten nicht geprüft werden: ' + E.Message);
         Exit;
       end;
     end;
@@ -2317,8 +2366,8 @@ begin
   RemotePath := #39 + StringReplace(ComposeFile, #39, #39 + '"' + #39 + '"' + #39,
     [rfReplaceAll]) + #39;
   RemoteCommand := 'echo "SSH: verbunden"; ' +
-    'if docker compose version >/dev/null 2>&1; then echo "Docker Compose: verfuegbar"; ' +
-    'else echo "Docker Compose: nicht verfuegbar oder keine Berechtigung"; fi; ' +
+    'if docker compose version >/dev/null 2>&1; then echo "Docker Compose: verfügbar"; ' +
+    'else echo "Docker Compose: nicht verfügbar oder keine Berechtigung"; fi; ' +
     'if [ -f ' + RemotePath + ' ] && [ -r ' + RemotePath + ' ]; then ' +
     'echo "Compose-Datei: vorhanden und lesbar"; else ' +
     'echo "Compose-Datei: fehlt oder ist nicht lesbar"; fi';
@@ -2359,11 +2408,11 @@ begin
         Lines.Add('$env:SSH_ASKPASS = ' + PowerShellQuote(Application.ExeName));
         Lines.Add('$env:SSH_ASKPASS_REQUIRE = ''force''');
         Lines.Add('$env:DISPLAY = ''paperless:0''');
-        Lines.Add('Write-Host ''Automatisch nur bei bereits bestaetigtem Server-Schluessel. Bei unbekanntem Schluessel zuerst ohne gespeicherte Zugangsdaten testen.''');
+        Lines.Add('Write-Host ''Automatisch nur bei bereits bestätigtem Server-Schlüssel. Bei unbekanntem Schlüssel zuerst ohne gespeicherte Zugangsdaten testen.''');
       end;
       Lines.Add('$testResult = ''failure''');
       Lines.Add('try {');
-      Lines.Add('  Write-Host ''Den Server-Fingerabdruck vor der Bestaetigung unabhaengig vergleichen.''');
+      Lines.Add('  Write-Host ''Den Server-Fingerabdruck vor der Bestätigung unabhängig vergleichen.''');
       Lines.Add('  $sshExe = Get-Command ssh.exe -ErrorAction Stop');
       Lines.Add('  & $sshExe.Source @sshArgs');
       Lines.Add('  if ($LASTEXITCODE -eq 0) { $testResult = ''success'' }');
@@ -2372,7 +2421,7 @@ begin
       Lines.Add('finally {');
       Lines.Add('  [System.IO.File]::WriteAllText(' + PowerShellQuote(ResultPath) + ', $testResult)');
       Lines.Add('  Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue');
-      Lines.Add('  Read-Host ''Zum Schliessen Eingabetaste druecken'' | Out-Null');
+      Lines.Add('  Read-Host ''Zum Schließen Eingabetaste drücken'' | Out-Null');
       Lines.Add('}');
       Lines.SaveToFile(ScriptPath, TEncoding.UTF8);
     finally
@@ -2393,7 +2442,7 @@ begin
     Params := '-NoProfile -ExecutionPolicy Bypass -File "' + ScriptPath + '"';
     LaunchResult := ShellExecute(Handle, 'open', 'powershell.exe', PChar(Params), nil, SW_SHOWNORMAL);
     if NativeInt(LaunchResult) <= 32 then
-      raise Exception.Create('Das Fenster fuer den SSH-Test konnte nicht gestartet werden.');
+      raise Exception.Create('Das Fenster für den SSH-Test konnte nicht gestartet werden.');
     FExternalTestTimer.Enabled := True;
   except
     on E: Exception do
@@ -2411,8 +2460,16 @@ procedure TMainformFrm.SaveExternalServerBtnClick(Sender: TObject);
 var
   Ini: TAppSettingsIni;
   SettingsPath, Auth, BackupFolder: string;
+  WebPort: Integer;
 begin
+  if FStartupCheckHandle <> 0 then Exit;
   ProgramUpdateLbl.Hide;
+  if not TryStrToInt(Trim(ExternalWebPortEdit.Text), WebPort) or
+     (WebPort < 1) or (WebPort > 65535) then
+  begin
+    CenteredShowMessage('Bitte einen Paperless-Webport zwischen 1 und 65535 eingeben.');
+    Exit;
+  end;
   ExternalConnectionSettingsChanged(Sender);
   SettingsPath := IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName;
   if ExternalAuthRadioGroup.ItemIndex = 1 then Auth := 'SSH-Key'
@@ -2427,6 +2484,7 @@ begin
     try
       Ini.WriteString('Paperless Extern', 'Host', ExternalHostEdit.Text);
       Ini.WriteString('Paperless Extern', 'SSH-Port', ExternalPortEdit.Text);
+      Ini.WriteString('Paperless Extern', IniKeyServerWebPort, IntToStr(WebPort));
       Ini.WriteString('Paperless Extern', 'Benutzer', ExternalUserEdit.Text);
       Ini.WriteString('Paperless Extern', 'SSH-Key-Datei', ExternalKeyEdit.Text);
       Ini.WriteString('Paperless Extern', 'Compose-Datei', ExternalComposePathEdit.Text);
@@ -2436,11 +2494,16 @@ begin
     finally
       Ini.Free;
     end;
-    CenteredShowMessage('Serverdaten wurden gespeichert.');
   except
     on E: Exception do
-      CenteredShowMessage('Serverdaten konnten nicht vollstaendig gespeichert werden. Einzelne Angaben koennen bereits gespeichert sein. ' + E.Message);
+    begin
+      CenteredShowMessage('Serverdaten konnten nicht vollständig gespeichert werden. Einzelne Angaben können bereits gespeichert sein. ' + E.Message);
+      Exit;
+    end;
   end;
+  // Confirm the fingerprint after every save, including an unchanged server address.
+  // Den Fingerabdruck nach jedem Speichern bestätigen lassen, auch bei gleicher Serveradresse.
+  BeginExternalStartupCheck(True);
 end;
 
 // Enable key fields only for SSH key authentication.
@@ -2511,6 +2574,52 @@ begin
     BeginServerBackupCheck(BackupFolder);
 end;
 
+// Confirm the saved host before changing Debian packages or server files.
+// Vor Änderungen an Debian-Paketen oder Serverdateien den gespeicherten Host bestätigen.
+// Use the saved root profile and require a fresh host-key confirmation before installation.
+// Das gespeicherte root-Profil verwenden und vor der Installation den Hostschlüssel erneut bestätigen lassen.
+procedure TMainformFrm.InstallServerPaperlessBtnClick(Sender: TObject);
+var
+  Ini: TAppSettingsIni;
+  Host, UserName: string;
+begin
+  if not ExternalInstallationSelected or ScriptBusy or FServerBackupCheckActive or
+     (FStartupCheckHandle <> 0) or ApplicationClosing then Exit;
+
+  Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
+  try
+    Host := Trim(Ini.ReadString('Paperless Extern', 'Host', ''));
+    UserName := Trim(Ini.ReadString('Paperless Extern', 'Benutzer', ''));
+  finally
+    Ini.Free;
+  end;
+  if (Host = '') or (UserName <> 'root') then
+  begin
+    CenteredShowMessage('Bitte zuerst die Serverdaten mit dem SSH-Benutzer root speichern.');
+    Exit;
+  end;
+
+  BeginExternalStartupCheck(True, Host);
+end;
+
+// The installation starts only after the fingerprint check and the target confirmation.
+// Die Installation beginnt erst nach Fingerabdruckprüfung und Bestätigung des Zielservers.
+// Ask for the installation itself after the fingerprint and SSH login have been checked.
+// Den Installationsauftrag erst nach Fingerabdruckbestätigung und erfolgreicher SSH-Anmeldung bestätigen lassen.
+procedure TMainformFrm.ConfirmServerInstallation(const Host: string);
+begin
+  if not ExternalInstallationSelected or ScriptBusy or FServerBackupCheckActive or
+     ApplicationClosing then Exit;
+  if CenteredMessageDlg('Paperless auf ' + Host + ' unter ' + ServerInstallFolder + ' installieren?' +
+    sLineBreak + sLineBreak +
+    'Das Programm aktualisiert die Debian-Pakete und richtet Docker, Paperless und die ' +
+    'beschreibbare Samba-Gastfreigabe paperless-consume ein.',
+    mtConfirmation, [mbYes, mbNo], 0) <> mrYes then Exit;
+  TabControl1.TabIndex := 0;
+  TabControl1Change(TabControl1);
+  BeginServerBackupCheck('', sbaInstallPaperless);
+end;
+
 // Keep server actions unavailable until the operation and its dialogs have finished.
 // Serveraktionen bis zum Abschluss des Vorgangs und seiner Dialoge sperren.
 procedure TMainformFrm.BeginServerBackupCheck(const BackupFolder: string; Action: TServerBackupAction;
@@ -2529,6 +2638,8 @@ begin
     if FServerBackupProgressActive then
     begin
       case Action of
+        sbaInstallPaperless:
+          FServerBackupStatusText := 'SSH-Verbindung für die Paperless-Installation wird aufgebaut ...';
         sbaStartBackup:
           FServerBackupStatusText := 'Server-Backup wird vorbereitet. Bitte warten ...';
         sbaDownloadBackup:
@@ -2575,7 +2686,12 @@ begin
         ErrorCaption := 'Server-Backup: Prüfung fehlgeschlagen';
         if Action in [sbaListRestoreBackups, sbaStartRestore, sbaWatchRestore] then
           ErrorCaption := 'Server-Wiederherstellung: Prüfung fehlgeschlagen';
-        if Action = sbaDownloadBackup then
+        if Action = sbaInstallPaperless then
+        begin
+          ErrorCaption := 'Paperless-Installation konnte nicht gestartet werden';
+          FinishScriptProgress(ErrorCaption, False);
+        end
+        else if Action = sbaDownloadBackup then
           FinishScriptProgress('Backup-Download konnte nicht gestartet werden.', False)
         else if Action = sbaUploadBackup then
           FinishScriptProgress('Backup konnte nicht zum Server gesendet werden.', False)
@@ -2634,6 +2750,7 @@ var
   CompletedBackupFolder, DownloadSourceFolder, DownloadTargetFolder, RestoreSourceFolder: string;
   AvailableBackupFolders, BackupNames: TArray<string>;
   I, SelectedIndex: Integer;
+  Ini: TAppSettingsIni;
   OperationSucceeded, SelectableBackups, WorkerProgress: Boolean;
 begin
   if FServerBackupCheckHandle = 0 then Exit;
@@ -2677,6 +2794,37 @@ begin
         RaiseLastOSError;
       OperationSucceeded := ReadServerBackupResult(FServerBackupCheckResultPath, ExitCode, Caption, MessageText,
         CompletedBackupFolder, AvailableBackupFolders);
+      if FServerBackupAction = sbaInstallPaperless then
+      begin
+        if OperationSucceeded then
+        begin
+          // Point subsequent backup and restore operations at the new Compose project.
+          // Anschließende Sicherungen und Wiederherstellungen auf das neue Compose-Projekt richten.
+          // Save the installed web port alongside the project for subsequent browser launches.
+          // Den installierten Webport mit dem Projekt für spätere Browseraufrufe speichern.
+          try
+            Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
+            try
+              Ini.WriteString('Paperless Extern', 'Compose-Datei', ServerInstallFolder);
+              Ini.WriteString('Paperless Extern', 'Compose-Projekt', ComposeProjectName);
+              Ini.WriteString('Paperless Extern', IniKeyServerWebPort, IntToStr(ServerInstallWebPort));
+              Ini.UpdateFile;
+            finally
+              Ini.Free;
+            end;
+            ExternalComposePathEdit.Text := ServerInstallFolder;
+            ExternalComposeProjectEdit.Text := ComposeProjectName;
+            ExternalWebPortEdit.Text := IntToStr(ServerInstallWebPort);
+          except
+            MessageText := MessageText + sLineBreak + sLineBreak +
+              'Die Serverdaten konnten lokal nicht aktualisiert werden. Bitte den Compose-Ordner ' +
+              ServerInstallFolder + ', das Compose-Projekt ' + ComposeProjectName +
+              ' und den Paperless-Webport ' + IntToStr(ServerInstallWebPort) + ' speichern.';
+          end;
+        end
+        else if not Caption.StartsWith('Paperless') then
+          Caption := 'Paperless-Installation fehlgeschlagen';
+      end;
       SelectableBackups := (FServerBackupAction in [sbaListBackups, sbaListRestoreBackups]) and OperationSucceeded and
         (Length(AvailableBackupFolders) > 0);
       if FServerBackupProgressActive then
@@ -2691,7 +2839,12 @@ begin
         Caption := 'Server-Backup: Prüfung fehlgeschlagen';
         if FServerBackupAction in [sbaListRestoreBackups, sbaStartRestore, sbaWatchRestore] then
           Caption := 'Server-Wiederherstellung: Prüfung fehlgeschlagen';
-        if FServerBackupAction = sbaDownloadBackup then
+        if FServerBackupAction = sbaInstallPaperless then
+        begin
+          Caption := 'Paperless-Installation: Ergebnis nicht verfügbar';
+          FinishScriptProgress(Caption, False);
+        end
+        else if FServerBackupAction = sbaDownloadBackup then
           FinishScriptProgress('Backup-Download: Ergebnis nicht verfügbar.', False)
         else if FServerBackupAction = sbaUploadBackup then
           FinishScriptProgress('Backup-Upload: Ergebnis nicht verfügbar.', False)
@@ -3102,6 +3255,16 @@ end;
 // Die Anwendung vom Hauptformular aus schließen.
 procedure TMainformFrm.FormClose(Sender: TObject; var Action: TCloseAction);
 begin
+  // Keep the installer connected until the server reports its final status.
+  // Die Installationsverbindung bis zum abschließenden Serverstatus offen halten.
+  if FServerBackupCheckActive and (FServerBackupAction = sbaInstallPaperless) and
+     (FServerBackupCheckHandle <> 0) and
+     (WaitForSingleObject(FServerBackupCheckHandle, 0) = WAIT_TIMEOUT) then
+  begin
+    Action := caNone;
+    CenteredShowMessage('Die Serverinstallation läuft noch. Bitte warten Sie auf das Ergebnis.');
+    Exit;
+  end;
   ApplicationClosing := True;
   EndServerBackupCheck;
   CancelExternalStartupCheck;
@@ -5231,7 +5394,6 @@ begin
   PaperlessUpdateBtn.Enabled := False else
   PaperlessUpdateBtn.Enabled := True;
 end;
-// Die lokale Paperless-Installation im Standardbrowser oeffnen.
 // Open the PDF manual in the default browser.
 // Die PDF-Anleitung im Standardbrowser öffnen.
 procedure TMainformFrm.OpenManualBtnClick(Sender: TObject);
@@ -5240,10 +5402,40 @@ begin
   ShellExecute(Handle, 'open', PChar(ProgramManualUrl), nil, nil, SW_SHOWNORMAL);
 end;
 
+// Open Paperless at the local address or at the saved server web endpoint.
+// Paperless unter der lokalen Adresse oder der gespeicherten Server-Webadresse öffnen.
 procedure TMainformFrm.OpenPaperlessBrowserLblClick(Sender: TObject);
+var
+  Ini: TAppSettingsIni;
+  BrowserUrl, Host, WebPortText: string;
+  WebPort: Integer;
 begin
   ProgramUpdateLbl.Hide;
-  ShellExecute(0, 'open', PaperlessLocalUrlWithSlash, nil, nil, SW_SHOWNORMAL);
+  BrowserUrl := PaperlessLocalUrlWithSlash;
+  if ExternalInstallationSelected then
+  begin
+    Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
+    try
+      Host := Trim(Ini.ReadString('Paperless Extern', 'Host', ''));
+      WebPortText := Trim(Ini.ReadString('Paperless Extern', IniKeyServerWebPort,
+        IntToStr(ServerInstallWebPort)));
+    finally
+      Ini.Free;
+    end;
+    if not IsValidHost(Host) or not TryStrToInt(WebPortText, WebPort) or
+       (WebPort < 1) or (WebPort > 65535) then
+    begin
+      CenteredShowMessage('Bitte zuerst eine gültige Serveradresse und einen Paperless-Webport speichern.');
+      Exit;
+    end;
+    // Bracket an IPv6 host before appending the web port to the URL.
+    // Eine IPv6-Adresse vor dem Anhängen des Webports in eckige Klammern setzen.
+    if Pos(':', Host) > 0 then
+      Host := '[' + Host + ']';
+    BrowserUrl := Format('http://%s:%d/', [Host, WebPort]);
+  end;
+  if NativeInt(ShellExecute(Handle, 'open', PChar(BrowserUrl), nil, nil, SW_SHOWNORMAL)) <= 32 then
+    CenteredShowMessage('Paperless konnte nicht im Browser geöffnet werden.');
 end;
 // Create paperless-restore.ps1 for the selected backup folder.
 // paperless-restore.ps1 für den ausgewählten Backup-Ordner erstellen.

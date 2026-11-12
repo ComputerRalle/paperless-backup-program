@@ -43,7 +43,7 @@ function CreateDockerComposeContent(
   const Versions: TDockerImageVersions;
   const PaperlessInput: string;
   const PaperlessSecretKey: string;
-  TrashRetentionDays: Integer): string;
+  TrashRetentionDays: Integer; ServerInstallation: Boolean = False): string;
 
 procedure SaveDockerComposeFile(const TargetPath, Content: string);
 
@@ -58,8 +58,29 @@ function CreateDockerComposeContent(
   const Versions: TDockerImageVersions;
   const PaperlessInput: string;
   const PaperlessSecretKey: string;
-  TrashRetentionDays: Integer): string;
+  TrashRetentionDays: Integer; ServerInstallation: Boolean): string;
+var
+  HostPort, DatabasePassword, ScriptMount, ScriptSetting: string;
 begin
+  // The Linux installer substitutes the database password on the server.
+  // Die Linux-Installation setzt das Datenbankpasswort erst auf dem Server ein.
+  // The Windows pre-consume script is only part of the local Compose profile.
+  // Das Windows-Pre-Consume-Skript gehört zur lokalen Compose-Konfiguration.
+  if ServerInstallation then
+  begin
+    HostPort := IntToStr(ServerInstallWebPort);
+    DatabasePassword := '__PAPERLESS_DB_PASSWORD__';
+    ScriptMount := '';
+    ScriptSetting := '';
+  end
+  else
+  begin
+    HostPort := '8001';
+    DatabasePassword := 'paperless';
+    ScriptMount := '      - ./scripts:/usr/src/paperless/scripts' + sLineBreak;
+    ScriptSetting := '      PAPERLESS_PRE_CONSUME_SCRIPT: /usr/src/paperless/scripts/' +
+      PaperlessPreConsumeScriptName + sLineBreak;
+  end;
   Result :=
     '# Compose file for the Paperless Backup Program by ComputerRalle' + sLineBreak +
     '# ralf-peter-kleinert.de' + sLineBreak +
@@ -83,7 +104,7 @@ begin
     '    environment:' + sLineBreak +
     '      POSTGRES_DB: paperless' + sLineBreak +
     '      POSTGRES_USER: paperless' + sLineBreak +
-    '      POSTGRES_PASSWORD: paperless' + sLineBreak + sLineBreak +
+    '      POSTGRES_PASSWORD: ' + DatabasePassword + sLineBreak + sLineBreak +
     // Forward selected image tags unchanged; defaults are Gotenberg 8 and Tika 3.2.3.0.
     // Gewählte Image-Tags unverändert übernehmen; Vorgaben sind Gotenberg 8 und Tika 3.2.3.0.
     '  gotenberg:' + sLineBreak +
@@ -113,26 +134,23 @@ begin
     '      - gotenberg' + sLineBreak +
     '      - tika' + sLineBreak +
     '    ports:' + sLineBreak +
-    '      - "8001:8000"' + sLineBreak +
+    '      - "' + HostPort + ':8000"' + sLineBreak +
     '    restart: always' + sLineBreak +
     '    volumes:' + sLineBreak +
     '      - data:/usr/src/paperless/data' + sLineBreak +
     '      - media:/usr/src/paperless/media' + sLineBreak +
     '      - export:/usr/src/paperless/export' + sLineBreak +
     '      - ' + PaperlessInput + ':/usr/src/paperless/consume' + sLineBreak +
-    // Always mount the scripts folder relative to the selected installation directory.
-    // Den Skriptordner immer relativ zum gewählten Installationsverzeichnis einbinden.
-    '      - ./scripts:/usr/src/paperless/scripts' + sLineBreak +
+    ScriptMount +
     '    env_file:' + sLineBreak +
     '      - ./email-versand.env' + sLineBreak +
     '    environment:' + sLineBreak +
-    '      PAPERLESS_PRE_CONSUME_SCRIPT: /usr/src/paperless/scripts/' +
-      PaperlessPreConsumeScriptName + sLineBreak +
+    ScriptSetting +
     '      PAPERLESS_REDIS: redis://broker:6379' + sLineBreak +
     '      PAPERLESS_DBHOST: db' + sLineBreak +
     '      PAPERLESS_DBNAME: paperless' + sLineBreak +
     '      PAPERLESS_DBUSER: paperless' + sLineBreak +
-    '      PAPERLESS_DBPASS: paperless' + sLineBreak +
+    '      PAPERLESS_DBPASS: ' + DatabasePassword + sLineBreak +
     '      PAPERLESS_TIME_ZONE: Europe/Berlin' + sLineBreak +
     '      PAPERLESS_SECRET_KEY: "' + PaperlessSecretKey + '"' + sLineBreak +
     '      PAPERLESS_CONSUMPTION_DIR: /usr/src/paperless/consume' + sLineBreak +

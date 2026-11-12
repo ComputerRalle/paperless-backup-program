@@ -92,7 +92,7 @@ begin
   end;
   try
     if (CredData.CredentialBlobSize mod SizeOf(Char)) <> 0 then
-      raise Exception.Create('Gespeicherte Zugangsdaten haben ein ungueltiges Format.');
+      raise Exception.Create('Gespeicherte Zugangsdaten haben ein ungültiges Format.');
     if CredData.CredentialBlobSize > 0 then
       SetString(Result, PChar(CredData.CredentialBlob), CredData.CredentialBlobSize div SizeOf(Char));
   finally
@@ -188,7 +188,7 @@ begin
     if (Length(Data) >= 4) and
        (((Data[0] = $FF) and (Data[1] = $FE) and (Data[2] = 0) and (Data[3] = 0)) or
         ((Data[0] = 0) and (Data[1] = 0) and (Data[2] = $FE) and (Data[3] = $FF))) then
-      raise Exception.Create('UTF-32 wird fuer die Einstellungsdatei nicht unterstuetzt.');
+      raise Exception.Create('UTF-32 wird für die Einstellungsdatei nicht unterstützt.');
     if (Length(Data) >= 2) and (Data[0] = $FF) and (Data[1] = $FE) then
     begin
       UnitSize := 2;
@@ -205,7 +205,7 @@ begin
     else if (Length(Data) >= 3) and (Data[0] = $EF) and (Data[1] = $BB) and (Data[2] = $BF) then
       Start := 3;
     if ((Length(Data) - Start) mod UnitSize) <> 0 then
-      raise Exception.Create('Die Einstellungsdatei hat eine ungueltige Codierung.');
+      raise Exception.Create('Die Einstellungsdatei hat eine ungültige Codierung.');
 
 // Find section boundaries without rewriting the original INI content.
 // Abschnittsgrenzen suchen, ohne den urspruenglichen INI-Inhalt umzuschreiben.

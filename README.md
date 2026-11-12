@@ -4,7 +4,19 @@
 
 **Praxisbestätigung vom 11.11.2026:** Ein auf der Linux-VM erzeugtes Backup wurde erfolgreich in Docker Desktop unter Windows eingespielt. Bei einer Wiederherstellung auf der Linux-VM meldete der Server-Worker den erfolgreichen Import und Start von Paperless. Das Programm findet vorhandene Server-Backups. Die Übertragungsdialoge für Upload und Download sowie das Öffnen eines Dokuments nach dem Server-Restore sind separat zu prüfen.
 
+### Paperless auf einem neuen Debian-Server installieren
+
+**Entwicklungsstand vom 12.11.2026:** Beim Klick auf **Serverdaten Speichern** blieb die SSH-Fingerabdruckabfrage im Praxistest aus. Das Programm meldete „Der Server hat keinen lesbaren SSH-Fingerabdruck geliefert.“ Die Prüfung endete dabei vor der Bestätigung und der SSH-Anmeldung. Im Quellcode steht jetzt ein zweiter Abrufweg über Windows OpenSSH bereit, wenn der direkte Scan keinen auswertbaren Schlüssel liefert. Die Korrektur ist mit simulierter SSH-Ausgabe geprüft und auf der betroffenen VM noch zu bestätigen. Die sichtbare Abfrage vor der Serverinstallation und die Installation auf einer frischen Debian-VM sind noch praktisch zu prüfen.
+
+1. Eine frische Debian-13-VM (amd64) mit funktionierendem SSH-Zugang für `root` bereitstellen.
+2. Unter **Einstellungen → Paperless Extern** die Serverdaten eintragen und speichern. Nach **Serverdaten Speichern** soll die Fingerabdruckabfrage vor der SSH-Anmeldung erscheinen, auch bei unveränderten Serverdaten. Den angezeigten Fingerabdruck mit dem auf dem Server vergleichen und bestätigen. Neue bestätigte Schlüssel werden nach erfolgreicher Anmeldung gespeichert. Bei Ablehnung oder einem geänderten gespeicherten Hostschlüssel wird die Prüfung abgebrochen.
+3. **Paperless installieren** wählen, den SSH-Fingerabdruck im Dialog bestätigen und anschließend den Installationsauftrag bestätigen. Das Programm aktualisiert Debian-Pakete, installiert Docker und Compose und startet Paperless mit PostgreSQL 18 unter `/opt/paperless`. Ein belegter Installationsordner wird vor der Paketaktualisierung abgelehnt.
+4. Nach der Erfolgsmeldung **Paperless im Browser aufrufen** wählen und dort den Paperless-Admin anlegen. Der Eingangsordner ist über `\\<Server-IP>\paperless-consume` als beschreibbare Samba-Gastfreigabe vorgesehen. Windows kann Gastzugriffe abhängig von der SMB-Konfiguration ablehnen.
+5. Der Dialog zeigt nach erfolgreicher Installation die Webadresse, die Samba-Freigabe und die Logdatei unter `Logs` an. Die Anwendung speichert Compose-Ordner, Projektname und Webport für spätere Aufrufe. Wenn ein später Schritt fehlschlägt und die Compose-Datei bereits angelegt wurde, bleibt sie auf dem Server. Den fehlgeschlagenen Schritt anhand der Logdatei prüfen.
+
 ### Server einrichten und sichern
+
+**Paperless im Browser aufrufen** verwendet im Servermodus die gespeicherte IP-Adresse oder den Hostnamen und den **Paperless-Webport**. Der Standard ist 8000. Bei einem abweichenden Docker-Hostport den Wert unter **Einstellungen → Paperless Extern** eintragen und mit **Serverdaten Speichern** übernehmen.
 
 1. Unter **Einstellungen → Paperless Extern** die Serververbindung und den Backupordner eintragen und **Serverdaten Speichern** wählen. Der Standardpfad ist `/srv/paperless_backup`. **Backupordner anlegen** prüft nach Bestätigung den freien Platz am Ziel oder am nächsten vorhandenen Elternordner und legt den Ordner anschließend per SSH an.
 2. Im Serverbetrieb **Paperless Backup Starten** wählen. **Ja** startet das Backup. **Nein** ruft den Status des letzten oder laufenden Server-Backups ab.

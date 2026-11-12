@@ -436,11 +436,11 @@ var
   ExitCode: Cardinal;
   Ini:TAppSettingsIni;
 begin
-  // External operations are not implemented yet.
-  // Externe Vorgaenge sind noch nicht implementiert.
+  // Route the setup button through the same server installation as the settings button.
+  // Den Einrichtungsbutton im Servermodus über denselben Ablauf wie in den Einstellungen führen.
   if ExternalInstallationSelected then
   begin
-    CenteredShowMessage('Externe Serveraktionen sind noch nicht verfügbar.');
+    MainformFrm.InstallServerPaperlessBtnClick(Sender);
     Exit;
   end;
   if ApplicationClosing or Application.Terminated then Exit;
