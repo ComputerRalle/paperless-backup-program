@@ -32,7 +32,7 @@ uses Winapi.Windows;
 type
   TServerBackupAction = (sbaCheckSpace, sbaStartBackup, sbaWatchBackup, sbaDownloadBackup,
     sbaListBackups, sbaUploadBackup, sbaListRestoreBackups, sbaStartRestore, sbaWatchRestore,
-    sbaInstallPaperless);
+    sbaInstallPaperless, sbaUpdateVersions);
 
 const
   ServerTransferActions = [sbaListBackups, sbaDownloadBackup, sbaUploadBackup];
@@ -42,7 +42,7 @@ function IsValidHost(const Value: string): Boolean;
 function NormalizeServerBackupFolder(const Value: string): string;
 procedure StartServerBackup(out ProcessHandle: THandle; out ResultPath: string;
   const BackupFolder: string = ''; Action: TServerBackupAction = sbaCheckSpace;
-  const LocalDownloadFolder: string = '');
+  const LocalDownloadFolder: string = ''; const VersionTags: TArray<string> = nil);
 function ReadServerBackupResult(const ResultPath: string; ExitCode: DWORD;
   out Caption, MessageText: string; out CompletedBackupFolder: string;
   out AvailableBackupFolders: TArray<string>; out TransferCancelled: Boolean): Boolean;
@@ -50,7 +50,7 @@ function ReadServerBackupResult(const ResultPath: string; ExitCode: DWORD;
 implementation
 
 uses
-  System.SysUtils, System.Classes, System.IOUtils, System.JSON,
+  System.SysUtils, System.Classes, System.IOUtils, System.JSON, System.Generics.Collections,
   Vcl.Forms, AppConfig, ExternPaperless, DockerComposeGenerator;
 
 // Quote a value as a PowerShell single-quoted literal.
@@ -700,8 +700,47 @@ begin
   Lines.Add(' }');
 end;
 
+// Send only changed tags and edit the existing Compose document on the server.
+// Nur geänderte Tags senden und die vorhandene Compose-Datei auf dem Server bearbeiten.
+procedure AddServerVersionUpdate(const Lines: TStringList; const VersionTags: TArray<string>);
+var
+  Tag: string;
+begin
+  if Length(VersionTags) <> 7 then
+    raise Exception.Create('Die Imageversionen für den Server fehlen.');
+  Lines.Add(' $title=''Server-Update fehlgeschlagen''');
+  Lines.Add(' $installStep=''SSH-Verbindung aufbauen''');
+  Lines.Add(' $installFailure=''''');
+  Lines.Add(' $installReady=$false');
+  Lines.Add(' $log=$null');
+  Lines.Add(' $logDir=Join-Path $runtimeDir ''Logs''');
+  Lines.Add(' $logPath=Join-Path $logDir ([IO.Path]::GetFileNameWithoutExtension($PSCommandPath)+''.log'')');
+  Lines.Add(' try {');
+  Lines.Add('  [void][IO.Directory]::CreateDirectory($logDir)');
+  Lines.Add('  $log=[IO.StreamWriter]::new([IO.File]::Open($logPath,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::Read),[Text.UTF8Encoding]::new($false))');
+  Lines.Add('  $log.AutoFlush=$true');
+  Lines.Add('  $remoteCommand=''bash -s -- ''+(ShArg $composeFile)+'' ''+(ShArg $project)');
+  for Tag in VersionTags do
+    Lines.Add('  $remoteCommand+='' ''+(ShArg ' + PsLiteral(Tag) + ')');
+  Lines.Add('  $linuxScript=@''');
+{$I ServerUpdateWorker.inc}
+  Lines.Add('''@');
+  Lines.Add('  $bytes=[Text.Encoding]::UTF8.GetBytes($linuxScript.Replace([string][char]13,'''')+[char]10)');
+  Lines.Add('  $null=Ssh ($remoteCommand+'' 2>&1'') $bytes 7200000');
+  Lines.Add('  if(-not $installReady){throw ''update_incomplete''}');
+  Lines.Add('  $backupCompleted=$true');
+  Lines.Add('  $title=''Paperless-Server wurde aktualisiert''');
+  Lines.Add('  $msg=''Die Docker-Images wurden geprüft und Paperless wurde mit der Server-Compose-Datei gestartet.''');
+  Lines.Add(' } catch {');
+  Lines.Add('  if($installFailure){$msg=$installFailure}else{$msg=CheckFailure $installStep $_.Exception}');
+  Lines.Add(' } finally {');
+  Lines.Add('  if($log){$log.Dispose();$msg+=[Environment]::NewLine+[Environment]::NewLine+"Logdatei: $logPath"}');
+  Lines.Add(' }');
+end;
+
 procedure StartServerBackup(out ProcessHandle: THandle; out ResultPath: string;
-  const BackupFolder: string; Action: TServerBackupAction; const LocalDownloadFolder: string);
+  const BackupFolder: string; Action: TServerBackupAction; const LocalDownloadFolder: string;
+  const VersionTags: TArray<string>);
 var
   Ini: TAppSettingsIni;
   SettingsPath, Host, UserName, KeyFile, Auth, ComposeFile, Project, SavedBackupFolder: string;
@@ -737,7 +776,7 @@ begin
     if not IsValidHost(Host) or not IsValidUser(UserName) then
       raise Exception.Create('Bitte gültigen Server und Benutzernamen speichern.');
     if (((BackupFolder = '') and (Action = sbaCheckSpace)) or
-        (Action in [sbaStartBackup, sbaStartRestore, sbaWatchRestore])) and
+        (Action in [sbaStartBackup, sbaStartRestore, sbaWatchRestore, sbaUpdateVersions])) and
        ((ComposeFile = '') or not ComposeFile.StartsWith('/') or HasControlChars(ComposeFile) or HasControlChars(Project)) then
       raise Exception.Create('Bitte einen gültigen absoluten Compose-Ordner speichern.');
     if SameText(Auth, 'SSH-Key') then UseKey := True
@@ -828,11 +867,11 @@ begin
       Lines.Add(' $a=@(''-T'',''-o'',''StrictHostKeyChecking=yes'',''-o'',''UpdateHostKeys=no'',''-o'',''ConnectTimeout=10'',''-o'',''NumberOfPasswordPrompts=1'',''-p'',$port,''-l'',$serverUser)');
       Lines.Add(' if($useKey){$a+=@(''-o'',''IdentitiesOnly=yes'',''-i'',$keyFile)}else{$a+=@(''-o'',''PreferredAuthentications=password'',''-o'',''PubkeyAuthentication=no'')}');
       Lines.Add(' if($outputPath -or $inputPath -or $monitorProgress){$a+=@(''-o'',''ServerAliveInterval=15'',''-o'',''ServerAliveCountMax=3'')}');
-      if Action = sbaInstallPaperless then
+      if Action in [sbaInstallPaperless, sbaUpdateVersions] then
         Lines.Add(' $a+=@(''-o'',''ServerAliveInterval=15'',''-o'',''ServerAliveCountMax=3'')');
       Lines.Add(' $a+=@($serverHost,$cmd);$si.Arguments=(($a|ForEach-Object{WinArg $_}) -join '' '')');
       Lines.Add(' $si.UseShellExecute=$false;$si.CreateNoWindow=$true;$si.RedirectStandardOutput=$true;$si.RedirectStandardError=$true;$si.RedirectStandardInput=$true');
-      if Action = sbaInstallPaperless then
+      if Action in [sbaInstallPaperless, sbaUpdateVersions] then
         Lines.Add(' $si.StandardOutputEncoding=[Text.Encoding]::UTF8;$si.StandardErrorEncoding=[Text.Encoding]::UTF8');
 // Stream backup files directly to a new file and keep the bounded memory path for metadata.
 // Backupdateien direkt in eine neue Datei schreiben und Metadaten weiter im Speicher lesen.
@@ -850,7 +889,7 @@ begin
       Lines.Add('  if(-not $p.Start()){throw ''ssh_start''}');
       Lines.Add('  $started=$true');
       Lines.Add('  $err=$p.StandardError.ReadToEndAsync()');
-      if Action <> sbaInstallPaperless then
+      if not (Action in [sbaInstallPaperless, sbaUpdateVersions]) then
         Lines.Add('  $out=$p.StandardOutput.BaseStream.CopyToAsync($m)');
       // Stream local archives through SSH stdin with a progress-based timeout.
       // Lokale Archive über SSH-stdin streamen und bei Stillstand abbrechen.
@@ -874,10 +913,10 @@ begin
       Lines.Add('  $p.StandardInput.Close()');
       // Measure download progress and use an idle timeout so large active transfers can finish.
       // Downloadfortschritt messen und nur bei Stillstand abbrechen, damit große aktive Übertragungen fertig werden.
-      if Action = sbaInstallPaperless then
+      if Action in [sbaInstallPaperless, sbaUpdateVersions] then
       begin
-        // Read installation output live and keep detailed command output in the log.
-        // Installationsausgabe live lesen und technische Befehlsausgabe in der Logdatei behalten.
+        // Read installation or update output live and keep detailed command output in the log.
+        // Installations- oder Update-Ausgabe live lesen und technische Befehlsausgabe protokollieren.
         Lines.Add('  $watch=[Diagnostics.Stopwatch]::StartNew()');
         Lines.Add('  while($true){');
         Lines.Add('   $remaining=[int][math]::Max(1,$timeoutMs-$watch.ElapsedMilliseconds)');
@@ -957,6 +996,11 @@ begin
       begin
         AddServerProgress(Lines);
         AddServerInstallation(Lines);
+      end
+      else if Action = sbaUpdateVersions then
+      begin
+        AddServerProgress(Lines);
+        AddServerVersionUpdate(Lines, VersionTags);
       end
       else if Action = sbaUploadBackup then
         AddServerBackupUpload(Lines, ExpandFileName(LocalDownloadFolder), SavedBackupFolder, RunId)

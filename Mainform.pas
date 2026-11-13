@@ -313,7 +313,8 @@ type
     FRetentionUpdateRequested: Boolean;
     FRetentionUpdateSucceeded: Boolean;
     procedure BeginServerBackupCheck(const BackupFolder: string = '';
-      Action: TServerBackupAction = sbaCheckSpace; const LocalDownloadFolder: string = '');
+      Action: TServerBackupAction = sbaCheckSpace; const LocalDownloadFolder: string = '';
+      const VersionTags: TArray<string> = nil);
     procedure EndServerBackupCheck;
     procedure ServerBackupCheckTimerTick(Sender: TObject);
     function ReadNextServerWorkerStatus(const ProgressPath: string): Boolean;
@@ -1142,6 +1143,8 @@ begin
   begin
     if FServerBackupAction = sbaInstallPaperless then
       Result := 'Paperless wird auf dem Server installiert. Bitte warten ...'
+    else if FServerBackupAction = sbaUpdateVersions then
+      Result := 'Paperless-Server wird aktualisiert. Bitte warten ...'
     else if FServerBackupAction = sbaDownloadBackup then
       Result := 'Backup wird heruntergeladen. Bitte warten ...'
     else if FServerBackupAction = sbaUploadBackup then
@@ -1664,7 +1667,7 @@ var
   LocalCompose: string;
 begin
   Result := False;
-  if not InstallationPathReady or not DirectoryExists(AppDataFolder) then Exit;
+  if not InstallationPathReady or not System.SysUtils.DirectoryExists(AppDataFolder) then Exit;
   Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
     if not SameText(Ini.ReadString('Einrichtung', 'Installation abgeschlossen', ''), 'Ja') then Exit;
@@ -1682,7 +1685,7 @@ var
   Ini: TAppSettingsIni;
   LocalCompose, Installed: string;
 begin
-  if not InstallationPathReady or not DirectoryExists(AppDataFolder) then
+  if not InstallationPathReady or not System.SysUtils.DirectoryExists(AppDataFolder) then
     raise Exception.Create('Der lokale Installationsordner ist nicht verfügbar.');
   Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
@@ -1700,10 +1703,12 @@ begin
     raise Exception.Create('Die lokale Compose-Datei wurde nicht gefunden.');
   InitLogger(AppDataFolder);
   EnsurePaperlessScripts(AppDataFolder);
-  if not DirectoryExists(PaperlessInput) and not ForceDirectories(PaperlessInput) then
+  if not System.SysUtils.DirectoryExists(PaperlessInput) and
+     not System.SysUtils.ForceDirectories(PaperlessInput) then
     raise Exception.Create('Der lokale Eingabeordner konnte nicht angelegt werden.');
   DefaultFolder := IncludeTrailingPathDelimiter(GetEnvironmentVariable('USERPROFILE')) + 'Desktop\' + PaperlessBackupFolderName;
-  if not DirectoryExists(DefaultFolder) and not ForceDirectories(DefaultFolder) then
+  if not System.SysUtils.DirectoryExists(DefaultFolder) and
+     not System.SysUtils.ForceDirectories(DefaultFolder) then
     raise Exception.Create('Der lokale Backupordner konnte nicht angelegt werden.');
   SaveEmptyEnvFile;
   ComposePath := LocalCompose;
@@ -1875,7 +1880,21 @@ begin
         end;
         Exit;
       end;
-      if Choice = mrYes then SaveVersionsForMode(ExternalInstallationSelected);
+      if Choice = mrYes then
+      begin
+        if ExternalInstallationSelected then
+        begin
+          FChangingInstallationMode := True;
+          try
+            InstallationModeRadioGroup.ItemIndex := 1;
+          finally
+            FChangingInstallationMode := False;
+          end;
+          SaveSettingsBtnClick(SaveSettingsBtn);
+          Exit;
+        end;
+        SaveVersionsForMode(False);
+      end;
     end;
     if not NewExternal and FLocalStartupPending then
       PrepareLocalAfterExternalStart;
@@ -2653,7 +2672,7 @@ end;
 // Keep server actions unavailable until the operation and its dialogs have finished.
 // Serveraktionen bis zum Abschluss des Vorgangs und seiner Dialoge sperren.
 procedure TMainformFrm.BeginServerBackupCheck(const BackupFolder: string; Action: TServerBackupAction;
-  const LocalDownloadFolder: string);
+  const LocalDownloadFolder: string; const VersionTags: TArray<string>);
 var
   ErrorCaption: string;
 begin
@@ -2671,6 +2690,8 @@ begin
       case Action of
         sbaInstallPaperless:
           FServerBackupStatusText := 'SSH-Verbindung für die Paperless-Installation wird aufgebaut ...';
+        sbaUpdateVersions:
+          FServerBackupStatusText := 'SSH-Verbindung für das Server-Update wird aufgebaut ...';
         sbaStartBackup:
           FServerBackupStatusText := 'Server-Backup wird vorbereitet. Bitte warten ...';
         sbaDownloadBackup:
@@ -2709,7 +2730,7 @@ begin
       FServerBackupCheckTimer.OnTimer := ServerBackupCheckTimerTick;
     end;
     StartServerBackup(FServerBackupCheckHandle, FServerBackupCheckResultPath, BackupFolder, Action,
-      LocalDownloadFolder);
+      LocalDownloadFolder, VersionTags);
     // Enable cancellation once the listing or transfer process has started.
     // Abbrechen erst nach dem Start des Such- oder Übertragungsprozesses aktivieren.
     CancelServerTransferBtn.Enabled := Action in ServerTransferActions;
@@ -2720,7 +2741,12 @@ begin
         ErrorCaption := 'Server-Backup: Prüfung fehlgeschlagen';
         if Action in [sbaListRestoreBackups, sbaStartRestore, sbaWatchRestore] then
           ErrorCaption := 'Server-Wiederherstellung: Prüfung fehlgeschlagen';
-        if Action = sbaInstallPaperless then
+        if Action = sbaUpdateVersions then
+        begin
+          ErrorCaption := 'Server-Update konnte nicht gestartet werden';
+          FinishScriptProgress(ErrorCaption, False);
+        end
+        else if Action = sbaInstallPaperless then
         begin
           ErrorCaption := 'Paperless-Installation konnte nicht gestartet werden';
           FinishScriptProgress(ErrorCaption, False);
@@ -2841,6 +2867,16 @@ begin
         RaiseLastOSError;
       OperationSucceeded := ReadServerBackupResult(FServerBackupCheckResultPath, ExitCode, Caption, MessageText,
         CompletedBackupFolder, AvailableBackupFolders, OperationCancelled);
+      // Persist requested versions only after the server has confirmed success.
+      // Die gewählten Versionen erst nach bestätigtem Servererfolg speichern.
+      if (FServerBackupAction = sbaUpdateVersions) and OperationSucceeded then
+        try
+          SaveVersionsForMode(True);
+        except
+          on E: Exception do
+            MessageText := MessageText + sLineBreak + sLineBreak +
+              'Das Server-Update war erfolgreich. Die Versionen konnten lokal nicht gespeichert werden: ' + E.Message;
+        end;
       if FServerBackupAction = sbaInstallPaperless then
       begin
         if OperationSucceeded then
@@ -2888,7 +2924,12 @@ begin
         Caption := 'Server-Backup: Prüfung fehlgeschlagen';
         if FServerBackupAction in [sbaListRestoreBackups, sbaStartRestore, sbaWatchRestore] then
           Caption := 'Server-Wiederherstellung: Prüfung fehlgeschlagen';
-        if FServerBackupAction = sbaInstallPaperless then
+        if FServerBackupAction = sbaUpdateVersions then
+        begin
+          Caption := 'Server-Update: Ergebnis nicht verfügbar';
+          FinishScriptProgress(Caption, False);
+        end
+        else if FServerBackupAction = sbaInstallPaperless then
         begin
           Caption := 'Paperless-Installation: Ergebnis nicht verfügbar';
           FinishScriptProgress(Caption, False);
@@ -3365,12 +3406,12 @@ begin
   end;
   // Keep the installer connected until the server reports its final status.
   // Die Installationsverbindung bis zum abschließenden Serverstatus offen halten.
-  if FServerBackupCheckActive and (FServerBackupAction = sbaInstallPaperless) and
+  if FServerBackupCheckActive and (FServerBackupAction in [sbaInstallPaperless, sbaUpdateVersions]) and
      (FServerBackupCheckHandle <> 0) and
      (WaitForSingleObject(FServerBackupCheckHandle, 0) = WAIT_TIMEOUT) then
   begin
     Action := caNone;
-    CenteredShowMessage('Die Serverinstallation läuft noch. Bitte warten Sie auf das Ergebnis.');
+    CenteredShowMessage('Der Servervorgang läuft noch. Bitte warten Sie auf das Ergebnis.');
     Exit;
   end;
   ApplicationClosing := True;
@@ -4795,7 +4836,8 @@ end;
 procedure TMainformFrm.SaveSettingsBtnClick(Sender: TObject);
 var
   Ini: TAppSettingsIni;
-  RestartChoice: Integer;
+  RestartChoice, I: Integer;
+  VersionTags: TArray<string>;
 begin
   ProgramUpdateLbl.Hide;
   if LocalInstallationSelected and FLocalStartupPending then
@@ -4803,17 +4845,42 @@ begin
     CenteredShowMessage('Bitte das Programm neu starten, um die lokale Installation vorzubereiten.');
     Exit;
   end;
-  // External saves must not update local settings or start local containers.
-  // Externes Speichern darf lokale Einstellungen und Container nicht veraendern.
+  // Always update the saved server project. Send only explicit tag edits.
+  // Das gespeicherte Serverprojekt immer aktualisieren. Nur ausdrücklich geänderte Tags senden.
   if ExternalInstallationSelected then
   begin
-    try
-      SaveVersionsForMode(True);
-      SettingsSavedLbl.Visible := True;
-    except
-      on E: Exception do
-        CenteredShowMessage('Externe Imageversionen konnten nicht gespeichert werden: ' + E.Message);
+    if ScriptBusy or FServerBackupCheckActive or ApplicationClosing then Exit;
+    if FStartupCheckHandle <> 0 then
+    begin
+      CenteredShowMessage('Die SSH-Verbindung wird noch geprüft. Bitte danach erneut auf Einstellungen speichern klicken.');
+      Exit;
     end;
+    // Keep the same field order as the version snapshot and the server worker.
+    // Die Reihenfolge der Felder entspricht dem gespeicherten Vergleichsstand und dem Server-Worker.
+    SetLength(VersionTags, Length(FVersionSnapshot));
+    VersionTags[0] := Trim(paperless_version_edit.Text);
+    VersionTags[1] := Trim(redis_version_edit.Text);
+    VersionTags[2] := Trim(postgres_version_edit.Text);
+    VersionTags[3] := Trim(gotenberg_version_edit.Text);
+    VersionTags[4] := Trim(tika_version_edit.Text);
+    VersionTags[5] := Trim(alpine_version_edit.Text);
+    VersionTags[6] := Trim(busybox_version_edit.Text);
+    for I := 0 to High(VersionTags) do
+      if VersionTags[I] = Trim(FVersionSnapshot[I]) then
+        VersionTags[I] := ''
+      else if VersionTags[I] = '' then
+      begin
+        CenteredShowMessage('Bitte für jedes geänderte Versionsfeld einen Image-Tag angeben.');
+        Exit;
+      end;
+    if CenteredMessageDlg('Paperless auf dem gespeicherten Server aktualisieren?' + sLineBreak + sLineBreak +
+      'Das Programm verwendet die aktuelle Compose-Datei auf dem Server und übernimmt geänderte Image-Tags. ' +
+      'Paperless wird heruntergefahren und nach dem Download der Images neu gestartet.',
+      mtConfirmation, [mbYes, mbNo], 0) <> mrYes then Exit;
+    SettingsSavedLbl.Visible := False;
+    TabControl1.TabIndex := 0;
+    TabControl1Change(TabControl1);
+    BeginServerBackupCheck('', sbaUpdateVersions, '', VersionTags);
     Exit;
   end;
   RestartChoice := mrYes;

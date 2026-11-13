@@ -24,6 +24,14 @@ Beim lokalen Speichern mit Neustart lädt das Updateskript die Images vor dem St
 4. Nach der Erfolgsmeldung **Paperless im Browser aufrufen** wählen und dort den Paperless-Admin anlegen. Der Eingangsordner ist über `\\<Server-IP>\paperless-consume` als beschreibbare Samba-Gastfreigabe vorgesehen. Windows kann Gastzugriffe abhängig von der SMB-Konfiguration ablehnen.
 5. Der Dialog zeigt nach erfolgreicher Installation die Webadresse, die Samba-Freigabe und die Logdatei unter `Logs` an. Die Anwendung speichert Compose-Ordner, Projektname und Webport für spätere Aufrufe. Wenn ein später Schritt fehlschlägt und die Compose-Datei bereits angelegt wurde, bleibt sie auf dem Server. Den fehlgeschlagenen Schritt anhand der Logdatei prüfen.
 
+### Paperless auf dem Server aktualisieren
+
+Im Modus **Externe Serverinstallation** startet **Einstellungen Speichern** nach Bestätigung bei jedem Klick einen Update-Lauf über das gespeicherte SSH-Profil. Die aktuelle Compose-Datei auf dem Server ist die Grundlage. Manuelle Änderungen per SSH bleiben erhalten. Nur ausdrücklich geänderte Image-Tags werden in die Datei geschrieben.
+
+Das Programm prüft Compose und führt für das gesamte Projekt **down**, **pull** und **up -d** mit Bereitschaftsprüfung aus. Der Ablauf gilt auch bei leeren oder unveränderten Versionsfeldern. Änderungen am PostgreSQL-Tag bleiben auf Hauptversion 18 begrenzt. Alpine und BusyBox können geändert werden, wenn die entsprechenden Compose-Dienste vorhanden sind.
+
+Der Ablauf braucht Zugriff auf den lokalen Docker-Daemon und die gemeinsame Serversperre mit flock. Für Tag-Änderungen wird zusätzlich python3 benötigt. Die Abschlussmeldung nennt den Pfad zum technischen Protokoll unter **Logs**. Bei Fehlern vor dem Start mit neuen Images versucht das Programm den Wiederanlauf mit der bisherigen Konfiguration. Nach einem fehlgeschlagenen Start mit neuen Images nennt es den Pfad zur bisherigen Compose-Datei. Datenmigrationen können dann bereits begonnen haben.
+
 ### Server einrichten und sichern
 
 **Paperless im Browser aufrufen** verwendet im Servermodus die gespeicherte IP-Adresse oder den Hostnamen und den **Paperless-Webport**. Der Standard ist 8000. Bei einem abweichenden Docker-Hostport den Wert unter **Einstellungen → Paperless Extern** eintragen und mit **Serverdaten Speichern** übernehmen.

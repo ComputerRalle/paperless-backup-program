@@ -138206,9 +138206,9 @@ object MainformFrm: TMainformFrm
         end
       end
       object CancelServerTransferBtn: TButton
-        Left = 348
+        Left = 303
         Top = 456
-        Width = 160
+        Width = 250
         Height = 60
         Caption = 'Abbrechen'
         Enabled = False
