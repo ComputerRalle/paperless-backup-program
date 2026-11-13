@@ -112,23 +112,26 @@ begin
     Lines.Add('  if ($detail -match ''Connection timed out|Connection refused|No route to host|Could not resolve hostname|Name or service not known|Network is unreachable'') { return ''unreachable'' }');
     Lines.Add('  return ''unknown''');
     Lines.Add('}');
-    // Bring the fingerprint prompt in front of the main window even though PowerShell is hidden.
-    // Die Fingerabdruckabfrage vor dem Hauptfenster anzeigen, auch wenn PowerShell verborgen läuft.
-    Lines.Add('function Confirm-ServerFingerprint([string]$fingerprints,[bool]$saveOnConfirm) {');
-    Lines.Add('  Add-Type -AssemblyName System.Windows.Forms');
+    // Exchange only the public fingerprints and the user's decision with the VCL application.
+    // Nur öffentliche Fingerabdrücke und die Benutzerauswahl mit der VCL-Anwendung austauschen.
+    Lines.Add('$promptPath = $resultPath + ''.prompt''');
+    Lines.Add('$decisionPath = $resultPath + ''.decision''');
+    Lines.Add('function Request-ServerFingerprintDecision([string]$fingerprints) {');
     Lines.Add('  Assert-Active');
-    Lines.Add('  $nl = [Environment]::NewLine');
-    Lines.Add('  $message = ("Server: {0}:{1}" -f $serverHost,$port) + $nl+$nl+$fingerprints+$nl+$nl');
-    Lines.Add('  $message += ''Bitte vergleichen Sie die angezeigten SSH-Fingerabdrücke mit den Fingerabdrücken auf Ihrem Server. Stimmen sie überein?''');
-    Lines.Add('  if ($saveOnConfirm) { $message += $nl+$nl+''Bei Ja speichert das Programm neue Schlüssel nach erfolgreicher SSH-Anmeldung.'' }');
-    Lines.Add('  $owner = New-Object Windows.Forms.Form');
-    Lines.Add('  try {');
-    Lines.Add('    $owner.ShowInTaskbar = $false; $owner.TopMost = $true; $owner.Opacity = 0');
-    Lines.Add('    $owner.Show()');
-    Lines.Add('    $choice = [Windows.Forms.MessageBox]::Show($owner, $message, ''SSH-Fingerabdruck bestätigen'', ''YesNo'', ''Warning'', ''Button2'')');
-    Lines.Add('  } finally { $owner.Dispose() }');
+    Lines.Add('  [IO.File]::WriteAllText($promptPath + ''.tmp'', $fingerprints, [Text.Encoding]::UTF8)');
+    Lines.Add('  [IO.File]::Move($promptPath + ''.tmp'', $promptPath)');
+    Lines.Add('  $wait = [Diagnostics.Stopwatch]::StartNew()');
+    Lines.Add('  while (-not (Test-Path -LiteralPath $decisionPath)) {');
+    Lines.Add('    Assert-Active');
+    Lines.Add('    if ($wait.Elapsed.TotalMinutes -ge 5) { throw ''fingerprint_timeout'' }');
+    Lines.Add('    Start-Sleep -Milliseconds 200');
+    Lines.Add('  }');
     Lines.Add('  Assert-Active');
-    Lines.Add('  return ($choice -eq [Windows.Forms.DialogResult]::Yes)');
+    Lines.Add('  $decision = [IO.File]::ReadAllText($decisionPath, [Text.Encoding]::UTF8)');
+    Lines.Add('  if ($decision -eq ''save'') { return $true }');
+    Lines.Add('  if ($decision -eq ''once'' -and -not $confirmFingerprint) { return $false }');
+    Lines.Add('  if ($decision -eq ''dialog_error'') { throw ''fingerprint_dialog'' }');
+    Lines.Add('  throw ''cancelled''');
     Lines.Add('}');
     // Explicit confirmation uses the host key scan before attempting SSH authentication.
     // Die ausdrückliche Bestätigung fragt den Hostschlüssel vor der SSH-Anmeldung ab.
@@ -191,7 +194,7 @@ begin
     // Bei ausdrücklicher Prüfung erscheint der Fingerabdruck vor der SSH-Anmeldung mit gespeicherten Zugangsdaten.
     Lines.Add('  if ($confirmFingerprint) {');
     Lines.Add('    $fingerprints = Read-ServerFingerprints');
-    Lines.Add('    if (-not (Confirm-ServerFingerprint $fingerprints $true)) { throw ''cancelled'' }');
+    Lines.Add('    $null = Request-ServerFingerprintDecision $fingerprints');
     Lines.Add('  }');
     Lines.Add('  $result = Invoke-Check '''' $fingerprints');
     Lines.Add('  if ($result -eq ''unknown_host'' -and (Test-Path -LiteralPath $savedKeys)) {');
@@ -201,11 +204,7 @@ begin
     Lines.Add('    $save = $true');
     Lines.Add('    if (-not $confirmFingerprint) {');
     Lines.Add('      $fingerprints = Read-ServerFingerprints');
-    Lines.Add('      if (-not (Confirm-ServerFingerprint $fingerprints $false)) { throw ''cancelled'' }');
-    Lines.Add('      $choice = [Windows.Forms.MessageBox]::Show(''Fingerabdruck für künftige Verbindungen speichern? Bei Nein ist die manuelle Prüfung bei jedem Start erforderlich.'', ''Fingerabdruck speichern?'', ''YesNoCancel'', ''Question'')');
-    Lines.Add('      Assert-Active');
-    Lines.Add('      if ($choice -eq [Windows.Forms.DialogResult]::Cancel) { throw ''cancelled'' }');
-    Lines.Add('      $save = $choice -eq [Windows.Forms.DialogResult]::Yes');
+    Lines.Add('      $save = Request-ServerFingerprintDecision $fingerprints');
     Lines.Add('    }');
     Lines.Add('    $result = Invoke-Check $tempKeys ''''');
     Lines.Add('    if ($result -eq ''success'' -and $save) {');
@@ -215,13 +214,14 @@ begin
     Lines.Add('  }');
     Lines.Add('} catch {');
     Lines.Add('  if ((Test-Path -LiteralPath $cancelPath) -or $_.Exception.Message -eq ''cancelled'') { $result = ''cancelled'' }');
-    Lines.Add('  elseif ($_.Exception.Message -in @(''fingerprint_tools'',''fingerprint_scan'',''fingerprint_unreadable'')) { $result = $_.Exception.Message }');
+    Lines.Add('  elseif ($_.Exception.Message -in @(''fingerprint_tools'',''fingerprint_scan'',''fingerprint_unreadable'',''fingerprint_timeout'',''fingerprint_dialog'')) { $result = $_.Exception.Message }');
     Lines.Add('  else { $result = ''unknown'' }');
     Lines.Add('}');
 // Publish the result unless cancelled, then remove temporary files.
 // Das Ergebnis ausser bei Abbruch bereitstellen und temporaere Dateien entfernen.
     Lines.Add('finally {');
     Lines.Add('  if (-not (Test-Path -LiteralPath $cancelPath)) { try { [IO.File]::WriteAllText($resultPath, $result, [Text.Encoding]::UTF8) } catch {} }');
+    Lines.Add('  Remove-Item -LiteralPath $promptPath, ($promptPath + ''.tmp''), $decisionPath, ($decisionPath + ''.tmp'') -Force -ErrorAction SilentlyContinue');
     Lines.Add('  Remove-Item -LiteralPath $tempKeys -Force -ErrorAction SilentlyContinue');
     Lines.Add('  Remove-Item -LiteralPath $cancelPath -Force -ErrorAction SilentlyContinue');
     Lines.Add('  Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue');
@@ -245,7 +245,7 @@ begin
   PowerShellPath := IncludeTrailingPathDelimiter(GetEnvironmentVariable('WINDIR')) +
     'System32\WindowsPowerShell\v1.0\powershell.exe';
   if not FileExists(PowerShellPath) then PowerShellPath := 'powershell.exe';
-  Cmd := '"' + PowerShellPath + '" -NoProfile -STA -ExecutionPolicy Bypass -File "' + ScriptPath + '"';
+  Cmd := '"' + PowerShellPath + '" -NoProfile -ExecutionPolicy Bypass -File "' + ScriptPath + '"';
   if not CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NO_WINDOW,
     nil, nil, SI, PI) then
   begin

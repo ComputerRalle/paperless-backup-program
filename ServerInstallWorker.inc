@@ -1,4 +1,4 @@
-  Lines.Add('set -Eeuo pipefail');
+﻿  Lines.Add('set -Eeuo pipefail');
   Lines.Add('export PATH=/usr/sbin:/usr/bin:/sbin:/bin');
   Lines.Add('export DEBIAN_FRONTEND=noninteractive');
   Lines.Add('umask 077');

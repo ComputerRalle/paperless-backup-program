@@ -171,7 +171,9 @@ begin
       // Check related files after reserving the script, including results of an earlier run.
       // Zugehörige Dateien nach der Reservierung prüfen, auch Ergebnisse früherer Aufrufe.
       if not (FileExists(Result + '.result') or FileExists(Result + '.result.cancel') or
-              FileExists(Result + '.hosts') or
+              FileExists(Result + '.hosts') or FileExists(Result + '.result.prompt') or
+              FileExists(Result + '.result.prompt.tmp') or FileExists(Result + '.result.decision') or
+              FileExists(Result + '.result.decision.tmp') or
               ((LogFolder <> '') and FileExists(TPath.Combine(LogFolder, Stamp + '.log')))) then
         Exit;
       if not Winapi.Windows.DeleteFile(PChar(Result)) then

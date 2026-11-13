@@ -40,6 +40,8 @@ function CenteredMessageBox(const Text, Caption: string; Flags: Cardinal): Integ
 function RequestPasswordDialog(const DialogCaption, Prompt: string; const ConfirmPassword: Boolean; out Password: string; const CancelButtonCaption: string = 'Abbrechen'): Integer;
 function RequestPasswordOrSkipDialog(const DialogCaption, Prompt, SkipButtonCaption: string; out Password: string): Integer;
 
+function RequestSshFingerprintDialog(const Endpoint, Fingerprints: string; AllowOnce: Boolean): Integer;
+
 implementation
 
 uses
@@ -537,6 +539,74 @@ begin
       Dialog.Free;
     end;
   until False;
+end;
+
+// Use the application style and select Cancel by default.
+// Den Anwendungsstil verwenden und Abbrechen als Standardauswahl setzen.
+function RequestSshFingerprintDialog(const Endpoint, Fingerprints: string; AllowOnce: Boolean): Integer;
+var
+  Dialog: TForm;
+  Prompt: TLabel;
+  FingerprintMemo: TMemo;
+  ConfirmBtn, OnceBtn, CancelBtn: TButton;
+begin
+  Dialog := TForm.Create(nil);
+  try
+    Dialog.BorderStyle := bsDialog;
+    Dialog.Caption := 'SSH-Fingerabdruck bestätigen';
+    Dialog.ClientWidth := 680;
+    Dialog.ClientHeight := 286;
+    if Assigned(Application.MainForm) then
+      Dialog.Font.Assign(Application.MainForm.Font);
+
+    Prompt := TLabel.Create(Dialog);
+    Prompt.Parent := Dialog;
+    Prompt.AutoSize := False;
+    Prompt.WordWrap := True;
+    Prompt.SetBounds(16, 16, 648, 108);
+    Prompt.Caption := 'Server ' + Endpoint + sLineBreak + sLineBreak +
+      'Vergleichen Sie die angezeigten SSH-Fingerabdrücke mit denen auf Ihrem Server. ' +
+      'Bestätigen Sie nur, wenn sie übereinstimmen.' + sLineBreak +
+      'Das Programm speichert neue Schlüssel erst nach erfolgreicher SSH-Anmeldung.';
+
+    FingerprintMemo := TMemo.Create(Dialog);
+    FingerprintMemo.Parent := Dialog;
+    FingerprintMemo.SetBounds(16, 132, 648, 88);
+    FingerprintMemo.ReadOnly := True;
+    FingerprintMemo.WordWrap := False;
+    FingerprintMemo.ScrollBars := ssBoth;
+    FingerprintMemo.Text := Fingerprints;
+
+    ConfirmBtn := TButton.Create(Dialog);
+    ConfirmBtn.Parent := Dialog;
+    ConfirmBtn.SetBounds(140, 236, 196, 32);
+    ConfirmBtn.Caption := 'Bestätigen und speichern';
+    ConfirmBtn.ModalResult := mrYes;
+
+    if AllowOnce then
+    begin
+      OnceBtn := TButton.Create(Dialog);
+      OnceBtn.Parent := Dialog;
+      OnceBtn.SetBounds(344, 236, 196, 32);
+      OnceBtn.Caption := 'Nur diesmal bestätigen';
+      OnceBtn.ModalResult := mrNo;
+    end
+    else
+      ConfirmBtn.Left := 344;
+
+    CancelBtn := TButton.Create(Dialog);
+    CancelBtn.Parent := Dialog;
+    CancelBtn.SetBounds(548, 236, 116, 32);
+    CancelBtn.Caption := 'Abbrechen';
+    CancelBtn.ModalResult := mrCancel;
+    CancelBtn.Cancel := True;
+    CancelBtn.Default := True;
+    Dialog.ActiveControl := CancelBtn;
+    PrepareModalDialog(Dialog, ActiveFormHandle);
+    Result := Dialog.ShowModal;
+  finally
+    Dialog.Free;
+  end;
 end;
 
 end.

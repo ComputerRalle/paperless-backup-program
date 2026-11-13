@@ -138205,6 +138205,16 @@ object MainformFrm: TMainformFrm
           OnClick = LoadServerBackupBtnClick
         end
       end
+      object CancelServerTransferBtn: TButton
+        Left = 348
+        Top = 456
+        Width = 160
+        Height = 60
+        Caption = 'Abbrechen'
+        Enabled = False
+        TabOrder = 9
+        OnClick = CancelServerTransferBtnClick
+      end
       object SendServerBackupHintPan: TPanel
         Left = 575
         Top = 456
@@ -138214,7 +138224,7 @@ object MainformFrm: TMainformFrm
         BevelOuter = bvNone
         ParentShowHint = False
         ShowHint = True
-        TabOrder = 9
+        TabOrder = 10
         object SendServerBackupBtn: TButton
           Left = 0
           Top = 0

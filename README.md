@@ -41,7 +41,7 @@ Der Server schreibt das Backup im lokalen PG18-Dateiformat. Die Wiederherstellun
 
 ### Backup auf dem Server einspielen
 
-1. Liegt das Backup auf Windows, zuerst **Backup zum Server senden** wählen. Den PG18-Zeitstempelordner auswählen und das Serverziel bestätigen. Das Programm prüft vor der Übertragung den freien Platz und vergleicht vor der Freigabe Dateigrößen und SHA-256-Prüfsummen. Gleichnamige Backups im Serverordner bleiben erhalten.
+1. Liegt das Backup auf Windows, zuerst **Backup zum Server senden** wählen. Den PG18-Zeitstempelordner auswählen und das Serverziel bestätigen. Nach der Bestätigung legt das Programm einen fehlenden Server-Backupordner an, sofern der SSH-Benutzer die nötigen Rechte hat. Es prüft vor der Übertragung den freien Platz und vergleicht vor der Freigabe Dateigrößen und SHA-256-Prüfsummen. Gleichnamige Backups im Serverordner bleiben erhalten. Mit **Abbrechen** kann die laufende Übertragung beendet werden. Das Programm räumt nur den Zwischenordner dieses Vorgangs auf. Falls die Bereinigung fehlschlägt, zeigt es den betroffenen Pfad an.
 2. Im Servermodus **Backup Wiederherstellen** wählen und den Hinweis mit **OK** schließen. Mit **Ja** die Liste der Backups im gespeicherten Serverordner öffnen. Ein Backup auswählen und den Zielserver prüfen.
 3. Das Überschreiben der Datenbank und der Ordner `data`, `media` und `export` bestätigen. Paperless ist während der Wiederherstellung vorübergehend nicht erreichbar.
 4. Bei Erfolg meldet das Programm **Wiederherstellung erfolgreich** und zeigt den Pfad zur Logdatei. Anschließend lassen sich die wiederhergestellten Dokumente im Browser kontrollieren.

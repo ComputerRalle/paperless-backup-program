@@ -35,6 +35,7 @@ type
     sbaInstallPaperless);
 
 const
+  ServerTransferActions = [sbaListBackups, sbaDownloadBackup, sbaUploadBackup];
   ServerWorkerActions = [sbaStartBackup, sbaWatchBackup, sbaStartRestore, sbaWatchRestore];
 
 function IsValidHost(const Value: string): Boolean;
@@ -44,7 +45,7 @@ procedure StartServerBackup(out ProcessHandle: THandle; out ResultPath: string;
   const LocalDownloadFolder: string = '');
 function ReadServerBackupResult(const ResultPath: string; ExitCode: DWORD;
   out Caption, MessageText: string; out CompletedBackupFolder: string;
-  out AvailableBackupFolders: TArray<string>): Boolean;
+  out AvailableBackupFolders: TArray<string>; out TransferCancelled: Boolean): Boolean;
 
 implementation
 
@@ -388,7 +389,7 @@ end;
 
 // List only published timestamp folders with readable, nonempty backup files.
 // Nur freigegebene Zeitstempelordner mit lesbaren, nicht leeren Sicherungsdateien auflisten.
-procedure AddServerBackupList(const Lines: TStringList; const TargetFolder: string);
+procedure AddServerBackupList(const Lines: TStringList; const TargetFolder: string; Cancellable: Boolean);
 begin
   AddServerProgress(Lines);
   AddRequiredServerBackupFiles(Lines);
@@ -401,7 +402,13 @@ begin
   // Return canonical server paths separately from the dialog message.
   // Kanonische Serverpfade getrennt vom Meldungstext zurückgeben.
   Lines.Add('  $check=''cd -P ''+(ShArg $listFolder)+'' || exit 72; test -r . && test -x . || exit 72; case "$PWD" in /|*[[:cntrl:]]*) exit 73;; esac; printf "%s\n" "$PWD"; for d in ''+$pattern+''; do test -d "$d" && test ! -L "$d" || continue; for f in ''+(($required | ForEach-Object {ShArg $_}) -join '' '')+''; do p="$d/$f"; test -f "$p" && test -s "$p" && test -r "$p" && test ! -L "$p" || continue 2; done; printf "%s\n" "${d#./}"; done''');
-  Lines.Add('  $rows=@((Remote $check) -split ''\r?\n'')');
+  if Cancellable then
+  begin
+    Lines.Add('  $rows=@((Text (Ssh $check $null 120000 '''' 0 '''' $true)) -split ''\r?\n'')');
+    Lines.Add('  if(-not [IO.File]::Exists($progressPath)){throw ''transfer_cancelled''}');
+  end
+  else
+    Lines.Add('  $rows=@((Remote $check) -split ''\r?\n'')');
   Lines.Add('  $canonicalFolder=$rows[0]');
   Lines.Add('  if($canonicalFolder -notmatch ''^/[^\x00-\x1f]+$''){throw ''backup_list_path''}');
   Lines.Add('  $entries=@($rows | Select-Object -Skip 1 | Where-Object {$_ -match ''^[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{2}-[0-9]{2}-[0-9]{2}$''} | Sort-Object -Descending)');
@@ -417,6 +424,7 @@ begin
   Lines.Add(' } catch {');
   Lines.Add('  $msg="Server: $serverHost`r`nBackupordner: $listFolder`r`n`r`n"');
   Lines.Add('  if($_.Exception.Message -eq ''ssh_exit_72''){ $msg+=''Der Backupordner ist auf dem Server nicht vorhanden oder nicht lesbar.'' }');
+  Lines.Add('  elseif($_.Exception.Message -eq ''transfer_cancelled''){ SetTransferCancelled }');
   Lines.Add('  else { $msg+=CheckFailure $step $_.Exception }');
   Lines.Add(' }');
 end;
@@ -480,6 +488,7 @@ begin
   Lines.Add('  if(-not [IO.Directory]::Exists($downloadParent)){throw ''download_parent''}');
   Lines.Add('  if(Test-Path -LiteralPath $final){throw ''download_exists''}');
   Lines.Add('  $candidate=[IO.Path]::Combine($downloadParent,''.paperless-download-''+$runId+''.partial'')');
+  Lines.Add('  if(-not [IO.File]::Exists($progressPath)){throw ''transfer_cancelled''}');
   Lines.Add('  if(Test-Path -LiteralPath $candidate){throw ''download_staging''}');
   Lines.Add('  [void][IO.Directory]::CreateDirectory($candidate)');
   Lines.Add('  $staging=$candidate');
@@ -507,7 +516,8 @@ begin
   Lines.Add('  $title=''Server-Backup: Download abgeschlossen''');
   Lines.Add('  $msg="Das Backup wurde auf diesen Windows-Computer heruntergeladen.`r`n`r`nZielordner: $final"');
   Lines.Add(' } catch {');
-  Lines.Add('  if($_.Exception.Message -eq ''download_exists''){ $msg="Der Zielordner ist bereits vorhanden:`r`n$final" }');
+  Lines.Add('  if($_.Exception.Message -in @(''download_cancelled'',''transfer_cancelled'')){ SetTransferCancelled }');
+  Lines.Add('  elseif($_.Exception.Message -eq ''download_exists''){ $msg="Der Zielordner ist bereits vorhanden:`r`n$final" }');
   Lines.Add('  elseif($_.Exception.Message -eq ''download_length''){ $msg="$step`r`nDie Dateigröße stimmt nicht mit der Angabe des Servers überein." }');
   Lines.Add('  elseif($_.Exception.Message -eq ''download_hash''){ $msg="$step`r`nDie Prüfsumme stimmt nicht mit der Angabe des Servers überein." }');
   Lines.Add('  else { $msg=CheckFailure $step $_.Exception }');
@@ -519,7 +529,7 @@ begin
   Lines.Add('    if(([IO.File]::GetAttributes($staging) -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw ''download_staging''}');
   Lines.Add('    foreach($name in $names){[IO.File]::Delete([IO.Path]::Combine($staging,$name))}');
   Lines.Add('    [IO.Directory]::Delete($staging,$false)');
-  Lines.Add('   } catch { $msg+="`r`n`r`nUnvollständige Dateien liegen in: $staging" }');
+  Lines.Add('   } catch { if($transferCancelled){$transferCancelled=$false;$title=''Abgebrochen: Bereinigung unvollständig''}; $msg+="`r`n`r`nUnvollständige Dateien liegen in: $staging" }');
   Lines.Add('  }');
   Lines.Add(' }');
 end;
@@ -555,10 +565,16 @@ begin
   Lines.Add('   if($names -cnotcontains $name -or ([IO.FileInfo]::new([IO.Path]::Combine($uploadSource,$name))).Length -le 0){throw (''upload_missing:''+$name)}');
   Lines.Add('  }');
   Lines.Add('  $requiredBytes=$total+1MB');
-  Lines.Add('  $step=''Freien Speicher am Serverziel prüfen''');
+  Lines.Add('  if(-not [IO.File]::Exists($progressPath)){throw ''upload_cancelled''}');
+  Lines.Add('  $step=''Server-Backupordner vorbereiten und freien Speicher prüfen''');
   Lines.Add('  SetProgress $step');
-  Lines.Add('  $inspect=''cd -P ''+(ShArg $uploadParent)+'' || exit 72; test -w . && test -x . || exit 72; case "$PWD" in /|*[[:cntrl:]]*) exit 73;; esac; printf "%s\n" "$PWD"; df -B1 --output=avail -- .''');
-  Lines.Add('  $rows=@((Remote $inspect) -split ''\r?\n'')');
+  // Create a missing destination with private permissions, then check the actual upload filesystem.
+  // Einen fehlenden Zielordner mit privaten Rechten anlegen und das tatsächliche Zieldateisystem prüfen.
+  Lines.Add('  $inspect=''target=''+(ShArg $uploadParent)+''; if [ ! -d "$target" ]; then ''');
+  Lines.Add('  $inspect+=''if [ -e "$target" ] || [ -L "$target" ]; then exit 72; fi; umask 077; mkdir -p -- "$target" || exit 78; fi; ''');
+  Lines.Add('  $inspect+=''cd -P "$target" || exit 72; test -w . && test -x . || exit 72; case "$PWD" in /|*[[:cntrl:]]*) exit 73;; esac; printf "%s\n" "$PWD"; df -B1 --output=avail -- .''');
+  Lines.Add('  $rows=@((Text (Ssh $inspect $null 120000 '''' 0 '''' $true)) -split ''\r?\n'')');
+  Lines.Add('  if(-not [IO.File]::Exists($progressPath)){throw ''transfer_cancelled''}');
   Lines.Add('  $parent=$rows[0]');
   Lines.Add('  if($parent -notmatch ''^/[^\x00-\x1f]+$''){throw ''upload_parent''}');
   Lines.Add('  $free=ReadFreeBytes (($rows | Select-Object -Skip 1) -join "`n")');
@@ -593,14 +609,16 @@ begin
   Lines.Add('  $msg="Das Backup wurde auf den Server kopiert.`r`n`r`nServer: $serverHost`r`nZielordner: $final"');
   Lines.Add(' } catch {');
   Lines.Add('  $errorCode=$_.Exception.Message');
-  Lines.Add('  if($errorCode -eq ''upload_space''){');
+  Lines.Add('  if($errorCode -in @(''upload_cancelled'',''transfer_cancelled'')){ SetTransferCancelled }');
+  Lines.Add('  elseif($errorCode -eq ''upload_space''){');
   Lines.Add('   $neededText=([double]($requiredBytes/1GB)).ToString(''N2'')');
   Lines.Add('   $freeText=([double]($free/1GB)).ToString(''N2'')');
   Lines.Add('   $msg="Auf dem Server ist nicht genug Platz für dieses Backup.`r`n`r`nZiel: $uploadParent`r`nBenötigt: $neededText GiB (inkl. Reserve)`r`nVerfügbar: $freeText GiB`r`n`r`nDer Kopiervorgang wurde abgebrochen."');
   Lines.Add('  } elseif($errorCode -eq ''upload_folder_name''){ $msg=''Bitte den Zeitstempelordner eines PG18-Backups auswählen.'' }');
   Lines.Add('  elseif($errorCode -eq ''upload_file_type''){ $msg=''Der Backupordner muss aus regulären Dateien ohne Unterordner oder Verknüpfungen bestehen.'' }');
   Lines.Add('  elseif($errorCode.StartsWith(''upload_missing:'')){ $msg=''Die erforderliche Backupdatei fehlt oder ist leer: ''+$errorCode.Substring(15) }');
-  Lines.Add('  elseif($errorCode -eq ''ssh_exit_72''){ $msg=''Der gespeicherte Serverordner fehlt oder ist nicht beschreibbar: ''+$uploadParent }');
+  Lines.Add('  elseif($errorCode -eq ''ssh_exit_72''){ $msg=''Das gespeicherte Serverziel ist kein nutzbarer, beschreibbarer Ordner: ''+$uploadParent }');
+  Lines.Add('  elseif($errorCode -eq ''ssh_exit_78''){ $msg=''Der Backupordner konnte auf dem Server nicht angelegt werden. Prüfen Sie den Pfad und die Rechte des SSH-Benutzers: ''+$uploadParent }');
   Lines.Add('  elseif($errorCode -eq ''ssh_exit_74''){ $msg="Auf dem Server gibt es bereits einen gleichnamigen Backupordner:`r`n$final" }');
   Lines.Add('  elseif($errorCode -eq ''ssh_exit_76'' -or $errorCode -eq ''upload_length''){ $msg=$step+"`r`nDie Dateigröße stimmt nicht überein." }');
   Lines.Add('  elseif($errorCode -eq ''ssh_exit_77''){ $msg=$step+"`r`nDie SHA-256-Prüfsumme stimmt nicht überein." }');
@@ -608,9 +626,11 @@ begin
   Lines.Add(' } finally {');
   Lines.Add('  if($staging){');
   Lines.Add('   try {');
-  Lines.Add('    $clean=''if [ -d ''+$stageArg+'' ] && [ ! -L ''+$stageArg+'' ]; then find ''+$stageArg+'' -mindepth 1 -maxdepth 1 -type f -delete && rmdir -- ''+$stageArg+''; fi''');
+  // Scope remote cleanup to direct files in the staging directory created by this run.
+  // Auf dem Server nur Dateien direkt im Zwischenordner dieses Vorgangs löschen.
+  Lines.Add('    $clean=''if [ ! -e ''+$stageArg+'' ] && [ ! -L ''+$stageArg+'' ]; then exit 0; fi; test -d ''+$stageArg+'' && test ! -L ''+$stageArg+'' || exit 75; find ''+$stageArg+'' -mindepth 1 -maxdepth 1 -type f -delete && rmdir -- ''+$stageArg');
   Lines.Add('    $null=Remote $clean');
-  Lines.Add('   } catch { $msg+="`r`n`r`nUnvollständige Dateien können auf dem Server liegen: $staging" }');
+  Lines.Add('   } catch { if($transferCancelled){$transferCancelled=$false;$title=''Abgebrochen: Bereinigung unvollständig''}; $msg+="`r`n`r`nUnvollständige Dateien können auf dem Server liegen: $staging" }');
   Lines.Add('  }');
   Lines.Add(' }');
 end;
@@ -779,6 +799,14 @@ begin
       Lines.Add('$ErrorActionPreference = ''Stop''');
       Lines.Add('$privateDir = $null');
       Lines.Add('$backupCompleted = $false');
+      Lines.Add('$transferCancelled = $false');
+      // Report a cancelled transfer separately from a failed one.
+      // Abgebrochene Übertragungen getrennt von Übertragungsfehlern melden.
+      Lines.Add('function SetTransferCancelled {');
+      Lines.Add(' $script:transferCancelled=$true');
+      Lines.Add(' $script:title=''Backup-Übertragung abgebrochen''');
+      Lines.Add(' $script:msg=''Der Vorgang wurde abgebrochen.''');
+      Lines.Add('}');
       Lines.Add('$completedBackupFolder = ''''');
       Lines.Add('$availableBackupFolders = @()');
 // Quote arguments for Windows and the remote POSIX shell.
@@ -810,6 +838,8 @@ begin
 // Backupdateien direkt in eine neue Datei schreiben und Metadaten weiter im Speicher lesen.
       Lines.Add(' $p=New-Object Diagnostics.Process;$p.StartInfo=$si;$m=$null;$source=$null;$started=$false');
       Lines.Add(' try {');
+      if Action in ServerTransferActions then
+        Lines.Add('  if(($outputPath -or $inputPath -or $monitorProgress) -and -not [IO.File]::Exists($progressPath)){throw ''transfer_cancelled''}');
       Lines.Add('  if($outputPath){$m=[IO.File]::Open($outputPath,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::Read)}');
       Lines.Add('  else{$m=New-Object IO.MemoryStream}');
       Lines.Add('  if($inputPath){');
@@ -931,7 +961,7 @@ begin
       else if Action = sbaUploadBackup then
         AddServerBackupUpload(Lines, ExpandFileName(LocalDownloadFolder), SavedBackupFolder, RunId)
       else if Action in [sbaListBackups, sbaListRestoreBackups] then
-        AddServerBackupList(Lines, SavedBackupFolder)
+        AddServerBackupList(Lines, SavedBackupFolder, Action = sbaListBackups)
       else if Action = sbaDownloadBackup then
         AddServerBackupDownload(Lines, NormalizeServerBackupFolder(BackupFolder),
           ExpandFileName(LocalDownloadFolder), RunId)
@@ -1095,7 +1125,7 @@ begin
         Lines.Add(' if(-not $backupCompleted){$msg+="`r`n`r`nPowerShell-Skript: $PSCommandPath"}')
       else if Action <> sbaInstallPaperless then
         Lines.Add(' $msg+="`r`n`r`nPowerShell-Skript: $PSCommandPath"');
-      Lines.Add(' $json=@{ title=$title; message=$msg; backupCompleted=$backupCompleted; completedBackupFolder=$completedBackupFolder; availableBackupFolders=$availableBackupFolders } | ConvertTo-Json -Compress');
+      Lines.Add(' $json=@{ title=$title; message=$msg; backupCompleted=$backupCompleted; transferCancelled=$transferCancelled; completedBackupFolder=$completedBackupFolder; availableBackupFolders=$availableBackupFolders } | ConvertTo-Json -Compress');
       Lines.Add(' $resultBytes=[Text.Encoding]::UTF8.GetBytes($json)');
       Lines.Add(' try {');
       Lines.Add('  $resultFile=[IO.File]::Open($resultPath,[IO.FileMode]::Open,[IO.FileAccess]::Write,[IO.FileShare]::Delete)');
@@ -1143,16 +1173,17 @@ end;
 // Ergebnis des Servervorgangs und optionale Sicherungspfade getrennt vom Dialogtext lesen.
 function ReadServerBackupResult(const ResultPath: string; ExitCode: DWORD;
   out Caption, MessageText: string; out CompletedBackupFolder: string;
-  out AvailableBackupFolders: TArray<string>): Boolean;
+  out AvailableBackupFolders: TArray<string>; out TransferCancelled: Boolean): Boolean;
 var
   Json: TJSONValue;
-  TitleValue, MessageValue, CompletedValue, FolderValue, ListValue, Item: TJSONValue;
+  TitleValue, MessageValue, CompletedValue, CancelledValue, FolderValue, ListValue, Item: TJSONValue;
   FolderArray: TJSONArray;
   I, FolderCount: Integer;
 begin
   Result := False;
   CompletedBackupFolder := '';
   AvailableBackupFolders := nil;
+  TransferCancelled := False;
   Caption := 'Server-Backup: Prüfung fehlgeschlagen';
   MessageText := 'Der Servervorgang hat kein lesbares Ergebnis geliefert.';
   if ExitCode <> 0 then
@@ -1172,6 +1203,9 @@ begin
           CompletedValue := TJSONObject(Json).GetValue('backupCompleted');
           if Assigned(CompletedValue) then
             Result := SameText(CompletedValue.Value, 'true');
+          CancelledValue := TJSONObject(Json).GetValue('transferCancelled');
+          if Assigned(CancelledValue) then
+            TransferCancelled := SameText(CancelledValue.Value, 'true');
           FolderValue := TJSONObject(Json).GetValue('completedBackupFolder');
           if Result and (FolderValue is TJSONString) then
             CompletedBackupFolder := FolderValue.Value;

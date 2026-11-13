@@ -43,6 +43,7 @@ type
     RestorePaperlessBackupBtn: TButton;
     LoadServerBackupBtn: TButton;
     SendServerBackupBtn: TButton;
+    CancelServerTransferBtn: TButton;
     LoadServerBackupHintPan: TPanel;
     SendServerBackupHintPan: TPanel;
     Panel4: TPanel;
@@ -207,6 +208,7 @@ type
     procedure StartPaperlessBackupBtnClick(Sender: TObject);
     procedure LoadServerBackupBtnClick(Sender: TObject);
     procedure SendServerBackupBtnClick(Sender: TObject);
+    procedure CancelServerTransferBtnClick(Sender: TObject);
     procedure OpenManualBtnClick(Sender: TObject);
     procedure BuyMeACoffeeBtnClick(Sender: TObject);
     procedure StartCmdScript;
@@ -273,6 +275,7 @@ type
 
   private
     FServerBackupCheckActive: Boolean;
+    FServerTransferCancelRequested: Boolean;
     FServerBackupProgressActive: Boolean;
     FServerBackupAction: TServerBackupAction;
     FServerBackupStatusText: string;
@@ -284,6 +287,9 @@ type
     FStartupCheckHandle: THandle;
     FStartupCheckTimer: TTimer;
     FStartupCheckResultPath: string;
+    FStartupCheckEndpoint: string;
+    FStartupCheckAllowOnce: Boolean;
+    FStartupCheckPromptHandled: Boolean;
     FStartupCheckOnce: Boolean;
     FStartupInstallHost: string;
     FStartupCheckInvalidated: Boolean;
@@ -2061,6 +2067,11 @@ begin
     StartExternalStartupCheck(Host, UserName, PortNumber, KeyFile, SettingsPath,
       Application.ExeName, UseKey, ConfirmFingerprint, FStartupCheckHandle, FStartupCheckResultPath);
     FStartupInstallHost := InstallHost;
+    FStartupCheckEndpoint := Host + ':' + IntToStr(PortNumber);
+    if Pos(':', Host) > 0 then
+      FStartupCheckEndpoint := '[' + Host + ']:' + IntToStr(PortNumber);
+    FStartupCheckAllowOnce := not ConfirmFingerprint;
+    FStartupCheckPromptHandled := False;
     SaveExternalServerBtn.Enabled := False;
     UpdateServerBackupButtons;
     FStartupCheckTimer.Enabled := True;
@@ -2082,10 +2093,50 @@ end;
 // Ein Ergebnis nur fuer das unveraenderte Serverprofil uebernehmen.
 procedure TMainformFrm.StartupCheckTimerTick(Sender: TObject);
 var
-  TestResult, InstallHost: string;
+  TestResult, InstallHost, PromptPath, DecisionPath, Fingerprints, Decision: string;
 begin
   if FStartupCheckHandle = 0 then Exit;
-  if WaitForSingleObject(FStartupCheckHandle, 0) <> WAIT_OBJECT_0 then Exit;
+  if WaitForSingleObject(FStartupCheckHandle, 0) <> WAIT_OBJECT_0 then
+  begin
+    if FStartupCheckInvalidated or ApplicationClosing or FStartupCheckPromptHandled then Exit;
+    PromptPath := FStartupCheckResultPath + '.prompt';
+    if not FileExists(PromptPath) then Exit;
+
+    // ShowModal runs its own message loop. Handle this request only once.
+    // ShowModal verarbeitet eigene Fensternachrichten. Die Abfrage nur einmal bearbeiten.
+    FStartupCheckPromptHandled := True;
+    FStartupCheckTimer.Enabled := False;
+    try
+      Decision := 'dialog_error';
+      try
+        Fingerprints := Trim(TFile.ReadAllText(PromptPath, TEncoding.UTF8));
+        if Fingerprints <> '' then
+          case RequestSshFingerprintDialog(FStartupCheckEndpoint, Fingerprints, FStartupCheckAllowOnce) of
+            mrYes: Decision := 'save';
+            mrNo: Decision := 'once';
+          else
+            Decision := 'cancel';
+          end;
+      except
+        Decision := 'dialog_error';
+      end;
+      if FStartupCheckInvalidated or ApplicationClosing then Exit;
+      if WaitForSingleObject(FStartupCheckHandle, 0) <> WAIT_TIMEOUT then Exit;
+      // Publish the completed decision by renaming the temporary file.
+      // Die vollständige Auswahl durch Umbenennen der temporären Datei bereitstellen.
+      DecisionPath := FStartupCheckResultPath + '.decision';
+      try
+        TFile.WriteAllText(DecisionPath + '.tmp', Decision, TEncoding.UTF8);
+        TFile.Move(DecisionPath + '.tmp', DecisionPath);
+      except
+        CancelExternalStartupCheck;
+        CenteredShowMessage('Die Auswahl zum SSH-Fingerabdruck konnte nicht übergeben werden.');
+      end;
+    finally
+      if not ApplicationClosing then FStartupCheckTimer.Enabled := True;
+    end;
+    Exit;
+  end;
   FStartupCheckTimer.Enabled := False;
   CloseHandle(FStartupCheckHandle);
   FStartupCheckHandle := 0;
@@ -2104,6 +2155,9 @@ begin
   if FileExists(FStartupCheckResultPath) then DeleteFile(FStartupCheckResultPath);
   if FileExists(FStartupCheckResultPath + '.cancel') then
     DeleteFile(FStartupCheckResultPath + '.cancel');
+  // Die Entscheidung kann beim Ablauf der Wartezeit zeitgleich mit der Skriptbereinigung eintreffen.
+  DeleteFile(FStartupCheckResultPath + '.decision');
+  DeleteFile(FStartupCheckResultPath + '.decision.tmp');
   FStartupCheckResultPath := '';
   if FStartupCheckInvalidated or ApplicationClosing then Exit;
   if (TestResult = 'success') or (TestResult = 'save_failed') then
@@ -2134,6 +2188,10 @@ begin
     CenteredShowMessage('Der SSH-Hostschlüssel konnte nicht abgerufen werden. Bitte Serveradresse, SSH-Port und Erreichbarkeit prüfen.')
   else if TestResult = 'fingerprint_unreadable' then
     CenteredShowMessage('Der SSH-Hostschlüssel wurde abgerufen, sein Fingerabdruck konnte aber nicht ausgewertet werden.')
+  else if TestResult = 'fingerprint_timeout' then
+    CenteredShowMessage('Die Wartezeit für die SSH-Fingerabdruckbestätigung ist abgelaufen.')
+  else if TestResult = 'fingerprint_dialog' then
+    CenteredShowMessage('Die SSH-Fingerabdruckabfrage konnte nicht angezeigt werden.')
   else if (TestResult = 'hostkey') or (TestResult = 'unknown_host') then
     CenteredShowMessage('Der Server-Fingerabdruck konnte nicht bestätigt werden. Bitte prüfen Sie den Server-Schlüssel.')
   else
@@ -2602,6 +2660,7 @@ begin
   if ScriptBusy or FServerBackupCheckActive or ApplicationClosing then Exit;
   FServerBackupCheckActive := True;
   FServerBackupAction := Action;
+  FServerTransferCancelRequested := False;
   FServerWorkerProgressOffset := 0;
   FServerBackupProgressActive := Action <> sbaCheckSpace;
   try
@@ -2651,6 +2710,9 @@ begin
     end;
     StartServerBackup(FServerBackupCheckHandle, FServerBackupCheckResultPath, BackupFolder, Action,
       LocalDownloadFolder);
+    // Enable cancellation once the listing or transfer process has started.
+    // Abbrechen erst nach dem Start des Such- oder Übertragungsprozesses aktivieren.
+    CancelServerTransferBtn.Enabled := Action in ServerTransferActions;
     FServerBackupCheckTimer.Enabled := True;
   except
     on E: Exception do
@@ -2723,7 +2785,9 @@ var
   AvailableBackupFolders, BackupNames: TArray<string>;
   I, SelectedIndex: Integer;
   Ini: TAppSettingsIni;
-  OperationSucceeded, SelectableBackups, WorkerProgress: Boolean;
+  ProgressStream: TFileStream;
+  ProgressReader: TStreamReader;
+  OperationSucceeded, OperationCancelled, SelectableBackups, WorkerProgress: Boolean;
 begin
   if FServerBackupCheckHandle = 0 then Exit;
   WaitResult := WaitForSingleObject(FServerBackupCheckHandle, 0);
@@ -2741,11 +2805,21 @@ begin
   begin
     if FServerBackupProgressActive then
     begin
-      // Keep the last server status while PowerShell updates the progress file.
-      // Den letzten Serverstatus beibehalten, während PowerShell die Fortschrittsdatei aktualisiert.
-      if not WorkerProgress and FileExists(ProgressPath) then
+      // Share the file with the PowerShell writer and retry on the next tick if opening fails.
+      // Schreibzugriffe von PowerShell zulassen und bei Lesefehlern beim nächsten Timer-Takt erneut lesen.
+      if not WorkerProgress and not FServerTransferCancelRequested and FileExists(ProgressPath) then
         try
-          ProgressText := TFile.ReadAllText(ProgressPath, TEncoding.UTF8).Trim;
+          ProgressStream := TFileStream.Create(ProgressPath, fmOpenRead or fmShareDenyNone);
+          try
+            ProgressReader := TStreamReader.Create(ProgressStream, TEncoding.UTF8, True);
+            try
+              ProgressText := ProgressReader.ReadToEnd.Trim;
+            finally
+              ProgressReader.Free;
+            end;
+          finally
+            ProgressStream.Free;
+          end;
           if ProgressText <> '' then FServerBackupStatusText := ProgressText;
         except
           on E: EStreamError do ;
@@ -2755,6 +2829,7 @@ begin
     Exit;
   end;
   FServerBackupCheckTimer.Enabled := False;
+  CancelServerTransferBtn.Enabled := False;
   DownloadSourceFolder := '';
   DownloadTargetFolder := '';
   RestoreSourceFolder := '';
@@ -2765,7 +2840,7 @@ begin
          not GetExitCodeProcess(FServerBackupCheckHandle, ExitCode) then
         RaiseLastOSError;
       OperationSucceeded := ReadServerBackupResult(FServerBackupCheckResultPath, ExitCode, Caption, MessageText,
-        CompletedBackupFolder, AvailableBackupFolders);
+        CompletedBackupFolder, AvailableBackupFolders, OperationCancelled);
       if FServerBackupAction = sbaInstallPaperless then
       begin
         if OperationSucceeded then
@@ -2801,7 +2876,9 @@ begin
         (Length(AvailableBackupFolders) > 0);
       if FServerBackupProgressActive then
         FinishScriptProgress(Caption, OperationSucceeded);
-      if not OperationSucceeded then
+      if OperationCancelled then
+        CenteredMessageBox(MessageText, Caption, MB_OK or MB_ICONINFORMATION)
+      else if not OperationSucceeded then
         CenteredMessageBox(MessageText, Caption, MB_OK or MB_ICONWARNING)
       else if not SelectableBackups then
         CenteredMessageBox(MessageText, Caption, MB_OK or MB_ICONINFORMATION);
@@ -2949,9 +3026,40 @@ begin
   end;
   FServerBackupStatusText := '';
   FServerBackupAction := sbaCheckSpace;
+  FServerTransferCancelRequested := False;
+  CancelServerTransferBtn.Enabled := False;
   FServerBackupProgressActive := False;
   FServerBackupCheckActive := False;
   if not ApplicationClosing then UpdateServerBackupButtons;
+end;
+
+// Use the per-run progress file as the cancellation signal. PowerShell owns cleanup.
+// Die Statusdatei dieses Laufs als Abbruchsignal verwenden. PowerShell übernimmt die Bereinigung.
+procedure TMainformFrm.CancelServerTransferBtnClick(Sender: TObject);
+var
+  ErrorCode: DWORD;
+begin
+  if not (FServerBackupAction in ServerTransferActions) or FServerTransferCancelRequested or
+     (FServerBackupCheckHandle = 0) or
+     (WaitForSingleObject(FServerBackupCheckHandle, 0) <> WAIT_TIMEOUT) then Exit;
+
+  if not Winapi.Windows.DeleteFile(PChar(FServerBackupCheckResultPath + '.progress')) then
+  begin
+    ErrorCode := GetLastError;
+    if ErrorCode <> ERROR_FILE_NOT_FOUND then
+    begin
+      CenteredShowMessage('Der Abbruch konnte nicht angefordert werden. Bitte erneut versuchen.' +
+        sLineBreak + SysErrorMessage(ErrorCode));
+      Exit;
+    end;
+  end;
+
+  // Keep the operation active until the worker reports the cleanup result.
+  // Den Vorgang bis zur Rückmeldung über die Bereinigung aktiv halten.
+  FServerTransferCancelRequested := True;
+  CancelServerTransferBtn.Enabled := False;
+  FServerBackupStatusText := 'Übertragung wird abgebrochen. Bitte auf die Bereinigung warten ...';
+  UpdateScriptProgress(FServerBackupStatusText);
 end;
 
 // Check the saved server folder before offering any backup for download.
@@ -2997,7 +3105,8 @@ begin
   end;
 
   if CenteredMessageDlg('Wollen Sie das Backup „' + BackupName +
-    '“ auf den Server in den gespeicherten Ordner „' + ServerBackupFolder + '“ kopieren?',
+    '“ auf den Server in den gespeicherten Ordner „' + ServerBackupFolder + '“ kopieren?' +
+    sLineBreak + 'Falls der Zielordner fehlt, legt das Programm ihn an.',
     mtConfirmation, [mbYes, mbNo, mbCancel], 0) = mrYes then
     BeginServerBackupCheck('', sbaUploadBackup, LocalBackupFolder);
 end;
@@ -3244,6 +3353,14 @@ begin
   begin
     Action := caNone;
     CenteredShowMessage('Die lokale Wiederherstellung läuft noch. Bitte warten Sie auf das Ergebnis.');
+    Exit;
+  end;
+  if FServerBackupCheckActive and (FServerBackupAction in ServerTransferActions) and
+     (FServerBackupCheckHandle <> 0) and
+     (WaitForSingleObject(FServerBackupCheckHandle, 0) = WAIT_TIMEOUT) then
+  begin
+    Action := caNone;
+    CenteredShowMessage('Der Servervorgang läuft noch. Mit Abbrechen können Sie die Übertragung beenden.');
     Exit;
   end;
   // Keep the installer connected until the server reports its final status.
