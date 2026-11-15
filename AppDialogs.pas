@@ -40,6 +40,7 @@ function CenteredMessageBox(const Text, Caption: string; Flags: Cardinal): Integ
 function RequestPasswordDialog(const DialogCaption, Prompt: string; const ConfirmPassword: Boolean; out Password: string; const CancelButtonCaption: string = 'Abbrechen'): Integer;
 function RequestPasswordOrSkipDialog(const DialogCaption, Prompt, SkipButtonCaption: string; out Password: string): Integer;
 
+function RequestInstallationModeDialog: Integer;
 function RequestSshFingerprintDialog(const Endpoint, Fingerprints: string; AllowOnce: Boolean): Integer;
 
 implementation
@@ -160,7 +161,7 @@ begin
   CenteredMessageDlg(Msg, mtInformation, [mbOK], 0);
 end;
 
-// Einen zentrierten VCL-Meldungsdialog anzeigen und die gewaehlte Schaltflaeche zurückgeben.
+// Einen zentrierten VCL-Meldungsdialog anzeigen und die gewählte Schaltfläche zurückgeben.
 function CenteredMessageDlg(const Msg: string; DlgType: TMsgDlgType; Buttons: TMsgDlgButtons; HelpCtx: Longint): Integer;
 var
   Dialog: TForm;
@@ -539,6 +540,26 @@ begin
       Dialog.Free;
     end;
   until False;
+end;
+
+// Ask how to set up Paperless before running any local installation checks.
+// Vor den lokalen Installationsprüfungen fragen, wo Paperless eingerichtet werden soll.
+function RequestInstallationModeDialog: Integer;
+var
+  Dialog: TForm;
+begin
+  Dialog := CreateMessageDialog(
+    'Wo möchten Sie Paperless einrichten?' + sLineBreak + sLineBreak +
+    'Lokal: Paperless auf diesem PC mit Docker Desktop installieren.' + sLineBreak +
+    'Server: Paperless auf einem entfernten Server einrichten.',
+    mtConfirmation, [mbYes, mbNo], mbYes, ['Lokal', 'Server']);
+  try
+    Dialog.Caption := 'Paperless einrichten';
+    PrepareModalDialog(Dialog, ActiveFormHandle);
+    Result := Dialog.ShowModal;
+  finally
+    Dialog.Free;
+  end;
 end;
 
 // Use the application style and select Cancel by default.

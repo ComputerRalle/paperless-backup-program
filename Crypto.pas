@@ -1,4 +1,4 @@
-// --------------------------------------------------------------
+﻿// --------------------------------------------------------------
 // Paperless Backup Program / Paperless Backup Programm
 //
 // Copyright (C) 2025-2026 Ralf-Peter Kleinert (#ComputerRalle / DIGITAL-easy)
@@ -71,7 +71,7 @@ const
   DerivedKeySize = AesKeySize + HmacKeySize;
   Pbkdf2Iterations = ULONG(600000);
 
-// Einen Windows-CNG-Algorithmusanbieter oeffnen.
+// Einen Windows-CNG-Algorithmusanbieter öffnen.
 function BCryptOpenAlgorithmProvider(
   out phAlgorithm: BCRYPT_ALG_HANDLE;
   pszAlgId: PWideChar;
@@ -107,7 +107,7 @@ function BCryptSetProperty(
   cbInput: ULONG;
   dwFlags: ULONG): NTSTATUS; stdcall; external 'bcrypt.dll';
 
-// Schluesselmaterial aus einem Passwort mit PBKDF2 ableiten.
+// Schlüsselmaterial aus einem Passwort mit PBKDF2 ableiten.
 function BCryptDeriveKeyPBKDF2(
   hPrf: BCRYPT_ALG_HANDLE;
   pbPassword: PByte;
@@ -119,7 +119,7 @@ function BCryptDeriveKeyPBKDF2(
   cbDerivedKey: ULONG;
   dwFlags: ULONG): NTSTATUS; stdcall; external 'bcrypt.dll';
 
-// Einen symmetrischen Verschluesselungsschluessel aus Rohbytes erzeugen.
+// Einen symmetrischen Verschlüsselungsschlüssel aus Rohbytes erzeugen.
 function BCryptGenerateSymmetricKey(
   hAlgorithm: BCRYPT_ALG_HANDLE;
   out phKey: BCRYPT_KEY_HANDLE;
@@ -175,7 +175,7 @@ function BCryptHashData(
   cbInput: ULONG;
   dwFlags: ULONG): NTSTATUS; stdcall; external 'bcrypt.dll';
 
-// Eine Windows-CNG-Hash- oder HMAC-Berechnung abschliessen.
+// Eine Windows-CNG-Hash- oder HMAC-Berechnung abschließen.
 function BCryptFinishHash(
   hHash: BCRYPT_HASH_HANDLE;
   pbOutput: PByte;
@@ -236,7 +236,7 @@ end;
 function ReadUInt32(const Source: TBytes; var Offset: Integer): ULONG;
 begin
   if Offset + SizeOf(Result) > Length(Source) then
-    raise Exception.Create('Verschluesselte Daten sind unvollstaendig.');
+    raise Exception.Create('Verschlüsselte Daten sind unvollständig.');
   Move(Source[Offset], Result, SizeOf(Result));
   Inc(Offset, SizeOf(Result));
 end;
@@ -245,7 +245,7 @@ end;
 function ReadBytes(const Source: TBytes; var Offset: Integer; const Count: Integer): TBytes;
 begin
   if (Offset < 0) or (Count < 0) or (Int64(Offset) + Count > Length(Source)) then
-    raise Exception.Create('Verschluesselte Daten sind unvollstaendig.');
+    raise Exception.Create('Verschlüsselte Daten sind unvollständig.');
   SetLength(Result, Count);
   if Count > 0 then
     Move(Source[Offset], Result[0], Count);
@@ -299,17 +299,17 @@ begin
         Pbkdf2Iterations,
         BytesData(Result), Length(Result),
         0),
-      'Schluessel ableiten');
+      'Schlüssel ableiten');
   finally
     BCryptCloseAlgorithmProvider(Alg, 0);
   end;
 end;
 
-// Einen geprueften Bytebereich aus einem groesseren Byte-Array kopieren.
+// Einen geprüften Bytebereich aus einem größeren Byte-Array kopieren.
 function SliceBytes(const Source: TBytes; const Offset, Count: Integer): TBytes;
 begin
   if (Offset < 0) or (Count < 0) or (Offset + Count > Length(Source)) then
-    raise Exception.Create('Interner Crypto-Fehler: ungueltiger Bytebereich.');
+    raise Exception.Create('Interner Crypto-Fehler: ungültiger Bytebereich.');
   SetLength(Result, Count);
   if Count > 0 then
     Move(Source[Offset], Result[0], Count);
@@ -332,21 +332,21 @@ begin
     SetLength(KeyObject, ObjectLength);
     CheckStatus(
       BCryptGenerateSymmetricKey(Alg, Key, BytesData(KeyObject), Length(KeyObject), ConstBytesData(AesKey), Length(AesKey), 0),
-      'AES-Schluessel erzeugen');
+      'AES-Schlüssel erzeugen');
     try
       WorkIv := Copy(Iv, 0, Length(Iv));
       ResultSize := 0;
       if Encrypt then
-        CheckStatus(BCryptEncrypt(Key, ConstBytesData(Input), Length(Input), nil, BytesData(WorkIv), Length(WorkIv), nil, 0, ResultSize, BCRYPT_BLOCK_PADDING), 'AES-Ausgabegroesse ermitteln')
+        CheckStatus(BCryptEncrypt(Key, ConstBytesData(Input), Length(Input), nil, BytesData(WorkIv), Length(WorkIv), nil, 0, ResultSize, BCRYPT_BLOCK_PADDING), 'AES-Ausgabegröße ermitteln')
       else
-        CheckStatus(BCryptDecrypt(Key, ConstBytesData(Input), Length(Input), nil, BytesData(WorkIv), Length(WorkIv), nil, 0, ResultSize, BCRYPT_BLOCK_PADDING), 'AES-Ausgabegroesse ermitteln');
+        CheckStatus(BCryptDecrypt(Key, ConstBytesData(Input), Length(Input), nil, BytesData(WorkIv), Length(WorkIv), nil, 0, ResultSize, BCRYPT_BLOCK_PADDING), 'AES-Ausgabegröße ermitteln');
 
       SetLength(Result, ResultSize);
       WorkIv := Copy(Iv, 0, Length(Iv));
       if Encrypt then
-        CheckStatus(BCryptEncrypt(Key, ConstBytesData(Input), Length(Input), nil, BytesData(WorkIv), Length(WorkIv), BytesData(Result), Length(Result), ResultSize, BCRYPT_BLOCK_PADDING), 'AES verschluesseln')
+        CheckStatus(BCryptEncrypt(Key, ConstBytesData(Input), Length(Input), nil, BytesData(WorkIv), Length(WorkIv), BytesData(Result), Length(Result), ResultSize, BCRYPT_BLOCK_PADDING), 'AES verschlüsseln')
       else
-        CheckStatus(BCryptDecrypt(Key, ConstBytesData(Input), Length(Input), nil, BytesData(WorkIv), Length(WorkIv), BytesData(Result), Length(Result), ResultSize, BCRYPT_BLOCK_PADDING), 'AES entschluesseln');
+        CheckStatus(BCryptDecrypt(Key, ConstBytesData(Input), Length(Input), nil, BytesData(WorkIv), Length(WorkIv), BytesData(Result), Length(Result), ResultSize, BCRYPT_BLOCK_PADDING), 'AES entschlüsseln');
       SetLength(Result, ResultSize);
     finally
       BCryptDestroyKey(Key);
@@ -378,7 +378,7 @@ begin
     try
       if Length(Data) > 0 then
         CheckStatus(BCryptHashData(Hash, ConstBytesData(Data), Length(Data), 0), 'HMAC Daten schreiben');
-      CheckStatus(BCryptFinishHash(Hash, BytesData(Result), Length(Result), 0), 'HMAC abschliessen');
+      CheckStatus(BCryptFinishHash(Hash, BytesData(Result), Length(Result), 0), 'HMAC abschließen');
     finally
       BCryptDestroyHash(Hash);
     end;
@@ -422,7 +422,7 @@ begin
   AppendBytes(Result, Hmac);
 end;
 
-// Rohbytes mit einem Passwort verschlüsseln und die vollstaendige portable Nutzlast zurückgeben.
+// Rohbytes mit einem Passwort verschlüsseln und die vollständige portable Nutzlast zurückgeben.
 function EncryptBytesWithPassword(const PlainBytes: TBytes; const Password: string): TBytes;
 var
   Salt, Iv, Keys, AesKey, HmacKey, CipherText, AuthenticatedData, Hmac: TBytes;
@@ -462,11 +462,11 @@ begin
 
   Version := ReadUInt32(EncryptedBytes, Offset);
   if Version <> CryptoVersion then
-    raise Exception.Create('Nicht unterstuetzte Crypto-Version.');
+    raise Exception.Create('Nicht unterstützte Crypto-Version.');
 
   Iterations := ReadUInt32(EncryptedBytes, Offset);
   if Iterations <> Pbkdf2Iterations then
-    raise Exception.Create('Nicht unterstuetzte PBKDF2-Iterationenzahl.');
+    raise Exception.Create('Nicht unterstützte PBKDF2-Iterationenzahl.');
 
   SaltLength := ReadUInt32(EncryptedBytes, Offset);
   IvLength := ReadUInt32(EncryptedBytes, Offset);
@@ -483,7 +483,7 @@ begin
   StoredHmac := ReadBytes(EncryptedBytes, Offset, 32);
 
   if Offset <> Length(EncryptedBytes) then
-    raise Exception.Create('Verschluesselte Daten enthalten unerwartete Zusatzdaten.');
+    raise Exception.Create('Verschlüsselte Daten enthalten unerwartete Zusatzdaten.');
 
   Keys := DeriveKeys(Password, Salt);
   AesKey := SliceBytes(Keys, 0, AesKeySize);
@@ -492,7 +492,7 @@ begin
   AuthenticatedData := BuildEncryptedPayload(Salt, Iv, CipherText, nil);
   CalculatedHmac := HmacSha256(AuthenticatedData, HmacKey);
   if not SameBytesConstantTime(StoredHmac, CalculatedHmac) then
-    raise Exception.Create('Passwort falsch oder verschluesselte Daten wurden veraendert.');
+    raise Exception.Create('Passwort falsch oder verschlüsselte Daten wurden verändert.');
 
   // Keine Entschlüsselung unauthentifizierter Daten: Der HMAC wurde unmittelbar zuvor geprüft.
   Result := AesCrypt(CipherText, AesKey, Iv, False);
@@ -510,7 +510,7 @@ begin
   Result := TEncoding.UTF8.GetString(DecryptBytesWithPassword(EncryptedBytes, Password));
 end;
 
-// Eine Datei mit einem Passwort verschlüsseln und die verschluesselte Zieldatei schreiben.
+// Eine Datei mit einem Passwort verschlüsseln und die verschlüsselte Zieldatei schreiben.
 procedure EncryptFileWithPassword(const SourceFile, TargetFile, Password: string);
 begin
   TFile.WriteAllBytes(TargetFile, EncryptBytesWithPassword(TFile.ReadAllBytes(SourceFile), Password));

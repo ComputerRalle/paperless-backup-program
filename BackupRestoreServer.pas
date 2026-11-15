@@ -61,7 +61,7 @@ begin
 end;
 
 // Restrict the host to characters accepted by the SSH invocation.
-// Den Host auf die fuer den SSH-Aufruf zugelassenen Zeichen beschraenken.
+// Den Host auf die für den SSH-Aufruf zugelassenen Zeichen beschränken.
 function IsValidHost(const Value: string): Boolean;
 var
   C: Char;
@@ -74,7 +74,7 @@ begin
 end;
 
 // Restrict the SSH user name to supported characters.
-// Den SSH-Benutzernamen auf unterstuetzte Zeichen beschraenken.
+// Den SSH-Benutzernamen auf unterstützte Zeichen beschränken.
 function IsValidUser(const Value: string): Boolean;
 var
   C: Char;
@@ -644,6 +644,8 @@ var
   Versions: TDockerImageVersions;
   ComposeContent: string;
 begin
+  // Use the built-in tags for the five services in a fresh Debian installation.
+  // Für die fünf Dienste einer Debian-Neuinstallation die eingebauten Tags verwenden.
   Versions := Default(TDockerImageVersions);
   Versions.Paperless := DefaultPaperlessVersion;
   Versions.Postgres := DefaultPostgresVersion;
@@ -849,7 +851,7 @@ begin
       Lines.Add('$completedBackupFolder = ''''');
       Lines.Add('$availableBackupFolders = @()');
 // Quote arguments for Windows and the remote POSIX shell.
-// Argumente fuer Windows und die POSIX-Shell des Servers maskieren.
+// Argumente für Windows und die POSIX-Shell des Servers maskieren.
       Lines.Add('function WinArg([string]$s) {');
       Lines.Add(' $b=New-Object Text.StringBuilder; [void]$b.Append(''"''); $n=0');
       Lines.Add(' foreach($c in $s.ToCharArray()) {');
@@ -861,7 +863,7 @@ begin
       Lines.Add('}');
       Lines.Add('function ShArg([string]$s) {$q=[string][char]39;return $q+$s.Replace($q,($q+''\''+$q+$q))+$q}');
 // Transfer SSH streams as bytes, keep stderr separate, and check the process result.
-// SSH-Daten als Bytes uebertragen, stderr getrennt halten und das Prozessergebnis pruefen.
+// SSH-Daten als Bytes übertragen, stderr getrennt halten und das Prozessergebnis prüfen.
       Lines.Add('function Ssh([string]$cmd,[byte[]]$inputBytes,[int]$timeoutMs=120000,[string]$outputPath,[long]$expectedBytes=0,[string]$inputPath,[bool]$monitorProgress=$false) {');
       Lines.Add(' $si=New-Object Diagnostics.ProcessStartInfo; $si.FileName=(Get-Command ssh.exe -ErrorAction Stop).Source');
       Lines.Add(' $a=@(''-T'',''-o'',''StrictHostKeyChecking=yes'',''-o'',''UpdateHostKeys=no'',''-o'',''ConnectTimeout=10'',''-o'',''NumberOfPasswordPrompts=1'',''-p'',$port,''-l'',$serverUser)');
@@ -1052,7 +1054,7 @@ begin
       Lines.Add(' try {');
       Lines.Add(' $step=''Geschützten lokalen Server-Arbeitsordner anlegen''');
 // Create a protected temporary workspace for the server Compose copy.
-// Einen geschuetzten temporaeren Arbeitsbereich fuer die Server-Compose-Kopie anlegen.
+// Einen geschützten temporären Arbeitsbereich für die Server-Compose-Kopie anlegen.
       Lines.Add(' $serverDir=Join-Path $runtimeDir ''Server''');
       Lines.Add(' if(-not [IO.Directory]::Exists($runtimeDir)){throw ''runtime''}');
       Lines.Add(' if(-not [IO.Directory]::Exists($serverDir)){[void][IO.Directory]::CreateDirectory($serverDir)}');
@@ -1085,7 +1087,7 @@ begin
       Lines.Add(' if(-not $context -or -not $context[0].Endpoints.docker.Host.StartsWith(''unix:///'')){throw ''docker_remote''}');
 
 // Normalize the locally read bytes on the server and parse the JSON in local memory.
-// Die lokal gelesenen Bytes auf dem Server aufloesen und das JSON lokal im Speicher auswerten.
+// Die lokal gelesenen Bytes auf dem Server auflösen und das JSON lokal im Speicher auswerten.
       Lines.Add(' $cmd=''cd ''+(ShArg $dir)+'' && docker compose --project-directory ''+(ShArg $dir)+'' -f -''');
       Lines.Add(' if($project){$cmd+='' -p ''+(ShArg $project)}');
       Lines.Add(' $step=''Docker Compose auf dem Server ausführen''');
@@ -1094,7 +1096,7 @@ begin
       Lines.Add(' $model=(Text $modelBytes)|ConvertFrom-Json');
       Lines.Add(' if(-not $model.services){throw ''services''}');
 // Resolve supported volume and bind sources; reject unsupported or inaccessible paths.
-// Unterstuetzte Volume- und Bind-Quellen aufloesen; nicht unterstuetzte oder unzugaengliche Pfade ablehnen.
+// Unterstützte Volume- und Bind-Quellen auflösen; nicht unterstützte oder unzugängliche Pfade ablehnen.
       Lines.Add(' $step=''Speicherpfade aus der Compose-Konfiguration ermitteln''');
       Lines.Add(' $paths=New-Object ''System.Collections.Generic.HashSet[string]'' ([StringComparer]::Ordinal)');
       Lines.Add(' foreach($service in $model.services.PSObject.Properties){foreach($mount in $service.Value.volumes){');
@@ -1124,7 +1126,7 @@ begin
       Lines.Add(' $step=''Speicherpfade für die Größenmessung zusammenstellen''');
       Lines.Add(' if($paths.Count -eq 0){throw ''paths''}');
 // Avoid counting nested paths twice and estimate source size and available space.
-// Verschachtelte Pfade nicht doppelt zaehlen und Quellgroesse sowie freien Speicherplatz schaetzen.
+// Verschachtelte Pfade nicht doppelt zählen und Quellgröße sowie freien Speicherplatz schätzen.
       Lines.Add(' $chosen=New-Object ''System.Collections.Generic.List[string]''');
       Lines.Add(' foreach($path in ($paths|Sort-Object Length)){');
       Lines.Add('  $covered=$false;foreach($parent in $chosen){if($path.Equals($parent,[StringComparison]::Ordinal) -or $path.StartsWith($parent+''/'',[StringComparison]::Ordinal)){$covered=$true;break}}');
@@ -1155,7 +1157,7 @@ begin
       end;
 
 // Remove the temporary Compose copy and warn if cleanup fails.
-// Die temporaere Compose-Kopie entfernen und bei fehlgeschlagener Bereinigung warnen.
+// Die temporäre Compose-Kopie entfernen und bei fehlgeschlagener Bereinigung warnen.
       Lines.Add('}finally{');
       Lines.Add(' $cleanupFailed=$false');
       Lines.Add(' if($local -and [IO.File]::Exists($local)){try{[IO.File]::Delete($local)}catch{$cleanupFailed=$true}}');

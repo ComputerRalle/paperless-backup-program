@@ -1,5 +1,23 @@
 ﻿# Paperless Backup Programm
 
+## Erststart und Betriebsart
+
+Beim ersten Start ohne bestätigten Laufzeitordner wählen Sie **Lokal** oder **Server**. **Lokal** führt zur Einrichtung mit Docker Desktop. Bei **Server** wählen Sie den Windows-Laufzeitordner. Anschließend öffnet das Programm **Einstellungen**, scrollt zu **Servereinstellungen Paperless Extern** und setzt den Fokus ins Hostfeld. Schließen Sie den Auswahldialog, endet der Start.
+
+Beim Umschalten von **Lokal** auf **Server** übernimmt das Programm die sieben gespeicherten lokalen Image-Tags in das Serverprofil. Beim Erststart mit **Server** sind alle Felder mit Programmvorgaben ausgefüllt. In vorhandenen Profilen ergänzen die Vorgaben leere Felder.
+
+| Docker-Image | Standard-Tag |
+|---|---|
+| Paperless-ngx | `3.4.2` |
+| PostgreSQL | `18` |
+| Valkey | `9-alpine` |
+| Gotenberg | `8` |
+| Apache Tika | `3.2.3.0` |
+| Alpine | `3` |
+| BusyBox | `1` |
+
+Die Debian-Neuinstallation verwendet die ersten fünf Vorgaben für die Compose-Dienste. Beim Aktualisieren einer vorhandenen Serverinstallation werden die Image-Tags durch ausdrückliche Bearbeitung und bestätigtes Speichern geändert.
+
 ## Lokale Sicherung, Wiederherstellung und Updates
 
 Manuelle und geplante Backups sichern die tatsächlich eingebundenen Docker-Volumes und Ordner. Backup-, Restore-, Installations- und Updateskripte verwenden eine gemeinsame Sperre für den Compose-Ordner. Das Backup erscheint nach Archivprüfung und Wiederanlauf der dafür gestoppten Dienste unter dem endgültigen Zeitstempel. Die automatische Aufbewahrung zählt vollständig freigegebene, markierte lokale Backups. Frühere Sicherungen und importierte Server-Backups ohne Markierung können Sie manuell verwalten.
@@ -20,7 +38,7 @@ Beim lokalen Speichern mit Neustart lädt das Updateskript die Images vor dem St
 
 1. Eine frische Debian-13-VM (amd64) mit funktionierendem SSH-Zugang für `root` bereitstellen.
 2. Unter **Einstellungen → Paperless Extern** die Serverdaten eintragen und speichern. Nach **Serverdaten Speichern** soll die Fingerabdruckabfrage vor der SSH-Anmeldung erscheinen, auch bei unveränderten Serverdaten. Den angezeigten Fingerabdruck mit dem auf dem Server vergleichen und bestätigen. Neue bestätigte Schlüssel werden nach erfolgreicher Anmeldung gespeichert. Bei Ablehnung oder einem geänderten gespeicherten Hostschlüssel wird die Prüfung abgebrochen.
-3. **Paperless installieren** wählen, den SSH-Fingerabdruck im Dialog bestätigen und anschließend den Installationsauftrag bestätigen. Das Programm aktualisiert Debian-Pakete, installiert Docker und Compose und startet Paperless mit PostgreSQL 18 unter `/opt/paperless`. Ein belegter Installationsordner wird vor der Paketaktualisierung abgelehnt.
+3. **Paperless installieren** wählen, den SSH-Fingerabdruck im Dialog bestätigen und anschließend den Installationsauftrag bestätigen. Das Programm aktualisiert Debian-Pakete, installiert Docker und Compose und startet standardmäßig Paperless-ngx 3.4.2 mit PostgreSQL 18 unter `/opt/paperless`. Ein belegter Installationsordner wird vor der Paketaktualisierung abgelehnt.
 4. Nach der Erfolgsmeldung **Paperless im Browser aufrufen** wählen und dort den Paperless-Admin anlegen. Der Eingangsordner ist über `\\<Server-IP>\paperless-consume` als beschreibbare Samba-Gastfreigabe vorgesehen. Windows kann Gastzugriffe abhängig von der SMB-Konfiguration ablehnen.
 5. Der Dialog zeigt nach erfolgreicher Installation die Webadresse, die Samba-Freigabe und die Logdatei unter `Logs` an. Die Anwendung speichert Compose-Ordner, Projektname und Webport für spätere Aufrufe. Wenn ein später Schritt fehlschlägt und die Compose-Datei bereits angelegt wurde, bleibt sie auf dem Server. Den fehlgeschlagenen Schritt anhand der Logdatei prüfen.
 

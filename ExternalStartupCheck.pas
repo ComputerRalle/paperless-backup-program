@@ -43,7 +43,7 @@ begin
 end;
 
 // Start the background SSH test and return its process handle and result-file path.
-// Den SSH-Test im Hintergrund starten und Prozesshandle sowie Ergebnisdateipfad zurueckgeben.
+// Den SSH-Test im Hintergrund starten und Prozesshandle sowie Ergebnisdateipfad zurückgeben.
 procedure StartExternalStartupCheck(const Host, UserName: string; PortNumber: Integer;
   const KeyFile, SettingsPath, ExePath: string; UseKey, ConfirmFingerprint: Boolean;
   out ProcessHandle: THandle; out ResultPath: string);
@@ -80,7 +80,7 @@ begin
     Lines.Add('$cancelPath = $resultPath + ''.cancel''');
     Lines.Add('function Assert-Active { if (Test-Path -LiteralPath $cancelPath) { throw ''cancelled'' } }');
 // Require a known host key and configure the chosen authentication method.
-// Einen bekannten Hostschluessel verlangen und die gewaehlte Anmeldeart konfigurieren.
+// Einen bekannten Hostschlüssel verlangen und die gewählte Anmeldeart konfigurieren.
     Lines.Add('$baseArgs = @(''-o'', ''StrictHostKeyChecking=yes'', ''-o'', ''UpdateHostKeys=no'', ''-o'', ''ConnectTimeout=10'', ''-o'', ''NumberOfPasswordPrompts=1'', ''-p'', $port, ''-l'', $serverUser)');
     if UseKey then
       Lines.Add('$baseArgs += @(''-o'', ''IdentitiesOnly=yes'', ''-i'', ' + PsLiteral(KeyFile) + ')')
@@ -218,7 +218,7 @@ begin
     Lines.Add('  else { $result = ''unknown'' }');
     Lines.Add('}');
 // Publish the result unless cancelled, then remove temporary files.
-// Das Ergebnis ausser bei Abbruch bereitstellen und temporaere Dateien entfernen.
+// Das Ergebnis außer bei Abbruch bereitstellen und temporäre Dateien entfernen.
     Lines.Add('finally {');
     Lines.Add('  if (-not (Test-Path -LiteralPath $cancelPath)) { try { [IO.File]::WriteAllText($resultPath, $result, [Text.Encoding]::UTF8) } catch {} }');
     Lines.Add('  Remove-Item -LiteralPath $promptPath, ($promptPath + ''.tmp''), $decisionPath, ($decisionPath + ''.tmp'') -Force -ErrorAction SilentlyContinue');

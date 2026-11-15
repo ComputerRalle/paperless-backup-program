@@ -780,6 +780,7 @@ begin
     PrepareSetupScriptWrite(CmdTargetPath);
     CmdFile := TStringList.Create;
     try
+      CmdFile.Add('[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)');
       CmdFile.Add('$ErrorActionPreference = ''Stop''');
       CmdFile.Add('');
       CmdFile.Add('$ComposeDir = $PSScriptRoot');
@@ -818,7 +819,7 @@ begin
       begin
         CmdFile.Add('    docker compose -f $ComposeFile run --rm --no-deps -T --user 0 --entrypoint /bin/sh paperless -c "chmod 755 /usr/src/paperless/scripts/master_pre_consume.sh ' +
           '&& test -x /usr/src/paperless/scripts/master_pre_consume.sh"');
-        CmdFile.Add('    if ($LASTEXITCODE -ne 0) { throw ''Skript-Ausfuehrungsrechte konnten nicht gesetzt werden.'' }');
+        CmdFile.Add('    if ($LASTEXITCODE -ne 0) { throw ''Skript-Ausführungsrechte konnten nicht gesetzt werden.'' }');
       end;
       CmdFile.Add('    docker compose --progress plain -f $ComposeFile up -d');
       CmdFile.Add('    if ($LASTEXITCODE -ne 0) {');
@@ -867,6 +868,7 @@ begin
       PrepareSetupScriptWrite(CmdTargetPath);
       CmdFile := TStringList.Create;
       try
+        CmdFile.Add('[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)');
         CmdFile.Add('$ErrorActionPreference = ''Stop''');
         CmdFile.Add('function Invoke-Step([scriptblock]$Command, [string]$ErrorMessage) {');
         CmdFile.Add('  & $Command');

@@ -39,7 +39,7 @@ const
   ServerCredentialNotFound = 1168; // ERROR_NOT_FOUND
 
 // Only answer the requested secret; all host-key and unknown prompts fail closed.
-// Nur das angeforderte Geheimnis ausgeben; Hostschluessel und unbekannte Fragen ablehnen.
+// Nur das angeforderte Geheimnis ausgeben; Hostschlüssel und unbekannte Fragen ablehnen.
 function RunServerAskPass: Integer;
 var
   Prompt, Mode, SettingsPath, Secret: string;
@@ -74,7 +74,7 @@ begin
 end;
 
 // Read the selected Windows credential; a missing entry returns an empty value.
-// Das gewaehlte Windows-Zugangsdatenfeld lesen; ein fehlender Eintrag liefert einen leeren Wert.
+// Das gewählte Windows-Zugangsdatenfeld lesen; ein fehlender Eintrag liefert einen leeren Wert.
 function ReadServerSecret(const SettingsPath, SecretName: string): string;
 var
   CredData: PCREDENTIAL;
@@ -101,7 +101,7 @@ begin
 end;
 
 // Store the secret for this Windows user, or delete it when the value is empty.
-// Das Geheimnis fuer diesen Windows-Benutzer speichern oder bei leerem Wert loeschen.
+// Das Geheimnis für diesen Windows-Benutzer speichern oder bei leerem Wert löschen.
 procedure WriteServerSecret(const SettingsPath, SecretName, Value: string);
 var
   CredData: Winapi.WinCred.CREDENTIALW;
@@ -128,7 +128,7 @@ begin
 end;
 
 // Add missing sections without changing any existing bytes or values.
-// Fehlende Abschnitte ergaenzen, ohne vorhandene Bytes oder Werte zu veraendern.
+// Fehlende Abschnitte ergänzen, ohne vorhandene Bytes oder Werte zu verändern.
 procedure EnsureExternalPaperlessSection(const SettingsPath: string);
 var
   Stream: THandleStream;
@@ -298,7 +298,7 @@ begin
     if TempHandle <> INVALID_HANDLE_VALUE then CloseHandle(TempHandle);
     if OriginalHandle <> INVALID_HANDLE_VALUE then CloseHandle(OriginalHandle);
     // After a failed replace retain the temporary copy for recovery.
-    // Nach fehlgeschlagener Ersetzung die temporaere Kopie zur Rettung erhalten.
+    // Nach fehlgeschlagener Ersetzung die temporäre Kopie zur Rettung erhalten.
     if TempCreated and not ReplaceAttempted then DeleteFile(PChar(TempPath));
   end;
 end;

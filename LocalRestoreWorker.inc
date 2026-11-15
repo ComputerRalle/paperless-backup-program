@@ -1,4 +1,4 @@
-  Lines.Add('function Restore-Container([string]$Service) {');
+﻿  Lines.Add('function Restore-Container([string]$Service) {');
   Lines.Add('  $ids = @(docker compose -f $ComposeFile ps -a -q $Service)');
   Lines.Add('  if ($LASTEXITCODE -ne 0 -or $ids.Count -ne 1 -or $ids[0] -notmatch ''^[a-f0-9]{12,64}$'') {');
   Lines.Add('    throw "Compose-Dienst $Service konnte nicht eindeutig ermittelt werden."');

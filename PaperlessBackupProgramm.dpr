@@ -4,18 +4,18 @@ program PaperlessBackupProgramm;
 uses
   System.SysUtils,
   Vcl.Forms,
-  MainForm in 'MainForm.pas' {Form1},
   Vcl.Themes,
   Vcl.Styles,
   AppConfig in 'AppConfig.pas',
-  ExternPaperless in 'ExternPaperless.pas',
-  ExternalStartupCheck in 'ExternalStartupCheck.pas',
-  BackupRestoreServer in 'BackupRestoreServer.pas',
-  AppLogger in 'AppLogger.pas',
   AppDialogs in 'AppDialogs.pas',
+  AppLogger in 'AppLogger.pas',
+  BackupRestoreServer in 'BackupRestoreServer.pas',
   Crypto in 'Crypto.pas',
-  ScriptGenerator in 'ScriptGenerator.pas',
   DockerComposeGenerator in 'DockerComposeGenerator.pas',
+  ExternalStartupCheck in 'ExternalStartupCheck.pas',
+  ExternPaperless in 'ExternPaperless.pas',
+  Mainform in 'Mainform.pas' {MainformFrm},
+  ScriptGenerator in 'ScriptGenerator.pas',
   SetupForm in 'SetupForm.pas' {SetupFrm};
 
 {$R *.res}

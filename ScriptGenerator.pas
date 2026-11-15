@@ -209,7 +209,7 @@ begin
   Lines.Add('  Write-Host "Aktualisiere Django-Datenbankstruktur..."');
   Lines.Add('  docker compose exec -T paperless python3 manage.py migrate');
   Lines.Add('  if ($LASTEXITCODE -ne 0) {');
-  Lines.Add('    Write-Host "Hinweis: Django-Datenbankmigration konnte jetzt nicht abgeschlossen werden. Das Skript laeuft weiter." -ForegroundColor Yellow');
+  Lines.Add('    Write-Host "Hinweis: Django-Datenbankmigration konnte jetzt nicht abgeschlossen werden. Das Skript läuft weiter." -ForegroundColor Yellow');
   Lines.Add('    $global:LASTEXITCODE = 0');
   Lines.Add('  }');
 end;
@@ -217,7 +217,7 @@ end;
 // Erzeugt docker image prune -f für unreferenzierte Images. Die Bereinigung gilt engineweit, nicht nur für dieses Compose-Projekt.
 procedure AddDanglingImagePrune(const Lines: TStringList);
 begin
-  Lines.Add('  Write-Host "Nicht mehr verwendete Docker-Images werden geloescht"');
+  Lines.Add('  Write-Host "Nicht mehr verwendete Docker-Images werden gelöscht"');
   Lines.Add('  Wait-Countdown 3');
   Lines.Add('  Invoke-DockerStep { docker image prune -f } "Fehler beim Bereinigen nicht verwendeter Docker-Images."');
   Lines.Add('');
@@ -478,7 +478,7 @@ begin
   Lines.Add('    $MigrationState = docker exec --user postgres $DatabaseContainer psql -X -w -U paperless -d paperless -v ON_ERROR_STOP=1 -At -c $MigrationQuery');
   Lines.Add('    if ($LASTEXITCODE -ne 0 -or ($MigrationState -join '''').Trim() -ne ''ready'') { throw "Erforderlicher Migrationsstand nicht erreicht. Paperless bleibt gestoppt." }');
   Lines.Add('  } elseif ($MigrationState -eq ''ready'') {');
-  Lines.Add('    Write-Host "Datenbank bereits kompatibel: Zwischenmigration wird uebersprungen."');
+  Lines.Add('    Write-Host "Datenbank bereits kompatibel: Zwischenmigration wird übersprungen."');
   Lines.Add('  } else { throw "Unbekannter Paperless-Migrationsstand. Abbruch." }');
   Lines.Add('  Write-Host "Migration auf die konfigurierte Paperless-Zielversion..."');
   Lines.Add('  Invoke-DockerStep { docker compose -f $ComposeFile run --rm --no-deps -T --entrypoint python3 paperless /usr/src/paperless/src/manage.py migrate --noinput } "Migration auf die Zielversion fehlgeschlagen."');
@@ -528,6 +528,7 @@ var
 begin
   Lines := TStringList.Create;
   try
+    Lines.Add('[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)');
     AddPsHeader(Lines);
     Lines.Add('try {');
     Lines.Add(Format('  $ComposeDir = %s', [PsQuote(ExtractFilePath(ComposePath))]));
@@ -538,7 +539,7 @@ begin
     Lines.Add('  Write-Host "Bitte warten, Paperless wird neu gestartet."');
     Lines.Add('  Wait-Countdown 3');
     Lines.Add('  Invoke-DockerStep { docker compose up -d } "Fehler beim Starten der Container."');
-    Lines.Add('  Write-Host "Nicht mehr verwendete Volumes werden geloescht"');
+    Lines.Add('  Write-Host "Nicht mehr verwendete Volumes werden gelöscht"');
     Lines.Add('  Wait-Countdown 3');
     Lines.Add('  Invoke-DockerStep { docker volume prune -f } "Fehler beim Bereinigen nicht verwendeter Volumes."');
     Lines.Add('  Wait-Countdown 3');
@@ -572,7 +573,7 @@ begin
   end;
 end;
 
-// Das PowerShell-Skript erstellen, das die geplante Backup-Aufgabe eintraegt oder aktualisiert.
+// Das PowerShell-Skript erstellen, das die geplante Backup-Aufgabe einträgt oder aktualisiert.
 procedure CreateBackupScheduleCmdScript(
   const TargetPath, BackupScriptPath, Weekdays, Hour, Minute: string);
 var

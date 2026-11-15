@@ -97,9 +97,9 @@ const
 
   // Default Docker image versions.
   // Standardversionen der Docker-Images.
-  // Shared target version for labels, new settings and Compose defaults.
-  // Gemeinsame Zielversion für Labels, neue Einstellungen und Compose-Vorgaben.
-  DefaultPaperlessVersion = '3.3.0';
+  // Use this Paperless tag for fresh settings and the generated Compose installer.
+  // Diesen Paperless-Tag für neue Einstellungen und die erzeugte Installations-Compose-Datei verwenden.
+  DefaultPaperlessVersion = '3.4.2';
   DefaultPostgresVersion = '18';
   DefaultRedisVersion = '9-alpine';
   // Follow the Gotenberg 8 release series instead of pinning a minor version.
@@ -280,7 +280,7 @@ begin
     TFile.WriteAllBytes(ScriptPath, TEncoding.UTF8.GetBytes(
       '#!/bin/sh' + #10 +
       '# Pre-consume hook. Add commands before exit 0.' + #10 +
-      '# Hook vor Verarbeitung. Befehle vor exit 0 einfuegen.' + #10 +
+      '# Hook vor Verarbeitung. Befehle vor exit 0 einfügen.' + #10 +
       '#' + #10 +
       '# Wird im Ordner Paperless Backup Programm PG18/scripts die Datei script-test.log mit einem Datumseintrag angelegt,' + #10 +
       '# nachdem ein Dokument in Paperless importiert wurde, funktioniert die Verarbeitung des scripts' + #10 +

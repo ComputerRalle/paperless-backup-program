@@ -149,19 +149,19 @@
         <DelphiCompile Include="$(MainSource)">
             <MainSource>MainSource</MainSource>
         </DelphiCompile>
-        <DCCReference Include="MainForm.pas">
-            <Form>Form1</Form>
+        <DCCReference Include="AppConfig.pas"/>
+        <DCCReference Include="AppDialogs.pas"/>
+        <DCCReference Include="AppLogger.pas"/>
+        <DCCReference Include="BackupRestoreServer.pas"/>
+        <DCCReference Include="Crypto.pas"/>
+        <DCCReference Include="DockerComposeGenerator.pas"/>
+        <DCCReference Include="ExternalStartupCheck.pas"/>
+        <DCCReference Include="ExternPaperless.pas"/>
+        <DCCReference Include="Mainform.pas">
+            <Form>MainformFrm</Form>
             <FormType>dfm</FormType>
         </DCCReference>
-        <DCCReference Include="AppConfig.pas"/>
-        <DCCReference Include="ExternPaperless.pas"/>
-        <DCCReference Include="ExternalStartupCheck.pas"/>
-        <DCCReference Include="BackupRestoreServer.pas"/>
-        <DCCReference Include="AppLogger.pas"/>
-        <DCCReference Include="AppDialogs.pas"/>
-        <DCCReference Include="Crypto.pas"/>
         <DCCReference Include="ScriptGenerator.pas"/>
-        <DCCReference Include="DockerComposeGenerator.pas"/>
         <DCCReference Include="SetupForm.pas">
             <Form>SetupFrm</Form>
             <FormType>dfm</FormType>

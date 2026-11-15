@@ -333,7 +333,7 @@ type
     procedure UpdateInstallationModeHeaders;
     procedure CaptureVersionSnapshot;
     function VersionsChanged: Boolean;
-    procedure LoadVersionsForMode(ExternalMode: Boolean);
+    procedure LoadVersionsForMode(ExternalMode: Boolean; DefaultsOnly: Boolean = False);
     procedure SaveVersionsForMode(ExternalMode: Boolean);
     procedure CreateBackupScript(const ComposePath: string);
     function PowerShellQuote(const Value: string): string;
@@ -464,7 +464,7 @@ begin
     Lines.Free;
   end;
 end;
-// True zurückgeben, wenn email-versand.env bereits Maildaten des Benutzers enthaelt.
+// True zurückgeben, wenn email-versand.env bereits Maildaten des Benutzers enthält.
 function EmailEnvHasConfiguredValues(const EnvList: TStrings): Boolean;
 begin
   Result :=
@@ -491,7 +491,7 @@ begin
     EnvList.Free;
   end;
 end;
-// Die Gesamtgroesse eines Ordnerbaums zurückgeben. Nicht lesbare Dateien werden uebersprungen.
+// Die Gesamtgröße eines Ordnerbaums zurückgeben. Nicht lesbare Dateien werden übersprungen.
 function GetDirectorySizeBytes(const FolderPath: string): Int64;
 var
   FilePath, ChildFolder: string;
@@ -513,7 +513,7 @@ begin
   for ChildFolder in TDirectory.GetDirectories(FolderPath) do
     Result := Result + GetDirectorySizeBytes(ChildFolder);
 end;
-// Eine Byte-Anzahl für sichtbare Wiederherstellungs-Schaetzungen formatieren.
+// Eine Byte-Anzahl für sichtbare Wiederherstellungs-Schätzungen formatieren.
 function FormatByteSize(const SizeBytes: Int64): string;
 const
   KB = 1024.0;
@@ -529,7 +529,7 @@ begin
   else
     Result := IntToStr(SizeBytes) + ' Bytes';
 end;
-// Eine vorsichtige Schaetzung der Wiederherstellungsdauer aus der Backupgroesse bauen.
+// Eine vorsichtige Schätzung der Wiederherstellungsdauer aus der Backupgröße bauen.
 function EstimateRestoreDurationSeconds(const SizeBytes: Int64): Integer;
 var
   Minutes: Integer;
@@ -543,7 +543,7 @@ begin
     Minutes := 5;
   Result := Minutes * 60;
 end;
-// Die sichtbare Schaetzung der Wiederherstellungsdauer bauen.
+// Die sichtbare Schätzung der Wiederherstellungsdauer bauen.
 function EstimateRestoreDurationText(const SizeBytes: Int64): string;
 var
   Minutes: Integer;
@@ -942,12 +942,14 @@ begin
       LogError('Could not prepare PowerShell status log: ' + E.Message);
   end;
 end;
-// Erzeugt den zweistufigen powershell.exe-Wrapper für die verdeckte Prozessausführung.
-// Der Wrapper schreibt die Ausgabe über Add-Content nach PowerShellStatus.log; dessen UTF-16LE-Codierung ist mit dem Leser abgestimmt.
+// Decode the child PowerShell output as UTF-8 and store the latest status line as UTF-16LE.
+// Die Ausgabe der untergeordneten PowerShell als UTF-8 lesen und die letzte Statuszeile als UTF-16LE speichern.
 function TMainformFrm.BuildPowerShellCommand(const ScriptPath, OutputLogPath: string): string;
 begin
   Result :=
-    'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& powershell.exe -NoProfile -ExecutionPolicy Bypass -File ' +
+    'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "' +
+    '[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); ' +
+    '& powershell.exe -NoProfile -ExecutionPolicy Bypass -File ' +
     PowerShellQuote(ScriptPath) +
     ' 2>&1 | ForEach-Object { $_; Set-Content -LiteralPath ' +
     PowerShellQuote(OutputLogPath) +
@@ -1000,13 +1002,13 @@ const
     'Fehler beim Wiederherstellen von export', 'Fehler beim Erstellen des UTF-8-PostgreSQL-Dumps im Container.',
     'Fehler beim Kopieren des PostgreSQL-Dumps in den Backupordner.', 'Fehler beim Stoppen der Container.',
     'Fehler beim Starten der Container.', 'Fehler beim Starten von Datenbank und Broker.',
-    'Fehler beim Zuruecksetzen des public Schemas.', 'Fehler beim Wiederherstellen der PostgreSQL-Datenbank.',
+    'Fehler beim Zurücksetzen des public Schemas.', 'Fehler beim Wiederherstellen der PostgreSQL-Datenbank.',
     'Migrationsstand konnte nicht gelesen werden.', 'Erforderlicher Migrationsstand nicht erreicht. Paperless bleibt gestoppt.',
     'Unbekannter Paperless-Migrationsstand. Abbruch.', 'Migration auf die Zielversion fehlgeschlagen.',
     'Fehler beim Bereinigen nicht verwendeter Volumes.', 'Fehler beim Bereinigen nicht verwendeter Docker-Images.',
     'Docker Engine ist nicht erreichbar.', 'Docker Compose ist nicht verfügbar.',
     'Die Compose-Konfiguration ist ungültig.', 'Benötigte Datei fehlt:',
-    'Containerstart fehlgeschlagen.', 'Skript-Ausfuehrungsrechte konnten nicht gesetzt werden.',
+    'Containerstart fehlgeschlagen.', 'Skript-Ausführungsrechte konnten nicht gesetzt werden.',
     'Fehler beim Herunterladen aktualisierter Images.', 'Fehler beim Aktualisieren der PostgreSQL Collation Version.',
     'PostgreSQL wurde innerhalb von 120 Sekunden nicht bereit.', 'Fehler: Datenbank-Dump fehlt:');
 var
@@ -1017,6 +1019,12 @@ begin
   if not Line.StartsWith(Marker) then
     Exit(Result + sLineBreak + 'Die genaue Ursache konnte nicht ermittelt werden.');
   Detail := Copy(Line, Length(Marker) + 1, MaxInt);
+  // Match messages from scripts generated before the spelling correction.
+  // Meldungen aus älteren Skripten für die Anzeige vereinheitlichen.
+  Detail := Detail.Replace('Fehler beim Zuruecksetzen des public Schemas.',
+    'Fehler beim Zurücksetzen des public Schemas.');
+  Detail := Detail.Replace('Skript-Ausfuehrungsrechte konnten nicht gesetzt werden.',
+    'Skript-Ausführungsrechte konnten nicht gesetzt werden.');
   for Known in KnownErrors do
     if Detail.StartsWith(Known) then
     begin
@@ -1028,7 +1036,7 @@ begin
   Result := Result + sLineBreak + 'Die genaue Ursache konnte nicht sicher ermittelt werden.';
 end;
 // Shorten long script status texts for the label.
-// Lange Skriptstatus-Texte für das Label kuerzen.
+// Lange Skriptstatus-Texte für das Label kürzen.
 function TMainformFrm.ShortenScriptStatusText(const StatusText: string): string;
 const
   MaxStatusTextLength = 95;
@@ -1058,7 +1066,7 @@ begin
   Result := ShortenScriptStatusText(Result);
 end;
 // Estimate install progress from Docker Compose status lines.
-// Installationsfortschritt aus Docker-Compose-Statuszeilen grob schaetzen.
+// Installationsfortschritt aus Docker-Compose-Statuszeilen grob schätzen.
 function TMainformFrm.EstimateInstallationProgressPercent(const StatusText: string; const CurrentPosition: Integer): Integer;
 var
   Text: string;
@@ -1095,7 +1103,7 @@ begin
   if Result > 96 then
     Result := 96;
 end;
-// Einen ungefaehren Wiederherstellungsfortschritt anhand der geschaetzten Dauer zurückgeben.
+// Einen ungefähren Wiederherstellungsfortschritt anhand der geschätzten Dauer zurückgeben.
 function ApproximateRestoreProgressPercent: Integer;
 var
   ElapsedSeconds: Double;
@@ -1110,7 +1118,7 @@ begin
     Result := 95;
 end;
 // Clear restore estimate state after a restore is done or failed.
-// Restore-Schaetzzustand nach Abschluss oder Fehler zurücksetzen.
+// Restore-Schätzzustand nach Abschluss oder Fehler zurücksetzen.
 procedure ClearRestoreProgressState;
 begin
   RestoreEstimateText := '';
@@ -1136,7 +1144,7 @@ begin
     Sleep(125);
   end;
 end;
-// Die Ueberschrift oberhalb der laufenden Skriptausgabe erzeugen.
+// Die Überschrift oberhalb der laufenden Skriptausgabe erzeugen.
 function TMainformFrm.BuildBusyWaitText(const StatusText: string): string;
 begin
   if FServerBackupProgressActive then
@@ -1254,7 +1262,7 @@ begin
   end;
   if not FServerBackupProgressActive then Application.ProcessMessages;
 end;
-// Die Statusanzeige für laufende Skripte abschliessen.
+// Die Statusanzeige für laufende Skripte abschließen.
 procedure TMainformFrm.FinishScriptProgress(const StatusText: string; const Success: Boolean);
 var
   RestoreProgress: Boolean;
@@ -1367,7 +1375,7 @@ begin
     if FileExists(LocalStage) then System.SysUtils.DeleteFile(LocalStage);
   end;
 end;
-// Verschluesselte Mail-Einstellungen aus dem Backup wiederherstellen, wenn der Benutzer das Passwort eingibt.
+// Verschlüsselte Mail-Einstellungen aus dem Backup wiederherstellen, wenn der Benutzer das Passwort eingibt.
 function TMainformFrm.RestoreEmailEnvFromBackup(const SourceBackupPath: string; out MailBytes: TBytes; out HasMail: Boolean): Boolean;
 var
   SourceEncryptedPath, Password: string;
@@ -1591,7 +1599,7 @@ end;
 
 // Manuelle Bearbeitung der Docker-Image-Versionen aktivieren oder deaktivieren.
 // Keep both selection flags consistent without changing either installation.
-// Beide Auswahlvariablen synchron halten, ohne Installationen zu veraendern.
+// Beide Auswahlvariablen synchron halten, ohne Installationen zu verändern.
 // The enabled panels display the hint even when Windows skips the disabled button.
 // Die aktiven Rahmen zeigen den Hinweis auch dann, wenn Windows den deaktivierten Button überspringt.
 procedure TMainformFrm.UpdateServerBackupButtons;
@@ -1609,7 +1617,7 @@ begin
 end;
 
 // Update the headers without changing the selected profile.
-// Die Kopfzeilen aktualisieren, ohne das Profil zu veraendern.
+// Die Kopfzeilen aktualisieren, ohne das Profil zu verändern.
 procedure TMainformFrm.UpdateInstallationModeHeaders;
 var
   HeaderText: string;
@@ -1635,7 +1643,7 @@ begin
 end;
 
 // Load the selected profile before any installation-specific startup actions.
-// Das ausgewaehlte Profil vor installationsbezogenen Startaktionen laden.
+// Das ausgewählte Profil vor installationsbezogenen Startaktionen laden.
 procedure TMainformFrm.LoadStoredInstallationMode;
 var
   Ini: TAppSettingsIni;
@@ -1660,7 +1668,7 @@ begin
 end;
 
 // Check the registered local installation without starting Docker.
-// Die registrierte lokale Installation ohne Dockerstart pruefen.
+// Die registrierte lokale Installation ohne Dockerstart prüfen.
 function TMainformFrm.LocalInstallationAvailable: Boolean;
 var
   Ini: TAppSettingsIni;
@@ -1698,7 +1706,7 @@ begin
      FileExists(IncludeTrailingPathDelimiter(AppDataFolder) + ComposePathFileName) or
      FileExists(IncludeTrailingPathDelimiter(AppDataFolder) + BackupTargetFileName) or
      FileExists(IncludeTrailingPathDelimiter(AppDataFolder) + InstallationCompletedFileName) then
-    raise Exception.Create('Die lokale Installation benoetigt eine gesonderte Startvorbereitung. Der Wechsel wurde abgebrochen.');
+    raise Exception.Create('Die lokale Installation benötigt eine gesonderte Startvorbereitung. Der Wechsel wurde abgebrochen.');
   if (LocalCompose = '') or not FileExists(LocalCompose) then
     raise Exception.Create('Die lokale Compose-Datei wurde nicht gefunden.');
   InitLogger(AppDataFolder);
@@ -1742,37 +1750,39 @@ begin
     (FVersionSnapshot[6] <> busybox_version_edit.Text);
 end;
 
-// External versions stay separate; unknown server versions have no assumed defaults.
-// Externe Versionen bleiben getrennt; unbekannte Serverversionen erhalten keine Vorgaben.
-procedure TMainformFrm.LoadVersionsForMode(ExternalMode: Boolean);
+// Use built-in tags for the first server setup. Otherwise read the selected profile and fill gaps with defaults.
+// Bei der Server-Ersteinrichtung die eingebauten Tags verwenden. Sonst das gewählte Profil laden und Leerwerte ergänzen.
+procedure TMainformFrm.LoadVersionsForMode(ExternalMode: Boolean; DefaultsOnly: Boolean);
+const
+  Keys: array[0..6] of string = (
+    IniKeyPaperlessVersion, IniKeyRedisVersion, IniKeyPostgresVersion, IniKeyGotenbergVersion,
+    IniKeyTikaVersion, IniKeyAlpineVersion, IniKeyBusyboxVersion);
+  DefaultVersions: array[0..6] of string = (
+    DefaultPaperlessVersion, DefaultRedisVersion, DefaultPostgresVersion, DefaultGotenbergVersion,
+    DefaultTikaVersion, DefaultAlpineVersion, DefaultBusyboxVersion);
 var
   Ini: TAppSettingsIni;
   Section: string;
   Values: array[0..6] of string;
+  SavedValue: string;
+  I: Integer;
 begin
-  Section := IniSectionVersions;
-  if ExternalMode then Section := 'Versionen Extern';
-  Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
-  try
-    Values[0] := Ini.ReadString(Section, IniKeyPaperlessVersion, '');
-    Values[1] := Ini.ReadString(Section, IniKeyRedisVersion, '');
-    Values[2] := Ini.ReadString(Section, IniKeyPostgresVersion, '');
-    Values[3] := Ini.ReadString(Section, IniKeyGotenbergVersion, '');
-    Values[4] := Ini.ReadString(Section, IniKeyTikaVersion, '');
-    Values[5] := Ini.ReadString(Section, IniKeyAlpineVersion, '');
-    Values[6] := Ini.ReadString(Section, IniKeyBusyboxVersion, '');
-  finally
-    Ini.Free;
-  end;
-  if not ExternalMode then
+  for I := Low(Values) to High(Values) do
+    Values[I] := DefaultVersions[I];
+  if not DefaultsOnly then
   begin
-    if Values[0] = '' then Values[0] := DefaultPaperlessVersion;
-    if Values[1] = '' then Values[1] := DefaultRedisVersion;
-    if Values[2] = '' then Values[2] := DefaultPostgresVersion;
-    if Values[3] = '' then Values[3] := DefaultGotenbergVersion;
-    if Values[4] = '' then Values[4] := DefaultTikaVersion;
-    if Values[5] = '' then Values[5] := DefaultAlpineVersion;
-    if Values[6] = '' then Values[6] := DefaultBusyboxVersion;
+    Section := IniSectionVersions;
+    if ExternalMode then Section := 'Versionen Extern';
+    Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
+    try
+      for I := Low(Values) to High(Values) do
+      begin
+        SavedValue := Trim(Ini.ReadString(Section, Keys[I], ''));
+        if SavedValue <> '' then Values[I] := SavedValue;
+      end;
+    finally
+      Ini.Free;
+    end;
   end;
   paperless_version_edit.Text := Values[0];
   redis_version_edit.Text := Values[1];
@@ -1781,6 +1791,8 @@ begin
   tika_version_edit.Text := Values[4];
   alpine_version_edit.Text := Values[5];
   busybox_version_edit.Text := Values[6];
+  // Compare subsequent edits with these loaded values when building a server update.
+  // Beim Server-Update bearbeitete Felder anhand dieser geladenen Werte erkennen.
   CaptureVersionSnapshot;
 end;
 
@@ -1807,7 +1819,7 @@ begin
 end;
 
 // Preserve unsaved version edits or cancel before switching profiles.
-// Ungespeicherte Versionsaenderungen vor dem Profilwechsel behandeln.
+// Ungespeicherte Versionsänderungen vor dem Profilwechsel behandeln.
 procedure TMainformFrm.InstallationModeRadioGroupClick(Sender: TObject);
 var
   NewExternal: Boolean;
@@ -1898,7 +1910,10 @@ begin
     end;
     if not NewExternal and FLocalStartupPending then
       PrepareLocalAfterExternalStart;
-    LoadVersionsForMode(NewExternal);
+    // Start the server profile with the saved local tags, including any just accepted edits.
+    // Das Serverprofil mit den gespeicherten lokalen Tags füllen, einschließlich gerade bestätigter Änderungen.
+    LoadVersionsForMode(False);
+    if NewExternal then SaveVersionsForMode(True);
     Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
     try
       if NewExternal then Ini.WriteString('Paperless Extern', 'Betriebsart', 'Extern')
@@ -1944,7 +1959,7 @@ begin
 end;
 
 // Accept existing explicit YAML filenames while using the standard file for folders.
-// Bestehende YAML-Dateinamen erhalten, bei Ordnern den Standarddateinamen ergaenzen.
+// Bestehende YAML-Dateinamen erhalten, bei Ordnern den Standarddateinamen ergänzen.
 function ExternalComposeDirectory(const Value: string): string;
 const
   StandardName = 'docker-compose.yml';
@@ -1975,7 +1990,7 @@ begin
 end;
 
 // Ask the background check to stop before another prompt or saved-key change.
-// Bei Profilaenderung oder Programmende keinen veralteten Test fortsetzen.
+// Bei Profiländerung oder Programmende keinen veralteten Test fortsetzen.
 procedure TMainformFrm.CancelExternalStartupCheck;
 begin
   FStartupCheckInvalidated := True;
@@ -1985,12 +2000,12 @@ begin
       TFile.WriteAllText(FStartupCheckResultPath + '.cancel', '', TEncoding.UTF8);
     except
       // The result is still ignored if the temporary marker cannot be written.
-      // Das Ergebnis wird auch ohne Abbruchdatei nicht mehr uebernommen.
+      // Das Ergebnis wird auch ohne Abbruchdatei nicht mehr übernommen.
     end;
 end;
 
 // Start one asynchronous SSH check using the loaded server profile.
-// Eine asynchrone SSH-Pruefung mit dem geladenen Serverprofil starten.
+// Eine asynchrone SSH-Prüfung mit dem geladenen Serverprofil starten.
 procedure TMainformFrm.BeginExternalStartupCheck(ConfirmFingerprint: Boolean;
   const InstallHost: string);
 var
@@ -2109,7 +2124,7 @@ begin
 end;
 
 // Only apply a completed result to the same unchanged server profile.
-// Ein Ergebnis nur fuer das unveraenderte Serverprofil uebernehmen.
+// Ein Ergebnis nur für das unveränderte Serverprofil übernehmen.
 procedure TMainformFrm.StartupCheckTimerTick(Sender: TObject);
 var
   TestResult, InstallHost, PromptPath, DecisionPath, Fingerprints, Decision: string;
@@ -2218,7 +2233,7 @@ begin
 end;
 
 // Read non-secret settings separately from the protected Windows credentials.
-// Allgemeine Serverdaten und geschuetzte Zugangsdaten getrennt laden.
+// Allgemeine Serverdaten und geschützte Zugangsdaten getrennt laden.
 procedure TMainformFrm.LoadExternalServerSettings;
 var
   Ini: TAppSettingsIni;
@@ -2255,7 +2270,7 @@ begin
 end;
 
 // A successful test describes a completed SSH login, not a persistent connection.
-// Ein erfolgreicher Test bestaetigt die SSH-Anmeldung, keine dauerhafte Verbindung.
+// Ein erfolgreicher Test bestätigt die SSH-Anmeldung, keine dauerhafte Verbindung.
 procedure TMainformFrm.ExternalConnectionSettingsChanged(Sender: TObject);
 begin
   FExternalTestInvalidated := True;
@@ -2306,14 +2321,14 @@ begin
     end;
   except
     // A writer may still hold the result file; retry on the next tick.
-    // Wenn die Datei noch geschrieben wird, beim naechsten Timer erneut lesen.
+    // Wenn die Datei noch geschrieben wird, beim nächsten Timer erneut lesen.
   end;
 end;
 
 // Save server settings without invoking the local settings or Docker workflows.
 // Serverdaten ohne lokale Einstellungen oder Dockerablaeufe speichern.
 // Use a visible OpenSSH window for authentication and read-only checks.
-// OpenSSH zur Anmeldung und fuer lesende Pruefungen sichtbar starten.
+// OpenSSH zur Anmeldung und für lesende Prüfungen sichtbar starten.
 procedure TMainformFrm.TestExternalConnectionBtnClick(Sender: TObject);
 var
   Host, UserName, ComposeFile, KeyFile, RemotePath, RemoteCommand: string;
@@ -2411,7 +2426,7 @@ begin
   end;
 
   // Quote the server path as a literal POSIX shell argument.
-  // Den Serverpfad als woertliches POSIX-Shellargument quotieren.
+  // Den Serverpfad als wörtliches POSIX-Shellargument quotieren.
   RemotePath := #39 + StringReplace(ComposeFile, #39, #39 + '"' + #39 + '"' + #39,
     [rfReplaceAll]) + #39;
   RemoteCommand := 'echo "SSH: verbunden"; ' +
@@ -3599,6 +3614,7 @@ var
   StoredPath: string;
   TextFilePath: String;
   FirstModeChoice: Integer;
+  OpenServerSettings: Boolean;
 begin
   if ApplicationClosing or Application.Terminated then Exit;
   Label38.Caption := 'Valkey-Version:';
@@ -3612,14 +3628,11 @@ begin
   AppDataFolder := LoadInstallationFolder;
 
   // Choose the first operating mode before local setup or Docker checks.
-  // Die erste Betriebsart vor lokaler Einrichtung und Dockerpruefung auswaehlen.
+  // Die erste Betriebsart vor lokaler Einrichtung und Dockerprüfung auswählen.
+  OpenServerSettings := False;
   if not InstallationPathReady then
   begin
-    FirstModeChoice := CenteredMessageDlg(
-      'Soll Paperless lokal installiert werden?' + sLineBreak + sLineBreak +
-      'Ja: lokale Installation mit Docker Desktop.' + sLineBreak +
-      'Nein: vorhandene Paperless-Installation auf einem Server verwenden.',
-      mtConfirmation, [mbYes, mbNo, mbCancel], 0);
+    FirstModeChoice := RequestInstallationModeDialog;
     if (FirstModeChoice <> mrYes) and (FirstModeChoice <> mrNo) then
     begin
       Application.Terminate;
@@ -3631,6 +3644,7 @@ begin
     begin
       InstallationModeRadioGroup.ItemIndex := 1;
       FLocalStartupPending := True;
+      OpenServerSettings := True;
     end
     else
       InstallationModeRadioGroup.ItemIndex := 0;
@@ -3717,7 +3731,7 @@ begin
     if LocalInstallationSelected and not System.SysUtils.DirectoryExists(PaperlessInput) then System.SysUtils.ForceDirectories(PaperlessInput);
   end;
   // Create the section after the installation path is ready.
-  // Den Abschnitt erst nach bestaetigtem Installationspfad anlegen.
+  // Den Abschnitt erst nach bestätigtem Installationspfad anlegen.
   EnsureExternalPaperlessSection(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
     LoadExternalServerSettings;
@@ -4056,63 +4070,40 @@ begin
      WriteComposeContainerAndVolumeInfo(ExtractFilePath(ComposePath));
 
 
-  Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
-  // Read image versions from the INI file and apply defaults when empty.
-  // Image-Versionen aus der INI-Datei lesen und bei leeren Werten Standardwerte verwenden.
-  try
-    redis_version_edit.Text := Ini.ReadString(IniSectionVersions, IniKeyRedisVersion, '');
-    if redis_version_edit.Text = '' then
-    redis_version_edit.Text := DefaultRedisVersion;
-
-    paperless_version_edit.Text := Ini.ReadString(IniSectionVersions, IniKeyPaperlessVersion, '');
-    if paperless_version_edit.Text = '' then
-    paperless_version_edit.Text := DefaultPaperlessVersion;
-
-    postgres_version_edit.Text := Ini.ReadString(IniSectionVersions, IniKeyPostgresVersion, '');
-    if postgres_version_edit.Text = '' then
-    postgres_version_edit.Text := DefaultPostgresVersion;
-
-    // Preserve saved custom tags; missing values use Gotenberg 8 and Tika 3.2.3.0.
-    // Gespeicherte Tags behalten; fehlende Werte erhalten Gotenberg 8 und Tika 3.2.3.0.
-    gotenberg_version_edit.Text := Ini.ReadString(IniSectionVersions, IniKeyGotenbergVersion, '');
-    if gotenberg_version_edit.Text = '' then
-    gotenberg_version_edit.Text := DefaultGotenbergVersion;
-
-    tika_version_edit.Text := Ini.ReadString(IniSectionVersions, IniKeyTikaVersion, '');
-    if tika_version_edit.Text = '' then
-    tika_version_edit.Text := DefaultTikaVersion;
-
-    alpine_version_edit.Text := Ini.ReadString(IniSectionVersions, IniKeyAlpineVersion, '');
-    if alpine_version_edit.Text = '' then
-    alpine_version_edit.Text := DefaultAlpineVersion;
-
-    busybox_version_edit.Text := Ini.ReadString(IniSectionVersions, IniKeyBusyboxVersion, '');
-    if busybox_version_edit.Text = '' then
-    busybox_version_edit.Text := DefaultBusyboxVersion;
-
-    redis_version := redis_version_edit.Text;
-    paperless_ngx_version := paperless_version_edit.Text;
-    postgresql_version := postgres_version_edit.Text;
-    gotenberg_version := gotenberg_version_edit.Text;
-    tika_version := tika_version_edit.Text;
-    alpine_version := alpine_version_edit.Text;
-    busybox_version := busybox_version_edit.Text;
-  finally
-    ini.Free;
-  end;
+  LoadVersionsForMode(False);
+  redis_version := redis_version_edit.Text;
+  paperless_ngx_version := paperless_version_edit.Text;
+  postgresql_version := postgres_version_edit.Text;
+  gotenberg_version := gotenberg_version_edit.Text;
+  tika_version := tika_version_edit.Text;
+  alpine_version := alpine_version_edit.Text;
+  busybox_version := busybox_version_edit.Text;
   if ExternalInstallationSelected then
   begin
-    LoadVersionsForMode(True);
+    // Save all seven defaults on first setup so the server profile starts with complete fields.
+    // Bei der Ersteinrichtung alle sieben Vorgaben speichern, damit das Serverprofil vollständig ausgefüllt startet.
+    LoadVersionsForMode(True, OpenServerSettings);
+    if OpenServerSettings then SaveVersionsForMode(True);
     ProtectCustomFilesCB.Enabled := False;
     PapierkorbAufbewahrungEdit.Enabled := False;
     CheckBox1.Enabled := True;
     CheckBox1Click(nil);
-  end
-  else
-    CaptureVersionSnapshot;
+  end;
   FVersionsReady := True;
 
   LoadUpdateIniFile();
+
+  // Open the server section after the runtime folder and settings have been prepared.
+  // Nach der Laufzeitordner-Auswahl und dem Laden der Einstellungen den Serverbereich öffnen.
+  if OpenServerSettings and not (ApplicationClosing or Application.Terminated) then
+  begin
+    TabControl1.TabIndex := 4;
+    TabControl1Change(TabControl1);
+    if ExternalHostEdit.CanFocus then
+      ActiveControl := ExternalHostEdit;
+    with SettingsScrollBox.VertScrollBar do
+      Position := Position + ExternalServerTitleLbl.Top - Margin;
+  end;
 end;
 
 // Ein Backup starten, wenn das Programm von der Windows-Aufgabenplanung gestartet wurde.
@@ -4775,7 +4766,7 @@ begin
         // Die .env-Datei lesen.
         EnvList.LoadFromFile(EnvFilePath);
         // Copy saved values into the edit fields without starting setup actions.
-        // Gespeicherte Werte in die Eingabefelder uebernehmen, ohne Einrichtungsaktionen zu starten.
+        // Gespeicherte Werte in die Eingabefelder übernehmen, ohne Einrichtungsaktionen zu starten.
         SMTPServerEdit.Text := EnvList.Values['PAPERLESS_EMAIL_HOST'];
         SMTPPortEdit.Text := EnvList.Values['PAPERLESS_EMAIL_PORT'];
         UserNameEdit.Text := EnvList.Values['PAPERLESS_EMAIL_HOST_USER'];
@@ -6227,37 +6218,37 @@ end;
 // Hilfelinks
 // --------------------------------------------------------------
 // Open the legal notice page.
-// Die Impressumsseite oeffnen.
+// Die Impressumsseite öffnen.
 procedure TMainformFrm.ImprintLblClick(Sender: TObject);
 begin
   ShellExecute(0, 'open', ImprintUrl, nil, nil, SW_SHOWNORMAL);
 end;
-// Die Paperless-Video-Playlist oeffnen.
+// Die Paperless-Video-Playlist öffnen.
 procedure TMainformFrm.PaperlessPlaylistLblClick(Sender: TObject);
 begin
   ShellExecute(0, 'open', PaperlessPlaylistUrl, nil, nil, SW_SHOWNORMAL);
 end;
-// Den YouTube-Kanal oeffnen.
+// Den YouTube-Kanal öffnen.
 procedure TMainformFrm.MyYouTubeChannelLblClick(Sender: TObject);
 begin
  ShellExecute(0, 'open', YouTubeChannelUrl, nil, nil, SW_SHOWNORMAL);
 end;
-// Die Anleitung zum Backup-Programm oeffnen.
+// Die Anleitung zum Backup-Programm öffnen.
 procedure TMainformFrm.BackupProgramGuideLblClick(Sender: TObject);
 begin
  ShellExecute(0, 'open', BackupGuideUrl, nil, nil, SW_SHOWNORMAL);
 end;
-// Die Haupt-Webseite von ComputerRalle oeffnen.
+// Die Haupt-Webseite von ComputerRalle öffnen.
 procedure TMainformFrm.Web1LblClick(Sender: TObject);
 begin
  ShellExecute(0, 'open', ComputerRalleUrl, nil, nil, SW_SHOWNORMAL);
 end;
-// Den ComputerRalle-Blog oeffnen.
+// Den ComputerRalle-Blog öffnen.
 procedure TMainformFrm.Web2LblClick(Sender: TObject);
 begin
  ShellExecute(0, 'open', BlogUrl, nil, nil, SW_SHOWNORMAL);
 end;
-// Die Newsletter-Anmeldeseite oeffnen.
+// Die Newsletter-Anmeldeseite öffnen.
 procedure TMainformFrm.NewsletterLblClick(Sender: TObject);
 begin
   ShellExecute(0, 'open', NewsletterUrl, nil, nil, SW_SHOWNORMAL);
@@ -6270,7 +6261,7 @@ begin
     CenteredShowMessage('Der Changelog konnte nicht im Browser geöffnet werden.');
 end;
 
-// Die Programm-Downloadseite oeffnen, wenn ein Update verfügbar ist.
+// Die Programm-Downloadseite öffnen, wenn ein Update verfügbar ist.
 procedure TMainformFrm.ProgramUpdateLblClick(Sender: TObject);
 begin
   ProgramUpdateLbl.Hide;

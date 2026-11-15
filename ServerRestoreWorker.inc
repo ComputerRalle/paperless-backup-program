@@ -1,4 +1,4 @@
-// Embed the Linux launcher and detached restore worker in the Windows program.
+﻿// Embed the Linux launcher and detached restore worker in the Windows program.
 // Linux-Starter und getrennten Wiederherstellungscontainer in das Windows-Programm einbetten.
 function ServerRestoreLaunchScript: string;
 var
@@ -10,7 +10,7 @@ begin
   try
     Lines.Add('set -eu');
     Lines.Add('umask 077');
-    Lines.Add('stage=''Docker-Verbindung pruefen''');
+    Lines.Add('stage=''Docker-Verbindung prüfen''');
     Lines.Add('build_dir=');
     Lines.Add('finish_launch() {');
     Lines.Add('  rc=$?');
@@ -32,7 +32,7 @@ begin
     Lines.Add('profile=$(printf ''%s\n%s\n'' "$compose" "$project" | sha256sum)');
     Lines.Add('profile=${profile%% *}');
     Lines.Add('');
-    Lines.Add('stage=''Gespeicherten Backupordner und Auswahl pruefen''');
+    Lines.Add('stage=''Gespeicherten Backupordner und Auswahl prüfen''');
     Lines.Add('target=$(realpath -e -- "$target")');
     Lines.Add('[ "$target" != / ] && [ -d "$target" ]');
     Lines.Add('stamp=${selected##*/}');
@@ -51,7 +51,7 @@ begin
     Lines.Add('');
     // Reattach to an active worker only when its Compose profile and selected backup match.
     // Einen laufenden Worker nur bei übereinstimmendem Compose-Profil und ausgewähltem Backup wiederverwenden.
-    Lines.Add('stage=''Vorhandene Wiederherstellung pruefen''');
+    Lines.Add('stage=''Vorhandene Wiederherstellung prüfen''');
     Lines.Add('old=$(docker ps -aq --no-trunc --filter "name=^/$job$" 2>/dev/null)');
     Lines.Add('inspect_restore() {');
     Lines.Add('  docker inspect --format ''{{index .Config.Labels "de.computerralle.paperless.restore"}}:{{index .Config.Labels "de.computerralle.paperless.restore.profile"}}:{{index .Config.Labels "de.computerralle.paperless.restore.selection"}}:{{.State.Status}}'' "$1" 2>/dev/null');
@@ -62,7 +62,7 @@ begin
     Lines.Add('    pg18:*:running|pg18:*:restarting|pg18:*:paused)');
     Lines.Add('      case "$previous" in');
     Lines.Add('        "pg18:$profile:$selection_hash:"*) printf ''OK: %s\n'' "$old"; exit 0;;');
-    Lines.Add('        *) stage=''Eine andere Server-Wiederherstellung laeuft bereits''; exit 1;;');
+    Lines.Add('        *) stage=''Eine andere Server-Wiederherstellung läuft bereits''; exit 1;;');
     Lines.Add('      esac');
     Lines.Add('      ;;');
     Lines.Add('    pg18:*:exited|pg18:*:created|pg18:*:dead) ;;');
@@ -87,7 +87,7 @@ begin
     Lines.Add('version=$(docker exec "$db" postgres --version 2>/dev/null)');
     Lines.Add('case "$version" in ''postgres (PostgreSQL) 18.''*) ;; *) exit 1;; esac');
     Lines.Add('');
-    Lines.Add('stage=''Schreibbare Docker-Mounts fuer data, media und export ermitteln''');
+    Lines.Add('stage=''Schreibbare Docker-Mounts für data, media und export ermitteln''');
     Lines.Add('mount_source() {');
     Lines.Add('  path=$(docker inspect --format "{{range .Mounts}}{{if and .RW (eq .Destination \"$2\")}}{{println .Source}}{{end}}{{end}}" "$1" 2>/dev/null) || return 1');
     Lines.Add('  case "$path" in /*) ;; *) return 1;; esac');
@@ -120,7 +120,7 @@ begin
     Lines.Add('disjoint "$data" "$media" && disjoint "$data" "$export_dir" && disjoint "$media" "$export_dir" &&');
     Lines.Add('  disjoint "$data" "$dbdata" && disjoint "$media" "$dbdata" && disjoint "$export_dir" "$dbdata"');
     Lines.Add('');
-    Lines.Add('stage=''Docker-Image fuer die Wiederherstellung bereitstellen''');
+    Lines.Add('stage=''Docker-Image für die Wiederherstellung bereitstellen''');
     Lines.Add('build_dir=$(mktemp -d)');
     Lines.Add('cat > "$build_dir/Dockerfile" <<''PAPERLESS_DOCKERFILE''');
     Lines.Add('FROM docker:cli');
@@ -257,18 +257,18 @@ begin
     Lines.Add('');
     Lines.Add('# Hold the same daemon-side lock as the backup worker throughout this operation.');
     Lines.Add('# Dieselbe Docker-Sperre wie der Backupcontainer bis zum Ende des Vorgangs halten.');
-    Lines.Add('progress ''Andere Server-Sicherung oder Wiederherstellung pruefen''');
+    Lines.Add('progress ''Andere Server-Sicherung oder Wiederherstellung prüfen''');
     Lines.Add('exec 9>>/operation-lock/job.lock');
-    Lines.Add('if ! flock -n 9; then printf ''%s\n'' ''FEHLER: Eine Server-Sicherung oder Wiederherstellung laeuft bereits.''; exit 1; fi');
+    Lines.Add('if ! flock -n 9; then printf ''%s\n'' ''FEHLER: Eine Server-Sicherung oder Wiederherstellung läuft bereits.''; exit 1; fi');
     Lines.Add('old_backup=$(docker ps -q --no-trunc --filter ''name=^/paperless-pg18-backup-job$'')');
     Lines.Add('if [ -n "$old_backup" ]; then');
     Lines.Add('  lock_version=$(docker inspect --format ''{{index .Config.Labels "de.computerralle.paperless.maintenance"}}'' "$old_backup")');
-    Lines.Add('  [ "$lock_version" = flock-v1 ] || { printf ''%s\n'' ''FEHLER: Eine Sicherung ohne gemeinsame Sperre laeuft bereits.''; exit 1; }');
+    Lines.Add('  [ "$lock_version" = flock-v1 ] || { printf ''%s\n'' ''FEHLER: Eine Sicherung ohne gemeinsame Sperre läuft bereits.''; exit 1; }');
     Lines.Add('fi');
     Lines.Add('trap fail_or_cleanup EXIT');
     Lines.Add('trap ''exit 1'' HUP INT TERM');
     Lines.Add('');
-    Lines.Add('progress ''Compose-Konfiguration und Docker-Dienste pruefen''');
+    Lines.Add('progress ''Compose-Konfiguration und Docker-Dienste prüfen''');
     Lines.Add('cd -- "${compose%/*}"');
     Lines.Add('compose_cmd config --quiet >/dev/null 2>&1');
     Lines.Add('[ "$(compose_cmd ps -a -q paperless 2>/dev/null)" = "$web" ]');
@@ -283,26 +283,26 @@ begin
     Lines.Add('done');
     Lines.Add('');
     Lines.Add('# Keep the backup key on the server and validate the candidate before stopping Paperless.');
-    Lines.Add('# Backup-Schluessel auf dem Server halten und die Compose-Kopie vor dem Stopp pruefen.');
-    Lines.Add('progress ''Paperless-Schluessel aus dem Backup lesen''');
+    Lines.Add('# Backup-Schlüssel auf dem Server halten und die Compose-Kopie vor dem Stopp prüfen.');
+    Lines.Add('progress ''Paperless-Schlüssel aus dem Backup lesen''');
     Lines.Add('key_source=$(python3 /restore/restore_files.py key-read "$backup/paperless_secret_key.txt" "$key_file" 2>/dev/null)');
-    Lines.Add('progress "Serverkonfiguration mit Paperless-Schluessel vorbereiten ($key_source)"');
+    Lines.Add('progress "Serverkonfiguration mit Paperless-Schlüssel vorbereiten ($key_source)"');
     Lines.Add('compose_hash=$(sha256sum < "$compose")');
     Lines.Add('candidate=$(mktemp "${compose%/*}/.paperless-restore-$run.XXXXXX")');
     Lines.Add('python3 /restore/restore_files.py key-prepare "$key_file" "$compose" "$candidate" "$project" "$web" >/dev/null 2>&1');
     Lines.Add('');
     // Check the SQL dump and extract the three archives into staging directories before stopping Paperless.
     // SQL-Dump prüfen und die drei Archive in Arbeitsordner entpacken, bevor Paperless gestoppt wird.
-    Lines.Add('progress ''PostgreSQL-Dump und Speicherplatz pruefen''');
+    Lines.Add('progress ''PostgreSQL-Dump und Speicherplatz prüfen''');
     Lines.Add('dump="$backup/${prefix}-db-1_backup.sql"');
     Lines.Add('python3 /restore/restore_files.py dump "$dump" /restore/restore.sql /dbspace');
     Lines.Add('for role in data media export; do');
-    Lines.Add('  progress "Archiv $role pruefen und im Ziel-Mount vorbereiten"');
+    Lines.Add('  progress "Archiv $role prüfen und im Ziel-Mount vorbereiten"');
     Lines.Add('  filesystem=$(findmnt -n -o FSTYPE --target "/target-$role")');
     Lines.Add('  python3 /restore/restore_files.py stage "$backup/${prefix}_$role.tar.gz" "/target-$role" "$run" "$filesystem" "$role"');
     Lines.Add('done');
     Lines.Add('');
-    Lines.Add('progress ''Paperless fuer die Wiederherstellung stoppen''');
+    Lines.Add('progress ''Paperless für die Wiederherstellung stoppen''');
     Lines.Add('[ "$(sha256sum < "$compose")" = "$compose_hash" ]');
     Lines.Add('[ "$(docker inspect --format ''{{.State.Status}}'' "$web" 2>/dev/null)" = "$web_state" ]');
     Lines.Add('if [ "$web_state" = running ]; then');
@@ -346,22 +346,22 @@ begin
     Lines.Add('rm -f -- "$recovery/sql.error"');
     Lines.Add('rm -f -- /restore/restore.sql');
     Lines.Add('');
-    Lines.Add('progress ''Django-Migrationsstand pruefen''');
+    Lines.Add('progress ''Django-Migrationsstand prüfen''');
     Lines.Add('migration_query="SELECT CASE WHEN EXISTS (SELECT 1 FROM django_migrations WHERE app=''documents'' AND name IN (''1075_workflowaction_order'',''0001_squashed'',''0002_squashed'')) THEN ''ready'' WHEN EXISTS (SELECT 1 FROM django_migrations WHERE app=''documents'') THEN ''legacy'' ELSE ''unknown'' END;"');
     Lines.Add('state=$(db_psql -At -c "$migration_query" </dev/null 2>/dev/null)');
     Lines.Add('if [ "$state" = legacy ]; then');
-    Lines.Add('  progress ''Zwischenmigration mit Paperless 2.20.15 ausfuehren''');
+    Lines.Add('  progress ''Zwischenmigration mit Paperless 2.20.15 ausführen''');
     Lines.Add('  printf ''%s\n'' ''services:'' ''  paperless:'' ''    image: ghcr.io/paperless-ngx/paperless-ngx:2.20.15'' > /restore/legacy.yml');
     Lines.Add('  compose_restore -f /restore/legacy.yml pull paperless >/dev/null 2>&1');
     Lines.Add('  compose_restore -f /restore/legacy.yml run --rm --no-deps -T --entrypoint python3 paperless /usr/src/paperless/src/manage.py migrate --noinput >/dev/null 2>&1');
     Lines.Add('  state=$(db_psql -At -c "$migration_query" </dev/null 2>/dev/null)');
     Lines.Add('fi');
     Lines.Add('[ "$state" = ready ]');
-    Lines.Add('progress ''Migration auf die konfigurierte Paperless-Zielversion ausfuehren''');
+    Lines.Add('progress ''Migration auf die konfigurierte Paperless-Zielversion ausführen''');
     Lines.Add('compose_restore run --rm --no-deps -T --entrypoint python3 paperless /usr/src/paperless/src/manage.py migrate --noinput >/dev/null 2>&1');
     // Publish the checked Compose file after migration, then verify the key before starting Paperless.
     // Die geprüfte Compose-Datei nach der Migration übernehmen und den Schlüssel vor dem Paperless-Start prüfen.
-    Lines.Add('progress ''Paperless-Schluessel in der Serverkonfiguration speichern''');
+    Lines.Add('progress ''Paperless-Schlüssel in der Serverkonfiguration speichern''');
     Lines.Add('[ "$(sha256sum < "$compose")" = "$compose_hash" ]');
     Lines.Add('if [ -s "$candidate" ]; then');
     Lines.Add('  published_hash=$(sha256sum <"$candidate")');
@@ -372,12 +372,12 @@ begin
     Lines.Add('  recreating=1');
     Lines.Add('fi');
     Lines.Add('if [ "$recreating" -eq 1 ]; then');
-    Lines.Add('  progress ''Paperless-Container mit dem wiederhergestellten Schluessel erzeugen''');
+    Lines.Add('  progress ''Paperless-Container mit dem wiederhergestellten Schlüssel erzeugen''');
     Lines.Add('  compose_cmd up --no-start --no-deps --pull never --force-recreate paperless >/dev/null 2>&1');
     Lines.Add('  web=$(compose_cmd ps -a -q paperless 2>/dev/null)');
     Lines.Add('  [ -n "$web" ]');
     Lines.Add('fi');
-    Lines.Add('progress ''Paperless-Schluessel im Container pruefen und Paperless starten''');
+    Lines.Add('progress ''Paperless-Schlüssel im Container prüfen und Paperless starten''');
     Lines.Add('python3 /restore/restore_files.py key-verify "$key_file" "$web" >/dev/null 2>&1');
     Lines.Add('docker start "$web" >/dev/null 2>&1');
     Lines.Add('progress ''Auf eine HTTP-Antwort von Paperless warten''');
@@ -607,7 +607,7 @@ begin
     Lines.Add('    if free < required:');
     Lines.Add('        mib = 1024**2');
     Lines.Add('        raise DumpPreflightError(');
-    Lines.Add('            f"Zu wenig Platz {location}. Frei: {free / mib:.1f} MiB. Benoetigt: {required / mib:.1f} MiB."');
+    Lines.Add('            f"Zu wenig Platz {location}. Frei: {free / mib:.1f} MiB. Benötigt: {required / mib:.1f} MiB."');
     Lines.Add('        )');
     Lines.Add('');
     Lines.Add('');
@@ -615,13 +615,13 @@ begin
     Lines.Add('    with private_input(source) as raw:');
     Lines.Add('        size = os.fstat(raw.fileno()).st_size');
     Lines.Add('        require_dump_space(db_mount, 3 * size + 256 * 1024**2, "auf dem PostgreSQL-Datentraeger")');
-    Lines.Add('        require_dump_space(Path(destination).parent, size + 16 * 1024**2, "fuer die temporaere SQL-Datei")');
+    Lines.Add('        require_dump_space(Path(destination).parent, size + 16 * 1024**2, "für die temporäre SQL-Datei")');
     Lines.Add('        sql = DumpSqlScanner()');
     Lines.Add('        copied = False');
     Lines.Add('        copy_count = 0');
     Lines.Add('        ended = False');
     Lines.Add('        # Use our own restriction key. Dump-supplied framing is replaced below.');
-    Lines.Add('        # Eigenen Sperrschluessel verwenden und die psql-Klammer des Dumps ersetzen.');
+    Lines.Add('        # Eigenen Sperrschlüssel verwenden und die psql-Klammer des Dumps ersetzen.');
     Lines.Add('        restriction = secrets.token_hex(32)');
     Lines.Add('        with io.TextIOWrapper(raw, encoding="utf-8-sig") as dump, open(destination, "x", encoding="utf-8", newline="\n") as out:');
     Lines.Add('            out.write(f"\\restrict {restriction}\n")');
@@ -640,7 +640,7 @@ begin
     Lines.Add('                    sql.scan(text, number)');
     Lines.Add('                out.write(line)');
     Lines.Add('            if copied or not copy_count or not ended or not sql.ready:');
-    Lines.Add('                raise DumpPreflightError("Der PostgreSQL-Textdump ist unvollstaendig.")');
+    Lines.Add('                raise DumpPreflightError("Der PostgreSQL-Textdump ist unvollständig.")');
     Lines.Add('            out.write(f"\n\\unrestrict {restriction}\n")');
     Lines.Add('');
     Lines.Add('');
@@ -648,13 +648,13 @@ begin
     Lines.Add('    try:');
     Lines.Add('        prepare_dump(source, destination, db_mount)');
     Lines.Add('    except DumpPreflightError as error:');
-    Lines.Add('        print(f"SQL-Vorpruefung: {error}", file=sys.stderr)');
+    Lines.Add('        print(f"SQL-Vorprüfung: {error}", file=sys.stderr)');
     Lines.Add('    except UnicodeError:');
-    Lines.Add('        print("SQL-Vorpruefung: Der Dump ist kein gueltiger UTF-8-Text.", file=sys.stderr)');
+    Lines.Add('        print("SQL-Vorprüfung: Der Dump ist kein gültiger UTF-8-Text.", file=sys.stderr)');
     Lines.Add('    except OSError as error:');
-    Lines.Add('        print(f"SQL-Vorpruefung: Datei- oder Speicherzugriff fehlgeschlagen (Systemfehler {error.errno}).", file=sys.stderr)');
+    Lines.Add('        print(f"SQL-Vorprüfung: Datei- oder Speicherzugriff fehlgeschlagen (Systemfehler {error.errno}).", file=sys.stderr)');
     Lines.Add('    except ValueError:');
-    Lines.Add('        print("SQL-Vorpruefung: Es wird eine lesbare PostgreSQL-Dumpdatei erwartet.", file=sys.stderr)');
+    Lines.Add('        print("SQL-Vorprüfung: Es wird eine lesbare PostgreSQL-Dumpdatei erwartet.", file=sys.stderr)');
     Lines.Add('    else:');
     Lines.Add('        return');
     Lines.Add('    sys.exit(1)');
@@ -810,7 +810,7 @@ begin
     Lines.Add('  docker build -q -t "$image" "$build_dir" >/dev/null 2>&1');
     Lines.Add('fi');
     Lines.Add('');
-    Lines.Add('stage=''Docker-Container fuer die Wiederherstellung starten''');
+    Lines.Add('stage=''Docker-Container für die Wiederherstellung starten''');
     Lines.Add('if [ -n "$old" ]; then docker rm "$old" >/dev/null 2>&1; fi');
     Lines.Add('id=$(docker run --detach --name "$job" --restart=no --network none --stop-timeout 240 --log-driver local \');
     Lines.Add('  --label de.computerralle.paperless.restore=pg18 \');

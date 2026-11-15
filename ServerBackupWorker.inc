@@ -1,4 +1,4 @@
-// Embed the Linux launcher and worker so an EXE can deploy them without local script files.
+﻿// Embed the Linux launcher and worker so an EXE can deploy them without local script files.
 // Linux-Starter und Backupskript einbetten, damit die EXE sie ohne lokale Skriptdateien bereitstellt.
 function ServerBackupLaunchScript: string;
 var
@@ -8,7 +8,7 @@ begin
   try
     Lines.Add('set -eu');
     Lines.Add('umask 077');
-    Lines.Add('stage=''Docker-Verbindung pruefen''');
+    Lines.Add('stage=''Docker-Verbindung prüfen''');
     Lines.Add('build_dir=');
     Lines.Add('finish_launch() {');
     Lines.Add('  rc=$?');
@@ -31,14 +31,14 @@ begin
     Lines.Add('profile=${profile%% *}');
     Lines.Add('');
     Lines.Add('# Use a fixed container name as a daemon-side lock and verify its ownership before reuse.');
-    Lines.Add('# Einen festen Containernamen als Sperre verwenden und vor der Wiederverwendung das Label pruefen.');
+    Lines.Add('# Einen festen Containernamen als Sperre verwenden und vor der Wiederverwendung das Label prüfen.');
     // Also keep this version's launcher out of an active restore's mount and space checks.
     // Auch den Starter während einer Wiederherstellung von Mount- und Platzprüfungen fernhalten.
-    Lines.Add('stage=''Laufende Wiederherstellung pruefen''');
+    Lines.Add('stage=''Laufende Wiederherstellung prüfen''');
     Lines.Add('restore=$(docker ps -q --filter "name=^/paperless-pg18-restore-job$" --filter "label=de.computerralle.paperless.restore=pg18")');
-    Lines.Add('if [ -n "$restore" ]; then stage=''Eine Server-Wiederherstellung laeuft bereits''; exit 1; fi');
+    Lines.Add('if [ -n "$restore" ]; then stage=''Eine Server-Wiederherstellung läuft bereits''; exit 1; fi');
     Lines.Add('');
-    Lines.Add('stage=''Vorhandenen Backuplauf pruefen''');
+    Lines.Add('stage=''Vorhandenen Backuplauf prüfen''');
     Lines.Add('old=$(docker ps -aq --no-trunc --filter "name=^/$job$" 2>/dev/null)');
     Lines.Add('if [ -n "$old" ]; then');
     Lines.Add('  [ "$(docker inspect --format ''{{index .Config.Labels "de.computerralle.paperless.backup"}}'' "$old" 2>/dev/null)" = pg18 ]');
@@ -68,7 +68,7 @@ begin
     Lines.Add('case "$db" in ''''|*[!a-f0-9]*) exit 1;; esac');
     Lines.Add('[ "$web" != "$db" ]');
     Lines.Add('version=$(docker exec "$db" postgres --version 2>/dev/null)');
-    Lines.Add('case "$version" in ''postgres (PostgreSQL) 18.''*) ;; *) stage=''PostgreSQL 18 pruefen''; exit 1;; esac');
+    Lines.Add('case "$version" in ''postgres (PostgreSQL) 18.''*) ;; *) stage=''PostgreSQL 18 prüfen''; exit 1;; esac');
     Lines.Add('broker=$(compose_cmd ps -q broker 2>/dev/null || :)');
     Lines.Add('gotenberg=$(compose_cmd ps -q gotenberg 2>/dev/null || :)');
     Lines.Add('tika=$(compose_cmd ps -q tika 2>/dev/null || :)');
@@ -95,13 +95,13 @@ begin
     Lines.Add('# Exportpfade unter /mnt muessen aktiv eingehaengt sein, damit kein leerer Ersatzordner gesichert wird.');
     Lines.Add('case "$export_dir" in');
     Lines.Add('  /mnt/*)');
-    Lines.Add('    stage=''Export-Mount unter /mnt pruefen''');
+    Lines.Add('    stage=''Export-Mount unter /mnt prüfen''');
     Lines.Add('    export_mount=$(findmnt -n -o TARGET --target "$export_dir")');
     Lines.Add('    case "$export_mount" in /mnt|/mnt/*) ;; *) exit 1;; esac');
     Lines.Add('    ;;');
     Lines.Add('esac');
     Lines.Add('');
-    Lines.Add('stage=''Backupordner und freien Speicher pruefen''');
+    Lines.Add('stage=''Backupordner und freien Speicher prüfen''');
     Lines.Add('target=$(realpath -e -- "$target")');
     Lines.Add('case "$target" in /|*,*|*\"*|*''');
     Lines.Add('''*) exit 1;; esac');
@@ -115,7 +115,7 @@ begin
     Lines.Add('  unsupported=$(find "$source" -mindepth 1 ! -type f ! -type d -print -quit)');
     Lines.Add('  [ -z "$unsupported" ] || { stage=''Backupquelle enthält eine Verknüpfung oder Spezialdatei, die nicht wiederhergestellt werden kann''; exit 1; }');
     Lines.Add('done');
-    Lines.Add('stage=''Backupordner und freien Speicher pruefen''');
+    Lines.Add('stage=''Backupordner und freien Speicher prüfen''');
     Lines.Add('for source in "$data" "$media" "$export_dir" "$dbdata"; do');
     Lines.Add('  case "$target/" in "$source/"*) exit 1;; esac');
     Lines.Add('  case "$source/" in "$target/"*) exit 1;; esac');
@@ -131,7 +131,7 @@ begin
     // Platz für die unkomprimierten Quelldaten, den zusätzlichen Datenbankdump und eine Reserve einplanen.
     Lines.Add('required=$((total + db_size + total / 10 + 1073741824))');
     Lines.Add('if [ "$space" -lt "$required" ]; then');
-    Lines.Add('  stage="Freier Speicher: $space Bytes, benoetigt: ca. $required Bytes"');
+    Lines.Add('  stage="Freier Speicher: $space Bytes, benötigt: ca. $required Bytes"');
     Lines.Add('  exit 1');
     Lines.Add('fi');
     Lines.Add('');
@@ -160,7 +160,7 @@ begin
     Lines.Add('archive_progress_pid=');
     Lines.Add('');
     Lines.Add('# Monitor archive size without inheriting the operation lock.');
-    Lines.Add('# Die Archivgroesse anzeigen, ohne die Sperre an den Beobachter zu vererben.');
+    Lines.Add('# Die Archivgröße anzeigen, ohne die Sperre an den Beobachter zu vererben.');
     // Read the compressed archive size while tar writes it. Stop the observer before resuming services.
     // Beim Schreiben mit tar die komprimierte Archivgröße ermitteln. Den Beobachter vor dem Dienstneustart beenden.
     Lines.Add('archive_progress() {');
@@ -217,11 +217,11 @@ begin
     Lines.Add('  trap '''' HUP INT TERM');
     Lines.Add('  stop_archive_progress');
     Lines.Add('  if ! resume_services; then');
-    Lines.Add('    printf ''%s\n'' ''FEHLER: Paperless oder PostgreSQL konnte nicht wieder gestartet werden. Bitte auf dem Server pruefen.''');
+    Lines.Add('    printf ''%s\n'' ''FEHLER: Paperless oder PostgreSQL konnte nicht wieder gestartet werden. Bitte auf dem Server prüfen.''');
     Lines.Add('    rc=1');
     Lines.Add('  fi');
     Lines.Add('  if [ "$rc" -ne 0 ]; then');
-    Lines.Add('    printf ''FEHLER: %s. Unvollstaendige Dateien liegen gegebenenfalls unter %s.\n'' "$stage" "$partial"');
+    Lines.Add('    printf ''FEHLER: %s. Unvollständige Dateien liegen gegebenenfalls unter %s.\n'' "$stage" "$partial"');
     Lines.Add('  fi');
     Lines.Add('  exit "$rc"');
     Lines.Add('}');
@@ -242,7 +242,7 @@ begin
     Lines.Add('final="/backup/$stamp"');
     Lines.Add('trap finish EXIT');
     Lines.Add('trap ''exit 1'' HUP INT TERM');
-    Lines.Add('stage=''Freien Speicher unmittelbar vor der Sicherung erneut pruefen''');
+    Lines.Add('stage=''Freien Speicher unmittelbar vor der Sicherung erneut prüfen''');
     Lines.Add('free_kib=$(df -Pk /backup | awk ''NR == 2 { print $4 }'')');
     Lines.Add('case "$free_kib" in ''''|*[!0-9]*) exit 1;; esac');
     Lines.Add('[ "$free_kib" -ge $(((required + 1023) / 1024)) ]');
@@ -253,8 +253,8 @@ begin
     Lines.Add('printf ''Backup auf dem Server gestartet. Lauf-ID: %s\n'' "$run"');
     Lines.Add('');
     Lines.Add('# Capture metadata before stopping Paperless; never send the key to the log.');
-    Lines.Add('# Metadaten vor dem Stopp sichern und den Schluessel aus dem Log heraushalten.');
-    Lines.Add('stage=''Paperless-Schluessel sichern''');
+    Lines.Add('# Metadaten vor dem Stopp sichern und den Schlüssel aus dem Log heraushalten.');
+    Lines.Add('stage=''Paperless-Schlüssel sichern''');
     Lines.Add('printf ''%s\n'' "$stage"');
     Lines.Add('key=$(docker exec "$web" sh -c ''');
     Lines.Add('  if [ -n "${PAPERLESS_SECRET_KEY:-}" ]; then printf "%s" "$PAPERLESS_SECRET_KEY"');
@@ -328,11 +328,11 @@ begin
     Lines.Add('done');
     Lines.Add('');
     Lines.Add('# Bring Paperless back before validating the archives and publishing the completed directory.');
-    Lines.Add('# Paperless vor der Archivpruefung und der Freigabe des fertigen Ordners wieder starten.');
+    Lines.Add('# Paperless vor der Archivprüfung und der Freigabe des fertigen Ordners wieder starten.');
     Lines.Add('stage=''Paperless und PostgreSQL wieder starten''');
     Lines.Add('printf ''%s\n'' "$stage"');
     Lines.Add('resume_services');
-    Lines.Add('stage=''Archive lesen und pruefen''');
+    Lines.Add('stage=''Archive lesen und prüfen''');
     Lines.Add('printf ''%s\n'' "$stage"');
     Lines.Add('for role in data db_data_18 export media; do');
     Lines.Add('  tar -tzf "$partial/${prefix}_$role.tar.gz" >/dev/null 2>&1');
