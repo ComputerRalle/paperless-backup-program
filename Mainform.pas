@@ -2010,7 +2010,7 @@ procedure TMainformFrm.BeginExternalStartupCheck(ConfirmFingerprint: Boolean;
   const InstallHost: string);
 var
   Ini: TAppSettingsIni;
-  Host, UserName, KeyFile, SettingsPath, PortText: string;
+  Host, UserName, KeyFile, SettingsPath, PortText, ComposeFile: string;
   PortNumber: Integer;
   Ch: Char;
   UseKey: Boolean;
@@ -2030,6 +2030,7 @@ begin
     UserName := Trim(Ini.ReadString('Paperless Extern', 'Benutzer', ''));
     KeyFile := Trim(Ini.ReadString('Paperless Extern', 'SSH-Key-Datei', ''));
     PortText := Trim(Ini.ReadString('Paperless Extern', 'SSH-Port', ''));
+    ComposeFile := ExternalComposeFile(Trim(Ini.ReadString('Paperless Extern', 'Compose-Datei', '')));
     UseKey := SameText(Ini.ReadString('Paperless Extern', 'Anmeldung', 'Passwort'), 'SSH-Key');
   finally
     Ini.Free;
@@ -2099,7 +2100,8 @@ begin
       ExternalConnectionStatusLbl.Caption := 'Verbindung wird getestet ...';
     TestExternalConnectionBtn.Enabled := False;
     StartExternalStartupCheck(Host, UserName, PortNumber, KeyFile, SettingsPath,
-      Application.ExeName, UseKey, ConfirmFingerprint, FStartupCheckHandle, FStartupCheckResultPath);
+      Application.ExeName, ComposeFile, UseKey, ConfirmFingerprint,
+      FStartupCheckHandle, FStartupCheckResultPath);
     FStartupInstallHost := InstallHost;
     FStartupCheckEndpoint := Host + ':' + IntToStr(PortNumber);
     if Pos(':', Host) > 0 then
@@ -2127,7 +2129,10 @@ end;
 // Ein Ergebnis nur für das unveränderte Serverprofil übernehmen.
 procedure TMainformFrm.StartupCheckTimerTick(Sender: TObject);
 var
-  TestResult, InstallHost, PromptPath, DecisionPath, Fingerprints, Decision: string;
+  TestResult, InstallHost, PromptPath, DecisionPath, Fingerprints, Decision, DetectedProject: string;
+  Ini: TAppSettingsIni;
+  ProjectNameChanged: TNotifyEvent;
+  Ch: Char;
 begin
   if FStartupCheckHandle = 0 then Exit;
   if WaitForSingleObject(FStartupCheckHandle, 0) <> WAIT_OBJECT_0 then
@@ -2194,10 +2199,51 @@ begin
   DeleteFile(FStartupCheckResultPath + '.decision.tmp');
   FStartupCheckResultPath := '';
   if FStartupCheckInvalidated or ApplicationClosing then Exit;
+  if TestResult.StartsWith('success|') then
+  begin
+    DetectedProject := TestResult.Substring(Length('success|'));
+    TestResult := 'success';
+  end;
   if (TestResult = 'success') or (TestResult = 'save_failed') then
   begin
     FExternalConnectionHeader := 'verbunden';
     ExternalConnectionStatusLbl.Caption := 'Verbindung hergestellt (SSH-Test)';
+    if DetectedProject = '*' then
+      ExternalConnectionStatusLbl.Caption := 'Mehrere Compose-Projekte gefunden. Projektnamen bitte prüfen.'
+    else if DetectedProject = '?' then
+      ExternalConnectionStatusLbl.Caption := 'SSH verbunden. Compose-Projekte konnten nicht abgefragt werden.'
+    else if DetectedProject <> '' then
+    begin
+      for Ch in DetectedProject do
+        if not CharInSet(Ch, ['a'..'z', '0'..'9', '-', '_']) then
+        begin
+          DetectedProject := '';
+          Break;
+        end;
+      if DetectedProject <> '' then
+        try
+          Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
+          try
+            if Ini.ReadString('Paperless Extern', IniKeyServerComposeProject, '') <> DetectedProject then
+              Ini.WriteString('Paperless Extern', IniKeyServerComposeProject, DetectedProject);
+          finally
+            Ini.Free;
+          end;
+          // Updating the field for this completed check is not a user edit.
+          // Die Anzeige aus dieser abgeschlossenen Prüfung aktualisieren.
+          ProjectNameChanged := ExternalComposeProjectEdit.OnChange;
+          ExternalComposeProjectEdit.OnChange := nil;
+          try
+            ExternalComposeProjectEdit.Text := DetectedProject;
+          finally
+            ExternalComposeProjectEdit.OnChange := ProjectNameChanged;
+          end;
+          ExternalConnectionStatusLbl.Caption := 'Compose-Projekt erkannt: ' + DetectedProject;
+        except
+          on E: Exception do
+            CenteredShowMessage('Das erkannte Compose-Projekt konnte nicht gespeichert werden: ' + E.Message);
+        end;
+    end;
     UpdateInstallationModeHeaders;
     if TestResult = 'save_failed' then
       CenteredShowMessage('Die SSH-Verbindung wurde hergestellt, der Server-Fingerabdruck konnte aber nicht gespeichert werden.')
@@ -2252,7 +2298,8 @@ begin
     ExternalComposePathEdit.Text := ExternalComposeDirectory(Ini.ReadString('Paperless Extern', 'Compose-Datei', ''));
     if ExternalComposePathEdit.Text = '' then
       ExternalComposePathEdit.Text := ServerInstallFolder;
-    ExternalComposeProjectEdit.Text := Ini.ReadString('Paperless Extern', 'Compose-Projekt', '');
+    ExternalComposeProjectEdit.Text := ServerComposeProjectOrDefault(
+      Ini.ReadString('Paperless Extern', IniKeyServerComposeProject, ''));
     ExternalBackupFolderEdit.Text := Ini.ReadString('Paperless Extern', IniKeyServerBackupFolder, DefaultServerBackupFolder);
     Auth := Ini.ReadString('Paperless Extern', 'Anmeldung', 'Passwort');
   finally
@@ -2405,7 +2452,8 @@ begin
            (IntToStr(PortNumber) <> Trim(Ini.ReadString('Paperless Extern', 'SSH-Port', ''))) or
            (UserName <> Trim(Ini.ReadString('Paperless Extern', 'Benutzer', ''))) or
            (ComposeFile <> ExternalComposeFile(Ini.ReadString('Paperless Extern', 'Compose-Datei', ''))) or
-           (ExternalComposeProjectEdit.Text <> Ini.ReadString('Paperless Extern', 'Compose-Projekt', '')) or
+           (ServerComposeProjectOrDefault(ExternalComposeProjectEdit.Text) <>
+            ServerComposeProjectOrDefault(Ini.ReadString('Paperless Extern', IniKeyServerComposeProject, ''))) or
            not SameText(ExpectedAuth, Ini.ReadString('Paperless Extern', 'Anmeldung', 'Passwort')) or
            ((ExternalAuthRadioGroup.ItemIndex = 1) and
             (KeyFile <> Trim(Ini.ReadString('Paperless Extern', 'SSH-Key-Datei', '')))) then
@@ -2523,7 +2571,7 @@ end;
 procedure TMainformFrm.SaveExternalServerBtnClick(Sender: TObject);
 var
   Ini: TAppSettingsIni;
-  SettingsPath, Auth, BackupFolder: string;
+  SettingsPath, Auth, BackupFolder, Project: string;
   WebPort: Integer;
 begin
   if FStartupCheckHandle <> 0 then Exit;
@@ -2542,6 +2590,7 @@ begin
     // Validate the backup path before persisting any server settings.
     // Den Backupordner vor dem Speichern der Servereinstellungen validieren.
     BackupFolder := NormalizeServerBackupFolder(ExternalBackupFolderEdit.Text);
+    Project := ServerComposeProjectOrDefault(ExternalComposeProjectEdit.Text);
     WriteServerSecret(SettingsPath, 'Passwort', ExternalPasswordEdit.Text);
     WriteServerSecret(SettingsPath, 'Passphrase', ExternalKeyPassphraseEdit.Text);
     Ini := TAppSettingsIni.Create(SettingsPath);
@@ -2552,7 +2601,7 @@ begin
       Ini.WriteString('Paperless Extern', 'Benutzer', ExternalUserEdit.Text);
       Ini.WriteString('Paperless Extern', 'SSH-Key-Datei', ExternalKeyEdit.Text);
       Ini.WriteString('Paperless Extern', 'Compose-Datei', ExternalComposePathEdit.Text);
-      Ini.WriteString('Paperless Extern', 'Compose-Projekt', ExternalComposeProjectEdit.Text);
+      Ini.WriteString('Paperless Extern', IniKeyServerComposeProject, Project);
       Ini.WriteString('Paperless Extern', IniKeyServerBackupFolder, BackupFolder);
       Ini.WriteString('Paperless Extern', 'Anmeldung', Auth);
     finally
@@ -2565,6 +2614,7 @@ begin
       Exit;
     end;
   end;
+  ExternalComposeProjectEdit.Text := Project;
   // Confirm the fingerprint after every save, including an unchanged server address.
   // Den Fingerabdruck nach jedem Speichern bestätigen lassen, auch bei gleicher Serveradresse.
   BeginExternalStartupCheck(True);
@@ -2692,6 +2742,11 @@ var
   ErrorCaption: string;
 begin
   if ScriptBusy or FServerBackupCheckActive or ApplicationClosing then Exit;
+  if FStartupCheckHandle <> 0 then
+  begin
+    CenteredShowMessage('Die Serververbindung und das Compose-Projekt werden noch geprüft.');
+    Exit;
+  end;
   FServerBackupCheckActive := True;
   FServerBackupAction := Action;
   FServerTransferCancelRequested := False;
@@ -2904,7 +2959,7 @@ begin
             Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
             try
               Ini.WriteString('Paperless Extern', 'Compose-Datei', ServerInstallFolder);
-              Ini.WriteString('Paperless Extern', 'Compose-Projekt', ComposeProjectName);
+              Ini.WriteString('Paperless Extern', IniKeyServerComposeProject, ComposeProjectName);
               Ini.WriteString('Paperless Extern', IniKeyServerWebPort, IntToStr(ServerInstallWebPort));
               Ini.UpdateFile;
             finally
@@ -3466,7 +3521,7 @@ begin
     'Dadurch sind die Programmdateien normalerweise vor dem Zugriff anderer Benutzer geschützt.' + #13#10 +
     'Administratoren können weiterhin darauf zugreifen.' + #13#10 + #13#10 +
     'Sie können auch einen anderen Installationspfad wählen.' + #13#10 + #13#10 +
-    'Möchten Sie den Installationspfad ändern?', mtConfirmation, [mbYes, mbNo], 0);
+    'Möchten Sie den Installationspfad ändern?', mtConfirmation, [mbYes, mbNo], 0, True);
   if (PathChoice <> mrYes) and (PathChoice <> mrNo) then Exit;
   if PathChoice = mrYes then
   begin

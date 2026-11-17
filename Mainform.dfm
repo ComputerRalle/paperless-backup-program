@@ -139317,6 +139317,7 @@ object MainformFrm: TMainformFrm
           Width = 471
           Height = 26
           TabOrder = 24
+          Text = 'paperless-ngx-pg18'
           OnChange = ExternalConnectionSettingsChanged
         end
         object ExternalBackupFolderEdit: TEdit

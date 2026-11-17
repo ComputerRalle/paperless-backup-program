@@ -28,12 +28,12 @@ interface
 uses Winapi.Windows;
 
 procedure StartExternalStartupCheck(const Host, UserName: string; PortNumber: Integer;
-  const KeyFile, SettingsPath, ExePath: string; UseKey, ConfirmFingerprint: Boolean;
+  const KeyFile, SettingsPath, ExePath, ComposeFile: string; UseKey, ConfirmFingerprint: Boolean;
   out ProcessHandle: THandle; out ResultPath: string);
 
 implementation
 
-uses System.SysUtils, System.Classes, System.IOUtils, AppConfig;
+uses System.SysUtils, System.Classes, System.IOUtils, System.NetEncoding, AppConfig;
 
 // Quote a value as a PowerShell single-quoted literal.
 // Einen Wert als einfach zitiertes PowerShell-Literal maskieren.
@@ -45,10 +45,10 @@ end;
 // Start the background SSH test and return its process handle and result-file path.
 // Den SSH-Test im Hintergrund starten und Prozesshandle sowie Ergebnisdateipfad zurückgeben.
 procedure StartExternalStartupCheck(const Host, UserName: string; PortNumber: Integer;
-  const KeyFile, SettingsPath, ExePath: string; UseKey, ConfirmFingerprint: Boolean;
+  const KeyFile, SettingsPath, ExePath, ComposeFile: string; UseKey, ConfirmFingerprint: Boolean;
   out ProcessHandle: THandle; out ResultPath: string);
 var
-  ScriptPath, Cmd, WorkDir, PowerShellPath: string;
+  ScriptPath, Cmd, WorkDir, PowerShellPath, RemoteCommand, RemotePath: string;
   Lines: TStringList;
   SI: TStartupInfo;
   PI: TProcessInformation;
@@ -57,10 +57,31 @@ begin
   ProcessHandle := 0;
   ResultPath := '';
   WorkDir := ExtractFilePath(SettingsPath);
+  RemoteCommand := 'true';
+  if ComposeFile.StartsWith('/') then
+  begin
+    RemotePath := #39 + StringReplace(ComposeFile, #39, #39 + '"' + #39 + '"' + #39,
+      [rfReplaceAll]) + #39;
+    // Read the Compose inventory without changing anything on the server.
+    // Die Compose-Projekte auf dem Server lesend abfragen.
+    RemoteCommand := 'p=$(readlink -f -- ' + RemotePath + ' 2>/dev/null) && ' +
+      'printf "PAPERLESS_COMPOSE_PATH=%s\n" "$p"; ' +
+      'if projects=$(timeout 10s docker compose ls --all --format json 2>/dev/null); then ' +
+      'printf "PAPERLESS_COMPOSE_PROJECTS=%s\n" "$projects"; fi; true';
+    // Encode the shell command to carry its quotes through Windows PowerShell and OpenSSH.
+    // Den Shellbefehl kodieren, damit PowerShell und OpenSSH seine Anführungszeichen erhalten.
+    RemoteCommand := 'printf %s ' +
+      TNetEncoding.Base64String.EncodeBytesToString(TEncoding.UTF8.GetBytes(RemoteCommand)) +
+      ' | base64 -d | sh';
+  end;
   Lines := TStringList.Create;
   try
     Lines.Add('$ErrorActionPreference = ''Stop''');
     Lines.Add('$result = ''unknown''');
+    Lines.Add('$detectedProject = ''''');
+    Lines.Add('$composeFile = ' + PsLiteral(ComposeFile));
+    Lines.Add('$remoteCommand = ' + PsLiteral(RemoteCommand));
+    Lines.Add('[Console]::OutputEncoding = New-Object Text.UTF8Encoding($false)');
     if ConfirmFingerprint then Lines.Add('$confirmFingerprint = $true')
     else Lines.Add('$confirmFingerprint = $false');
     Lines.Add('$tempKeys = $PSCommandPath + ''.hosts''');
@@ -91,7 +112,7 @@ begin
     Lines.Add('  $a = @($baseArgs)');
     Lines.Add('  if ($hostFile) { $a += @(''-o'', (''UserKnownHostsFile="'' + $hostFile + ''"''), ''-o'', ''GlobalKnownHostsFile=none'') }');
     Lines.Add('  if ($confirmedFingerprints) { $a += ''-v'' }');
-    Lines.Add('  $a += @($serverHost, ''true'')');
+    Lines.Add('  $a += @($serverHost, $remoteCommand)');
     Lines.Add('  $old = $ErrorActionPreference; $ErrorActionPreference = ''Continue''');
     Lines.Add('  try { $output = & ssh.exe @a 2>&1; $code = $LASTEXITCODE } finally { $ErrorActionPreference = $old }');
     Lines.Add('  $detail = ($output | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine');
@@ -102,6 +123,27 @@ begin
     Lines.Add('      if (-not $negotiated.Count) { return ''hostkey'' }');
     Lines.Add('      $hash = $negotiated[$negotiated.Count-1].Groups[1].Value');
     Lines.Add('      if ($hash -cnotin ($confirmedFingerprints -split ''\s+'')) { return ''changed_host'' }');
+    Lines.Add('    }');
+    // A project must match the configured primary Compose file and be unique.
+    // Das Projekt muss eindeutig zur eingetragenen Haupt-Compose-Datei passen.
+    Lines.Add('    if ($composeFile.StartsWith(''/'')) {');
+    Lines.Add('      $script:detectedProject = ''?''');
+    Lines.Add('      $paths = @($composeFile)');
+    Lines.Add('      $projectsJson = $null');
+    Lines.Add('      foreach ($line in $output) {');
+    Lines.Add('        if ($line -isnot [string]) { continue }');
+    Lines.Add('        if ($line.StartsWith(''PAPERLESS_COMPOSE_PATH='')) { $paths += $line.Substring(23) }');
+    Lines.Add('        if ($line.StartsWith(''PAPERLESS_COMPOSE_PROJECTS='')) { $projectsJson = $line.Substring(27) }');
+    Lines.Add('      }');
+    Lines.Add('      if ($projectsJson) {');
+    Lines.Add('        try {');
+    Lines.Add('          $names = @((ConvertFrom-Json -InputObject $projectsJson) | Where-Object {');
+    Lines.Add('            $_.Name -cmatch ''^[a-z0-9][a-z0-9_-]*$'' -and');
+    Lines.Add('            (([string]$_.ConfigFiles -cin $paths) -or (([string]$_.ConfigFiles -csplit '','', 2)[0] -cin $paths))');
+    Lines.Add('          } | Select-Object -ExpandProperty Name -Unique)');
+    Lines.Add('          $script:detectedProject = if ($names.Count -eq 1) { $names[0] } elseif ($names.Count -gt 1) { ''*'' } else { '''' }');
+    Lines.Add('        } catch {}');
+    Lines.Add('      }');
     Lines.Add('    }');
     Lines.Add('    return ''success''');
     Lines.Add('  }');
@@ -220,6 +262,7 @@ begin
 // Publish the result unless cancelled, then remove temporary files.
 // Das Ergebnis außer bei Abbruch bereitstellen und temporäre Dateien entfernen.
     Lines.Add('finally {');
+    Lines.Add('  if ($result -eq ''success'' -and $detectedProject) { $result += ''|'' + $detectedProject }');
     Lines.Add('  if (-not (Test-Path -LiteralPath $cancelPath)) { try { [IO.File]::WriteAllText($resultPath, $result, [Text.Encoding]::UTF8) } catch {} }');
     Lines.Add('  Remove-Item -LiteralPath $promptPath, ($promptPath + ''.tmp''), $decisionPath, ($decisionPath + ''.tmp'') -Force -ErrorAction SilentlyContinue');
     Lines.Add('  Remove-Item -LiteralPath $tempKeys -Force -ErrorAction SilentlyContinue');

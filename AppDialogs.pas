@@ -35,7 +35,7 @@ function CenteredSelectDirectory(const Caption: string; var Directory: string): 
 function CenteredSelectListItem(const Caption, Prompt: string; const Items: TArray<string>;
   out ItemIndex: Integer): Boolean;
 procedure CenteredShowMessage(const Msg: string);
-function CenteredMessageDlg(const Msg: string; DlgType: TMsgDlgType; Buttons: TMsgDlgButtons; HelpCtx: Longint): Integer;
+function CenteredMessageDlg(const Msg: string; DlgType: TMsgDlgType; Buttons: TMsgDlgButtons; HelpCtx: Longint; NoFirst: Boolean = False): Integer;
 function CenteredMessageBox(const Text, Caption: string; Flags: Cardinal): Integer;
 function RequestPasswordDialog(const DialogCaption, Prompt: string; const ConfirmPassword: Boolean; out Password: string; const CancelButtonCaption: string = 'Abbrechen'): Integer;
 function RequestPasswordOrSkipDialog(const DialogCaption, Prompt, SkipButtonCaption: string; out Password: string): Integer;
@@ -163,10 +163,12 @@ begin
 end;
 
 // Einen zentrierten VCL-Meldungsdialog anzeigen und die gewählte Schaltfläche zurückgeben.
-function CenteredMessageDlg(const Msg: string; DlgType: TMsgDlgType; Buttons: TMsgDlgButtons; HelpCtx: Longint): Integer;
+function CenteredMessageDlg(const Msg: string; DlgType: TMsgDlgType; Buttons: TMsgDlgButtons; HelpCtx: Longint; NoFirst: Boolean): Integer;
 var
   Dialog: TForm;
   DialogButtons: TMsgDlgButtons;
+  YesButton, NoButton: TButton;
+  I, SavedLeft, SavedTabOrder: Integer;
 begin
   DialogButtons := Buttons;
   // Allow closing decision dialogs without treating X as Yes or No.
@@ -176,6 +178,32 @@ begin
   Dialog := CreateMessageDialog(Msg, DlgType, DialogButtons);
   try
     Dialog.HelpContext := HelpCtx;
+    // Nur auf ausdrücklichen Wunsch: Nein links und als Standardauswahl.
+    if NoFirst then
+    begin
+      YesButton := nil;
+      NoButton := nil;
+      for I := 0 to Dialog.ComponentCount - 1 do
+        if Dialog.Components[I] is TButton then
+        begin
+          if TButton(Dialog.Components[I]).ModalResult = mrYes then
+            YesButton := TButton(Dialog.Components[I]);
+          if TButton(Dialog.Components[I]).ModalResult = mrNo then
+            NoButton := TButton(Dialog.Components[I]);
+        end;
+      if Assigned(YesButton) and Assigned(NoButton) then
+      begin
+        SavedLeft := YesButton.Left;
+        YesButton.Left := NoButton.Left;
+        NoButton.Left := SavedLeft;
+        SavedTabOrder := YesButton.TabOrder;
+        YesButton.TabOrder := NoButton.TabOrder;
+        NoButton.TabOrder := SavedTabOrder;
+        YesButton.Default := False;
+        NoButton.Default := True;
+        Dialog.ActiveControl := NoButton;
+      end;
+    end;
     PrepareModalDialog(Dialog);
     Result := Dialog.ShowModal;
   finally
@@ -546,7 +574,7 @@ begin
   Dialog := CreateMessageDialog(
     'Wo möchten Sie Paperless einrichten?' + sLineBreak + sLineBreak +
     'Lokal: Paperless auf diesem PC mit Docker Desktop installieren.' + sLineBreak +
-    'Server: Paperless auf einem entfernten Server einrichten.',
+    'Server: Paperless auf einem Server installieren.',
     mtConfirmation, [mbYes, mbNo], mbYes, ['Lokal', 'Server']);
   try
     Dialog.Caption := 'Paperless einrichten';

@@ -768,7 +768,7 @@ begin
       KeyFile := Trim(Ini.ReadString('Paperless Extern', 'SSH-Key-Datei', ''));
       Auth := Ini.ReadString('Paperless Extern', 'Anmeldung', 'Passwort');
       ComposeFile := RemoteComposeFile(Ini.ReadString('Paperless Extern', 'Compose-Datei', ''));
-      Project := Trim(Ini.ReadString('Paperless Extern', 'Compose-Projekt', ''));
+      Project := ServerComposeProjectOrDefault(Ini.ReadString('Paperless Extern', IniKeyServerComposeProject, ''));
       SavedBackupFolder := Ini.ReadString('Paperless Extern', IniKeyServerBackupFolder, DefaultServerBackupFolder);
     finally
       Ini.Free;

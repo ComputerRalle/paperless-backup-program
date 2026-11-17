@@ -50,6 +50,7 @@ const
   // Den Installationsport auch für Compose und als Vorgabe für den Browser verwenden.
   ServerInstallWebPort = 8000;
   IniKeyServerWebPort = 'Web-Port';
+  IniKeyServerComposeProject = 'Compose-Projekt';
   // Default and settings key for the backup directory on the external Linux server.
   // Vorgabe und Einstellungsschlüssel für das Sicherungsverzeichnis auf dem externen Linux-Server.
   DefaultServerBackupFolder = '/srv/paperless_backup';
@@ -135,6 +136,7 @@ const
   ProgramDownloadUrl = 'https://downloads.ralf-peter-kleinert.de/software/paperless-backup-programm.html';
   ChangelogUrl = ProgramDownloadUrl + '#_Changelog';
 
+function ServerComposeProjectOrDefault(const Value: string): string;
 function InstallationFolderUnderParent(const ParentFolder: string): string;
 function DefaultInstallationFolder: string;
 function InstallationPathIniFile: string;
@@ -149,6 +151,14 @@ function NoticeReminderDue(const InstallationDate, LastAccepted, Today: TDateTim
 implementation
 
 uses System.SysUtils, System.DateUtils, System.IOUtils, Winapi.Windows;
+
+// Use the standard server project when no name has been entered.
+// Ohne eingetragenen Namen das Standardprojekt für den Server verwenden.
+function ServerComposeProjectOrDefault(const Value: string): string;
+begin
+  Result := Trim(Value);
+  if Result = '' then Result := ComposeProjectName;
+end;
 
 // Reserve the script atomically and advance by one second when the timestamp is occupied.
 // Den Skriptnamen atomar reservieren und bei belegtem Zeitstempel zur nächsten Sekunde wechseln.

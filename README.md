@@ -1,5 +1,31 @@
 ﻿# Paperless Backup Programm
 
+## Erststartdialoge – 17.11.2026
+
+Die Betriebsartauswahl verwendet **Lokal** und **Server**. Der Beschreibungstext lautet **„Server: Paperless auf einem Server installieren.“** Die Auswahl führt nach der Laufzeitpfadwahl zu den Servereinstellungen; die eigentliche Installation wird dort gesondert gestartet.
+
+Bei **„Möchten Sie den Installationspfad ändern?“** lautet die Reihenfolge **Nein, Ja, Abbrechen**. **Nein** erhält den Fokus und ist die Standardaktion für Enter; es verwendet den Standardordner. **Ja** öffnet die Ordnerauswahl. Abbrechen und Schließen beenden die Pfadwahl. Andere Dialoge behalten ihre Reihenfolge.
+
+## Aktueller Entwicklungsstand / Current development status – 17.11.2026
+
+Stand des Quellcodes: **17.11.2026**, Programmversion **6.26.11.100** in **Win64 Debug**, Entwicklung mit **Delphi 13 / VCL**. Verbindlicher Projektpfad: `C:\Users\konta\Documents\ComputerRalle Entwicklungen\paperless-backup-program`. Ältere datierte Abschnitte dokumentieren frühere Zustände; ihre Pfade, Versionswerte und Prüfungen gelten nicht als aktueller Sollstand.
+
+Die Betriebsarten sind **Lokal** (Docker Desktop) und **Server** (Docker über SSH). Serverinstallation auf Debian 13, Backup, Restore, Upload, Download und Update sind implementiert. Die externe Zeitplanung bleibt offen. Lokale Zeitpläne starten `paperless-backup-geplant.ps1` direkt über `powershell.exe`.
+
+Programmstandards: Paperless-ngx **3.4.2**, PostgreSQL **18**, Valkey **9-alpine**, Gotenberg **8**, Tika **3.2.3.0**, Alpine **3**, BusyBox **1**. Gespeicherte eigene Image-Tags und die tatsächlich laufenden Images sind davon zu unterscheiden. Servervorgaben: `/opt/paperless`, Projekt `paperless-ngx-pg18`, Webport `8000`, Backupziel `/srv/paperless_backup`; lokaler Webport `8001`.
+
+Beim Serverstart und Speichern der Serverdaten erkennt die SSH-Prüfung den Compose-Projektnamen anhand der Haupt-Compose-Datei aus laufenden und gestoppten Projekten. Nur ein eindeutiger Treffer ersetzt den gespeicherten Namen. Mehrdeutigkeit oder Abfragefehler lassen ihn unverändert. Serveraktionen können erst nach Abschluss der Prüfung gestartet werden.
+
+Der lokale Compose-Schutz erhält eine vorhandene Compose-Datei. Generierte PowerShell-Skripte werden weiterhin aktualisiert. Eigene Dateien unter `scripts` bleiben erhalten, gehören aber nicht zu den regulären Backup-/Restorearchiven. Die Mastervorlage protokolliert einen UTC-Zeitpunkt in `script-test.log`.
+
+Die Aufbewahrung greift erst nach einer vollständig freigegebenen lokalen Sicherung und berücksichtigt ausschließlich markierte lokale Backups. Geplante Sicherungen enthalten SQL und die Archive von `data`, `media` und `export`, gegebenenfalls Maildatei und Schlüssel; sie erzeugen keine neue Imageversionsdatei und kein physisches DB-Archiv. Serverübertragungen prüfen Dateigrößen und SHA-256 vor der Freigabe.
+
+Der aktuelle Win64-IDE-Build und vollständige Laufzeitprüfungen der jüngsten Änderungen stehen aus. Ältere erfolgreiche Builds und einzelne bestätigte Wiederherstellungen ersetzen diese Prüfungen nicht. Diese Dokumentationspflege führt keine Installation, Serveraktion oder Veröffentlichung aus.
+
+Die ODT-Benutzeranleitung enthält die gelieferten Version-6-Bilder. Inhaltsverzeichnis-Seitenzahlen und visuelle Layoutkontrolle sind noch offen. Keine neue PDF-Fassung.
+
+English: Version 6.26.11.100 targets Delphi 13 / Win64. Remote installation, backup, restore, transfer and updates are implemented; remote scheduling remains open. The latest build and full runtime validation are pending. The ODT includes the supplied version-6 screenshots; its table-of-contents page numbers and visual layout still need review.
+
 ## Fenster und Dialoge
 
 Der aktuelle Projektstand ist **6.26.11.100** (Win64 Debug). Das Hauptfenster und das Fenster für die Ersteinrichtung öffnen auf dem in Windows festgelegten Hauptmonitor. Meldungen, Passwortabfragen und die Ordnerauswahl erscheinen mittig vor dem Fenster, aus dem Sie sie aufrufen. Das gilt auch, wenn dieses Fenster auf einen zweiten Monitor verschoben wurde.
@@ -56,6 +82,8 @@ Der Ablauf braucht Zugriff auf den lokalen Docker-Daemon und die gemeinsame Serv
 
 ### Server einrichten und sichern
 
+**Compose-Projektname** ist mit `paperless-ngx-pg18` vorbelegt und bearbeitbar. Beim Start im Servermodus und bei **Serverdaten Speichern** prüft das Programm laufende und gestoppte Projekte. Gehört die Haupt-Compose-Datei im eingetragenen Ordner eindeutig zu einem Projekt, übernimmt das Programm dessen Namen und speichert ihn für spätere Serveraktionen. Ohne eindeutigen Treffer gilt der gespeicherte Name. Das Ergebnis steht bei den Serverdaten.
+
 **Paperless im Browser aufrufen** verwendet im Servermodus die gespeicherte IP-Adresse oder den Hostnamen und den **Paperless-Webport**. Der Standard ist 8000. Bei einem abweichenden Docker-Hostport den Wert unter **Einstellungen → Paperless Extern** eintragen und mit **Serverdaten Speichern** übernehmen.
 
 1. Unter **Einstellungen → Paperless Extern** die Serververbindung und den Backupordner eintragen und **Serverdaten Speichern** wählen. Der Standardpfad ist `/srv/paperless_backup`. **Backupordner anlegen** prüft nach Bestätigung den freien Platz am Ziel oder am nächsten vorhandenen Elternordner und legt den Ordner anschließend per SSH an.
@@ -90,7 +118,7 @@ Die erzeugten PowerShell-Skripte bleiben pro Aufruf unter `Server` im Windows-La
 
 Die Statusabfrage für das Server-Backup verwendet Compose-Datei, Projekt und Backupziel. Das Downloadangebot nach einem erfolgreichen Lauf gehört zum zugehörigen Backupcontainer.
 
-## Stand / Status – 08.10.2026
+## Historischer Stand / Historical status – 08.10.2026
 
 Version **5.26.10.100 ist veröffentlicht**. Die feste Skriptanbindung unten ist eine spätere, noch unveröffentlichte Quellcodeänderung dieses Chats. Keine neue Versionsnummer festgelegt.
 
@@ -101,15 +129,15 @@ Version **5.26.10.100 has been published**. The fixed script integration below i
 
 **[Software für Windows herunterladen / Download the Windows software](https://downloads.ralf-peter-kleinert.de/software/paperless-backup-programm.html)**
 
-Paperless Backup Programm is a Delphi/VCL helper for Windows systems running
-Paperless-ngx with Docker Desktop. It can install Paperless-ngx, create backups,
-restore backups, prepare scheduled backups, and manage selected Docker image
-versions from one desktop application.
+Paperless Backup Programm is a Delphi/VCL application for Windows. It manages
+Paperless-ngx locally with Docker Desktop or on a Docker server over SSH:
+installation, backup, restore, transfers and image updates. Scheduled backups
+are currently available for local installations.
 
-Paperless Backup Programm ist ein Delphi/VCL-Hilfsprogramm fuer Windows-Systeme,
-auf denen Paperless-ngx mit Docker Desktop laeuft. Es kann Paperless-ngx
-installieren, Backups erstellen, Backups wiederherstellen, geplante Backups
-vorbereiten und ausgewaehlte Docker-Image-Versionen verwalten.
+Paperless Backup Programm ist eine Delphi/VCL-Anwendung für Windows. Sie verwaltet
+Paperless-ngx lokal mit Docker Desktop oder auf einem Docker-Server über SSH:
+Installation, Backup, Wiederherstellung, Übertragung und Image-Updates.
+Geplante Backups stehen derzeit für lokale Installationen zur Verfügung.
 
 ## Features / Funktionen
 
@@ -121,8 +149,8 @@ vorbereiten und ausgewaehlte Docker-Image-Versionen verwalten.
 - Windows-Aufgaben fuer automatische Backups erstellen.
 - Generate and update `docker-compose.yml` for Paperless-ngx.
 - `docker-compose.yml` fuer Paperless-ngx erzeugen und aktualisieren.
-- Save Docker image versions with backups for later compatibility checks.
-- Docker-Image-Versionen mit Backups speichern, um spaeter die Kompatibilitaet pruefen zu koennen.
+- Save Docker image versions with manual backups for later compatibility checks; scheduled local backups do not generate a new version file.
+- Docker-Image-Versionen mit manuellen Backups speichern; geplante lokale Backups erzeugen keine neue Versionsdatei.
 - Configure Paperless mail settings through `email-versand.env`.
 - Paperless-Mail-Einstellungen ueber `email-versand.env` konfigurieren.
 - Store Paperless mail settings in backups as encrypted `email-versand.env.enc`.
@@ -130,10 +158,11 @@ vorbereiten und ausgewaehlte Docker-Image-Versionen verwalten.
 
 ## Requirements / Voraussetzungen
 
-- Windows
-- Docker Desktop
-- Delphi with VCL support for building from source
-- A working Paperless-ngx Docker setup, or Docker Desktop ready for first setup
+- Windows als Bedienrechner / Windows client.
+- Lokal: Docker Desktop mit Linux-Containern / Local mode: Docker Desktop with Linux containers.
+- Server: Windows-OpenSSH-Werkzeuge und ein erreichbarer Linux-Docker-Server mit Compose und passenden SSH-Rechten. Docker Desktop ist hierfür nicht erforderlich. / Server mode: Windows OpenSSH tools and a reachable Linux Docker/Compose host with appropriate SSH permissions; Docker Desktop is not required.
+- Neuinstallation über die Serverfunktion: Debian 13 (amd64), Anmeldung als root. / Remote installation: Debian 13 (amd64), root login.
+- Zum Kompilieren: Delphi 13 mit VCL, Ziel Win64. / To build: Delphi 13 with VCL, Win64 target.
 
 Die Anwendung verwendet ausschließlich die mit Delphi mitgelieferten VCL-/RTL-Komponenten. Zusätzliche Komponenten oder Komponentenpakete von Drittanbietern müssen nicht installiert werden.
 
@@ -242,12 +271,13 @@ Beim Erzeugen der Compose-Datei legt das Programm scripts im gewählten PG18-Ins
 
 ~~~sh
 #!/bin/sh
+date -u >> /usr/src/paperless/scripts/script-test.log
 exit 0
 ~~~
 
-Die tatsächliche Vorlage enthält zusätzlich Kommentare. Ohne eigene Ergänzungen tut sie nichts. Vorhandene Skripte bleiben erhalten. Keine Aktivierungs-Checkbox.
+Die tatsächliche Vorlage enthält zusätzlich zweisprachige Kommentare. Sie protokolliert bei jedem Aufruf einen UTC-Zeitpunkt in script-test.log. Vorhandene Skripte bleiben erhalten. Keine Aktivierungs-Checkbox.
 
-When generating Compose, the program creates scripts in the selected PG18 folder and a missing master_pre_consume.sh as a harmless template. Existing scripts are preserved; there is no activation checkbox.
+When generating Compose, the program creates scripts in the selected PG18 folder and a missing master_pre_consume.sh as a template that logs a UTC timestamp to script-test.log. Existing scripts are preserved; there is no activation checkbox.
 
 Der Dienst paperless erhält immer folgenden Mount und Hook (Ausschnitt):
 
@@ -266,26 +296,14 @@ Vorhandene Installationen: Projekt neu erstellen, neue EXE einsetzen und Einstel
 
 For existing installations, rebuild the project, deploy the new EXE and save settings with restart/update confirmed. This workflow may update Docker images. scripts is outside existing backup/restore archives; back up custom scripts separately.
 
-Isolierter Win32-Build und Generatorprüfungen erfolgreich; echte GUI-/Docker-Ausführung steht aus. / Isolated Win32 build and generator checks passed; actual GUI/Docker execution remains untested.
+Historische Win32-Generatorprüfungen sind dokumentiert. Für den aktuellen Stand stehen Win64-IDE-Build und vollständige Praxistests aus. / Historical Win32 generator checks are documented; the current Win64 IDE build and full runtime tests remain pending.
 
-## Eigene Bearbeitungen schützen – Stand 25.10.2026
+## Eigene Compose-Bearbeitungen schützen – Stand 17.11.2026
 
-Im Tab **Einstellungen** sitzt unter Paperless-Version und rechts neben Tika-Version die Checkbox **„Scripte und compose.yml für eigene Bearbeitung sperren“** (`MainformFrm`, `SettingsPan`, `ProtectCustomFilesCB`). Sie ist standardmäßig ausgeschaltet und unabhängig von der Versionsfreigabe. Die Auswahl wird mit **Einstellungen Speichern** dauerhaft übernommen und beim nächsten Start geladen.
+Im Tab **Einstellungen** schützt die entsprechende Checkbox eine vorhandene Compose-Datei vor automatischem Überschreiben. Aktivieren und mit **Einstellungen Speichern** übernehmen. Fehlende Dateien können angelegt werden. Generierte PowerShell-Skripte werden weiterhin aktualisiert; eigene Änderungen darin können verloren gehen. Eigene Dateien unter `scripts` bleiben erhalten.
 
-Beim Aktivieren erklärt ein Ja/Nein-Warnfenster die Verantwortung für die eigene Dateipflege. Vorhandene `docker-compose.yml` und vom Programm erzeugte PowerShell-Skripte werden bei gespeichertem Schutz weder überschrieben noch als Einmalskripte nach dem Lauf gelöscht. Fehlende Dateien können weiterhin angelegt werden. Eigene Dateien unter `scripts` bleiben wie bisher erhalten. Es gibt keine Umleitung in einen anderen Arbeitsordner.
+Beim Aufheben des Schutzes zeigt die Anwendung den Sicherungsordner zur Bestätigung. **Nein** erhält den Schutz. **Ja** kopiert vorhandene `.ps1`, `.cmd`, `.bat`, `.sh`, `docker-compose.yml`, `compose.yml` sowie den vollständigen Unterordner `scripts` nach `<Installationsordner>\Eigene Bearbeitungen Backup\yyyy-mm-dd_hh-nn-ss`. Bei Kollision oder Kopierfehler bleibt der Schutz aktiv; eine teilweise angelegte Sicherung bleibt erhalten. Erst **Einstellungen Speichern** übernimmt das Aufheben dauerhaft.
 
-Backup, Wiederherstellung und Updates führen weiterhin die vorhandenen Dateien aus. Deshalb müssen Pfade, Backupziele, Wiederherstellungsquellen, Imageversionen und weitere Angaben darin selbst gepflegt werden. Änderungen in der Oberfläche werden nicht automatisch in geschützte Dateien eingetragen. Nach eigenen Änderungen **Einstellungen Speichern** anklicken und den Neustart bestätigen; der vorhandene Installations-/Updateablauf verwendet die Dateien und kann weiterhin Dockeraktionen und Image-Downloads ausführen.
+Diese Dateisicherung ersetzt kein Paperless-Datenbackup. INI und separate Maildatei gehören nicht dazu. Reguläre Paperless-Backups enthalten `scripts` nicht; eigene Skripte separat sichern. Beim lokalen Update mit Schutz bleibt die eigene Compose-Datei maßgeblich. Im Servermodus bildet die aktuelle Server-Compose-Datei die Grundlage; nur ausdrücklich bearbeitete Image-Tags werden geändert.
 
-Beim Entfernen des Häkchens erscheint vorab eine zweite Ja/Nein-Warnung mit dem vollständigen Sicherungsordner. **Nein** lässt den Haken gesetzt. **Ja** kopiert zuerst:
-
-- vorhandene `.ps1`, `.cmd`, `.bat` und `.sh` im Installationsordner;
-- `docker-compose.yml` und eine gegebenenfalls vorhandene `compose.yml`;
-- sämtliche Dateien unter `scripts`, einschließlich der Unterordnerstruktur und Hilfsdateien.
-
-Ziel ist `<Installationsordner>\Eigene Bearbeitungen Backup\yyyy-mm-dd_hh-nn-ss`, beispielsweise `2026-10-25_14-30-00`. Es gibt keine ID und keinen zusätzlichen Namenszusatz. Vorhandene Sicherungen werden nicht überschrieben. Existiert derselbe Zeitstempel bereits, bleibt der Schutz erhalten; erneut versuchen. Quellen werden nur kopiert, Dateiinhalte nicht neu codiert. Andere Dateien wie Einstellungen.ini und die separate Maildatei gehören nicht zu dieser Sicherung; diese ersetzt kein Paperless-Datenbackup und keine bisherige Backup-/Restorefunktion.
-
-Nach erfolgreichem Kopieren nennt eine Meldung den tatsächlichen Sicherungsordner. Erst **Einstellungen Speichern** übernimmt die aufgehobene Sperre. Bei Kopierfehler wird der Haken wieder gesetzt; eine Fehlermeldung erscheint und eine teilweise angelegte Sicherung bleibt erhalten. Der vorbeugende Hinweis auf Kopierfehler wurde auf Benutzerwunsch aus beiden Warnfenstern entfernt; die Fehlerbehandlung bleibt bestehen. Laden gespeicherter Einstellungen und Nein im Aktivierungsfenster erzeugen keine Sicherung und keine erneute Aktivierungswarnung.
-
-Prüfstand: Codepfade, Ereignisbindung, Dateiformate und Diffs statisch geprüft. Die lokale Delphi-13-Ausgabe unterstützt keinen Kommandozeilenbuild; IDE-Build erforderlich. Kein GUI-, tatsächlicher Delphi-Dateikopier- oder Dockerlauf durch diesen Chat. Keine Veröffentlichung und keine neue Programmversion bestätigt.
-
-English: The saved settings checkbox preserves existing Compose and generated PowerShell files for manual maintenance. Disabling it requires confirmation and copies root scripts, Compose and the complete scripts file tree into a timestamp-only backup directory before unlocking can be saved. Failures keep protection enabled. Existing files still control backup, restore and update behavior. Static checks only; build and runtime verification in Delphi remain required.
+English: Protection preserves an existing Compose file. Generated PowerShell scripts are still updated. Disabling protection requires confirmation and first backs up root scripts, Compose files and the full `scripts` tree. Failures retain protection. This file copy is not a Paperless data backup; custom scripts require separate backup.
