@@ -280,7 +280,7 @@ end;
 procedure TSetupFrm.FormShow(Sender: TObject);
 begin
   if ApplicationClosing or Application.Terminated then Exit;
-  CenterFormOnApplication(Self);
+  CenterFormOnPrimaryMonitor(Self);
   TerminateApplicationOnClose := True;
   WantsInstall := False;
   DockerAvailable := False;

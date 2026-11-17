@@ -18,7 +18,8 @@ object MainformFrm: TMainformFrm
   Font.Height = -15
   Font.Name = 'Verdana'
   Font.Style = []
-  Position = poDesktopCenter
+  DefaultMonitor = dmPrimary
+  Position = poScreenCenter
   OnClose = FormClose
   OnCreate = FormCreate
   OnShow = FormShow

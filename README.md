@@ -1,5 +1,9 @@
 ﻿# Paperless Backup Programm
 
+## Fenster und Dialoge
+
+Der aktuelle Projektstand ist **6.26.11.100** (Win64 Debug). Das Hauptfenster und das Fenster für die Ersteinrichtung öffnen auf dem in Windows festgelegten Hauptmonitor. Meldungen, Passwortabfragen und die Ordnerauswahl erscheinen mittig vor dem Fenster, aus dem Sie sie aufrufen. Das gilt auch, wenn dieses Fenster auf einen zweiten Monitor verschoben wurde.
+
 ## Erststart und Betriebsart
 
 Beim ersten Start ohne bestätigten Laufzeitordner wählen Sie **Lokal** oder **Server**. **Lokal** führt zur Einrichtung mit Docker Desktop. Bei **Server** wählen Sie den Windows-Laufzeitordner. Anschließend öffnet das Programm **Einstellungen**, scrollt zu **Servereinstellungen Paperless Extern** und setzt den Fokus ins Hostfeld. Schließen Sie den Auswahldialog, endet der Start.

@@ -21,7 +21,7 @@
 // or check LICENSE.txt in this repository.
 // --------------------------------------------------------------
 
-// Gemeinsame Meldungs-, Passwort- und Ordnerdialoge. Alle werden am Hauptfenster ausgerichtet; vor dessen Anzeige dient der Monitor-Arbeitsbereich als Bezug.
+// Gemeinsame Meldungs-, Passwort- und Ordnerdialoge über ihrem Besitzerfenster.
 unit AppDialogs;
 
 interface
@@ -29,7 +29,7 @@ interface
 uses
   Winapi.Windows, Vcl.Dialogs, Vcl.Forms;
 
-procedure CenterFormOnApplication(const Dialog: TForm);
+procedure CenterFormOnPrimaryMonitor(const Dialog: TForm);
 function CenteredFolderDialogExecute(const Dialog: TFileOpenDialog): Boolean;
 function CenteredSelectDirectory(const Caption: string; var Directory: string): Boolean;
 function CenteredSelectListItem(const Caption, Prompt: string; const Items: TArray<string>;
@@ -46,16 +46,23 @@ function RequestSshFingerprintDialog(const Endpoint, Fingerprints: string; Allow
 implementation
 
 uses
-  System.SysUtils, System.Types, Winapi.MultiMon, Vcl.Controls, Vcl.StdCtrls;
+  System.SysUtils, System.Types, Vcl.Controls, Vcl.StdCtrls;
 
 threadvar
   MessageBoxHook: HHOOK;
-  MessageBoxOwnerHandle: HWND;
+  NativeDialogOwner: HWND;
 
-// Vorwärtsdeklaration für die gemeinsame Auswahl des Bezugsfensters.
-function ActivePopupParent: TCustomForm; forward;
+// Prefer the active application form, including an open setup or modal dialog.
+// Das aktive Programmfenster bevorzugen, auch ein geöffnetes Setupfenster oder einen modalen Dialog.
+function ActivePopupParent: TCustomForm;
+begin
+  Result := Screen.ActiveCustomForm;
+  if Assigned(Result) and Result.HandleAllocated and IsWindowVisible(Result.Handle) then Exit;
+  Result := Application.MainForm;
+  if Assigned(Result) and Result.HandleAllocated then Exit;
+  Result := nil;
+end;
 
-// Liefert das Fensterhandle des Dialogbezugs; ohne geeignetes Formular wird das Application-Handle verwendet.
 function ActiveFormHandle: HWND;
 var
   PopupParent: TCustomForm;
@@ -65,49 +72,37 @@ begin
   else Result := Application.Handle;
 end;
 
-// Bevorzugt das Hauptfenster, damit die Zentrierung bei aktivem Setup- oder Passwortdialog nicht wandert.
-// Falls noch kein Hauptfensterhandle vorhanden ist, dient das aktive Formular als Rückfall.
-function ActivePopupParent: TCustomForm;
-begin
-  Result := Application.MainForm;
-  if Assigned(Result) and Result.HandleAllocated then Exit;
-  Result := Screen.ActiveCustomForm;
-  if Assigned(Result) and Result.HandleAllocated then Exit;
-  Result := nil;
-end;
-// Verwendet die tatsächlichen Bildschirmkoordinaten des sichtbaren Bezugsfensters.
-// Vor dessen Anzeige gilt die Monitor-Arbeitsfläche, da die VCL-Startposition noch nicht endgültig ist.
-function OwnerFormRect(const OwnerHandle: HWND): TRect;
+function PrimaryWorkArea: TRect;
 var
-  MonitorInfo: TMonitorInfo;
+  PrimaryMonitor: TMonitor;
 begin
-  if (OwnerHandle <> 0) and IsWindowVisible(OwnerHandle) and
-     GetWindowRect(OwnerHandle, Result) then Exit;
-
-  // Vor Anzeige des Hauptfensters dessen Monitor-Arbeitsbereich verwenden.
-  MonitorInfo.cbSize := SizeOf(MonitorInfo);
-  if GetMonitorInfo(MonitorFromWindow(OwnerHandle, MONITOR_DEFAULTTONEAREST),
-    @MonitorInfo) then
-    Result := MonitorInfo.rcWork
+  PrimaryMonitor := Screen.PrimaryMonitor;
+  if Assigned(PrimaryMonitor) then
+    Result := PrimaryMonitor.WorkareaRect
   else
     Result := Screen.WorkAreaRect;
 end;
 
-// Berechnet die Mitte anhand der aktuellen Fenstergröße. VCL-Fenster erhalten synchronisierte Bounds; native Dialoge werden über SetWindowPos verschoben.
-procedure CenterWindowOnOwner(WindowHandle, OwnerHandle: HWND);
+// Use the visible owner's bounds, or the primary work area during startup.
+// Über dem sichtbaren Besitzerfenster zentrieren, beim Start ersatzweise auf dem Hauptmonitor.
+function DialogAnchorRect(OwnerHandle: HWND): TRect;
+begin
+  if IsWindowVisible(OwnerHandle) and not IsIconic(OwnerHandle) and
+     GetWindowRect(OwnerHandle, Result) then Exit;
+  Result := PrimaryWorkArea;
+end;
+
+procedure CenterWindowInRect(WindowHandle: HWND; const Anchor: TRect);
 var
-  OwnerRect, DialogRect: TRect;
+  DialogRect: TRect;
   DialogWidth, DialogHeight, NewLeft, NewTop: Integer;
   Control: TWinControl;
 begin
-  if WindowHandle = 0 then Exit;
-
-  OwnerRect := OwnerFormRect(OwnerHandle);
-  GetWindowRect(WindowHandle, DialogRect);
-  DialogWidth := DialogRect.Right - DialogRect.Left;
-  DialogHeight := DialogRect.Bottom - DialogRect.Top;
-  NewLeft := OwnerRect.Left + ((OwnerRect.Right - OwnerRect.Left) - DialogWidth) div 2;
-  NewTop := OwnerRect.Top + ((OwnerRect.Bottom - OwnerRect.Top) - DialogHeight) div 2;
+  if not GetWindowRect(WindowHandle, DialogRect) then Exit;
+  DialogWidth := DialogRect.Width;
+  DialogHeight := DialogRect.Height;
+  NewLeft := Anchor.Left + (Anchor.Width - DialogWidth) div 2;
+  NewTop := Anchor.Top + (Anchor.Height - DialogHeight) div 2;
 
   // VCL-Koordinaten mitführen, damit die Anzeige die berechnete Position beibehält.
   Control := FindControl(WindowHandle);
@@ -119,19 +114,25 @@ end;
 
 // Legt PopupParent und Position vor ShowModal fest und hält den Dialog vor der Anwendung.
 // Position darf nicht während OnShow/OnHide geändert werden, da dies das Fenster neu erzeugen kann.
-procedure PrepareModalDialog(const Dialog: TForm; const OwnerHandle: HWND);
+procedure PrepareModalDialog(const Dialog: TForm);
 var
   PopupParent: TCustomForm;
+  OwnerHandle: HWND;
 begin
   Dialog.Position := poDesigned;
+  // Keep the computed position when VCL shows the dialog.
+  // Die berechnete Position beim Anzeigen durch die VCL beibehalten.
+  Dialog.DefaultMonitor := dmDesktop;
+  OwnerHandle := 0;
   PopupParent := ActivePopupParent;
   if Assigned(PopupParent) then
   begin
     Dialog.PopupMode := pmExplicit;
     Dialog.PopupParent := PopupParent;
+    OwnerHandle := PopupParent.Handle;
   end;
   Dialog.FormStyle := fsStayOnTop;
-  CenterWindowOnOwner(Dialog.Handle, OwnerHandle);
+  CenterWindowInRect(Dialog.Handle, DialogAnchorRect(OwnerHandle));
   SetWindowPos(Dialog.Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE);
   SetForegroundWindow(Dialog.Handle);
 end;
@@ -142,7 +143,7 @@ function MessageBoxCbtHook(Code: Integer; WParam: WPARAM; LParam: LPARAM): LRESU
 begin
   if Code = HCBT_ACTIVATE then
   begin
-    CenterWindowOnOwner(HWND(WParam), MessageBoxOwnerHandle);
+    CenterWindowInRect(HWND(WParam), DialogAnchorRect(NativeDialogOwner));
     SetWindowPos(HWND(WParam), HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE);
     SetForegroundWindow(HWND(WParam));
     if MessageBoxHook <> 0 then
@@ -165,10 +166,8 @@ end;
 function CenteredMessageDlg(const Msg: string; DlgType: TMsgDlgType; Buttons: TMsgDlgButtons; HelpCtx: Longint): Integer;
 var
   Dialog: TForm;
-  OwnerHandle: HWND;
   DialogButtons: TMsgDlgButtons;
 begin
-  OwnerHandle := ActiveFormHandle;
   DialogButtons := Buttons;
   // Allow closing decision dialogs without treating X as Yes or No.
   // Entscheidungsdialoge mit X abbrechen, ohne Ja oder Nein auszuwählen.
@@ -177,7 +176,7 @@ begin
   Dialog := CreateMessageDialog(Msg, DlgType, DialogButtons);
   try
     Dialog.HelpContext := HelpCtx;
-    PrepareModalDialog(Dialog, OwnerHandle);
+    PrepareModalDialog(Dialog);
     Result := Dialog.ShowModal;
   finally
     Dialog.Free;
@@ -190,7 +189,7 @@ var
   OwnerHandle: HWND;
 begin
   OwnerHandle := ActiveFormHandle;
-  MessageBoxOwnerHandle := OwnerHandle;
+  NativeDialogOwner := OwnerHandle;
 
   MessageBoxHook := SetWindowsHookEx(WH_CBT, @MessageBoxCbtHook, 0, GetCurrentThreadId);
   try
@@ -205,17 +204,17 @@ begin
       UnhookWindowsHookEx(MessageBoxHook);
       MessageBoxHook := 0;
     end;
-    MessageBoxOwnerHandle := 0;
+    NativeDialogOwner := 0;
   end;
 end;
 
-// Verschiebt das Formular bei unveränderter Größe auf den gemeinsamen Dialogbezug.
+// Verschiebt das Formular bei unveränderter Größe mittig auf den Hauptmonitor.
 // Keine Änderung von Position: Der Aufruf ist damit auch aus OnShow ohne RecreateWnd vorgesehen.
-procedure CenterFormOnApplication(const Dialog: TForm);
+procedure CenterFormOnPrimaryMonitor(const Dialog: TForm);
 begin
   // Position changes recreate the window and are forbidden inside OnShow/OnHide.
   // Im OnShow/OnHide nur verschieben, ohne das Fenster neu zu erzeugen.
-  CenterWindowOnOwner(Dialog.Handle, ActiveFormHandle);
+  CenterWindowInRect(Dialog.Handle, PrimaryWorkArea);
 end;
 
 // Startet die native Ordnerauswahl mit Besitzerhandle und zentriert ihr Fenster bei Aktivierung.
@@ -225,7 +224,7 @@ var
   OwnerHandle: HWND;
 begin
   OwnerHandle := ActiveFormHandle;
-  MessageBoxOwnerHandle := OwnerHandle;
+  NativeDialogOwner := OwnerHandle;
   MessageBoxHook := SetWindowsHookEx(WH_CBT, @MessageBoxCbtHook, 0, GetCurrentThreadId);
   try
     Result := Dialog.Execute(OwnerHandle);
@@ -235,7 +234,7 @@ begin
       UnhookWindowsHookEx(MessageBoxHook);
       MessageBoxHook := 0;
     end;
-    MessageBoxOwnerHandle := 0;
+    NativeDialogOwner := 0;
   end;
 end;
 
@@ -315,7 +314,7 @@ begin
     CancelBtn.Cancel := True;
 
     Dialog.ActiveControl := ItemList;
-    PrepareModalDialog(Dialog, ActiveFormHandle);
+    PrepareModalDialog(Dialog);
     if Dialog.ShowModal <> mrOk then Exit;
     ItemIndex := ItemList.ItemIndex;
     Result := ItemIndex >= 0;
@@ -332,7 +331,6 @@ var
   PromptLbl, PasswordLbl, ConfirmLbl: TLabel;
   PasswordEdit, ConfirmEdit: TEdit;
   OkBtn, CancelBtn: TButton;
-  OwnerHandle: HWND;
   PromptTop, ButtonTop, CancelButtonWidth: Integer;
 begin
   // Each normal exit assigns its result; cancellation returns False explicitly.
@@ -417,8 +415,7 @@ begin
       OkBtn.Left := CancelBtn.Left - OkBtn.Width - 8;
 
       Dialog.ClientHeight := ButtonTop + 48;
-      OwnerHandle := ActiveFormHandle;
-      PrepareModalDialog(Dialog, OwnerHandle);
+      PrepareModalDialog(Dialog);
 
       Result := Dialog.ShowModal;
       if Result <> mrOk then
@@ -456,7 +453,6 @@ var
   PromptLbl, PasswordLbl: TLabel;
   PasswordEdit: TEdit;
   OkBtn, SkipBtn, CancelBtn: TButton;
-  OwnerHandle: HWND;
   ButtonTop: Integer;
 begin
   Password := '';
@@ -521,8 +517,7 @@ begin
       CancelBtn.Top := ButtonTop;
 
       Dialog.ClientHeight := ButtonTop + 48;
-      OwnerHandle := ActiveFormHandle;
-      PrepareModalDialog(Dialog, OwnerHandle);
+      PrepareModalDialog(Dialog);
 
       Result := Dialog.ShowModal;
       if Result <> mrOk then
@@ -555,7 +550,7 @@ begin
     mtConfirmation, [mbYes, mbNo], mbYes, ['Lokal', 'Server']);
   try
     Dialog.Caption := 'Paperless einrichten';
-    PrepareModalDialog(Dialog, ActiveFormHandle);
+    PrepareModalDialog(Dialog);
     Result := Dialog.ShowModal;
   finally
     Dialog.Free;
@@ -623,7 +618,7 @@ begin
     CancelBtn.Cancel := True;
     CancelBtn.Default := True;
     Dialog.ActiveControl := CancelBtn;
-    PrepareModalDialog(Dialog, ActiveFormHandle);
+    PrepareModalDialog(Dialog);
     Result := Dialog.ShowModal;
   finally
     Dialog.Free;
