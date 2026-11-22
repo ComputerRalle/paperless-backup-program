@@ -13,15 +13,16 @@ object MainformFrm: TMainformFrm
   Constraints.MaxWidth = 860
   Constraints.MinHeight = 650
   Constraints.MinWidth = 860
+  DefaultMonitor = dmPrimary
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
   Font.Height = -15
   Font.Name = 'Verdana'
   Font.Style = []
-  DefaultMonitor = dmPrimary
   Position = poScreenCenter
   OnClose = FormClose
   OnCreate = FormCreate
+  OnMouseWheel = SettingsMouseWheel
   OnShow = FormShow
   TextHeight = 18
   object StatusBar1: TStatusBar
@@ -57,6 +58,9 @@ object MainformFrm: TMainformFrm
       BevelOuter = bvNone
       ParentBackground = False
       TabOrder = 0
+      DesignSize = (
+        836
+        559)
       object Panel2: TPanel
         Left = 0
         Top = 300
@@ -75,20 +79,23 @@ object MainformFrm: TMainformFrm
         Top = 300
         Width = 834
         Height = 77
+        Anchors = [akLeft, akTop, akRight]
         BevelOuter = bvNone
         Ctl3D = False
         ParentBackground = False
         ParentCtl3D = False
         TabOrder = 1
+        DesignSize = (
+          834
+          77)
         object ProgramUpdateLbl: TLabel
-          Left = 0
+          Left = 30
           Top = 15
-          Width = 310
+          Width = 804
           Height = 36
           Cursor = crHandPoint
-          Alignment = taCenter
+          Anchors = [akLeft, akTop, akRight]
           AutoSize = False
-          Layout = tlCenter
           Color = clBtnFace
           Font.Charset = DEFAULT_CHARSET
           Font.Color = clWindowText
@@ -97,6 +104,7 @@ object MainformFrm: TMainformFrm
           Font.Style = []
           ParentColor = False
           ParentFont = False
+          Layout = tlCenter
           WordWrap = True
           OnClick = ProgramUpdateLblClick
         end
@@ -105,10 +113,10 @@ object MainformFrm: TMainformFrm
           Top = 24
           Width = 794
           Height = 37
+          AutoSize = False
           Caption = 
             'Um ein Backup oder eine Wiederherstellung zu machen, muss das Pr' +
             'ogramm neu gestartet werden'
-          AutoSize = False
           EllipsisPosition = epEndEllipsis
           Layout = tlCenter
           Visible = False
@@ -138858,21 +138866,8 @@ object MainformFrm: TMainformFrm
         VertScrollBar.Tracking = True
         Align = alClient
         BorderStyle = bsNone
+        OnMouseWheel = SettingsMouseWheel
         TabOrder = 0
-        object InstallationModeRadioGroup: TRadioGroup
-          Left = 33
-          Top = 75
-          Width = 782
-          Height = 65
-          Caption = 'Paperless-Installation'
-          Columns = 2
-          ItemIndex = 0
-          Items.Strings = (
-            'Lokale Installation'
-            'Externe Serverinstallation')
-          TabOrder = 1
-          OnClick = InstallationModeRadioGroupClick
-        end
         object Label26: TLabel
           Left = 31
           Top = 155
@@ -138952,17 +138947,6 @@ object MainformFrm: TMainformFrm
           Height = 18
           Caption = 'Paperless-Version'
         end
-        object ExternalServerDividerPan: TPanel
-          Left = 0
-          Top = 630
-          Width = 815
-          Height = 10
-          BevelOuter = bvNone
-          Color = 2313489
-          ParentBackground = False
-          StyleElements = [seFont, seBorder]
-          TabOrder = 25
-        end
         object ExternalServerTitleLbl: TLabel
           Left = 33
           Top = 655
@@ -138973,6 +138957,8 @@ object MainformFrm: TMainformFrm
         object ExternalConnectionStatusLbl: TLabel
           Left = 344
           Top = 655
+          Width = 188
+          Height = 18
           Caption = 'Verbindung nicht getestet'
         end
         object ExternalHostLbl: TLabel
@@ -138992,6 +138978,8 @@ object MainformFrm: TMainformFrm
         object ExternalWebPortLbl: TLabel
           Left = 477
           Top = 735
+          Width = 140
+          Height = 18
           Caption = 'Paperless-Webport'
           FocusControl = ExternalWebPortEdit
         end
@@ -139010,33 +138998,72 @@ object MainformFrm: TMainformFrm
           Caption = 'Passwort'
         end
         object ExternalKeyLbl: TLabel
-          Enabled = False
           Left = 33
           Top = 900
           Width = 154
           Height = 18
           Caption = 'SSH-Key (Dateipfad)'
+          Enabled = False
         end
         object ExternalComposePathLbl: TLabel
           Left = 33
           Top = 1030
+          Width = 205
+          Height = 18
           Caption = 'Pfad zum Compose-Ordner'
         end
         object ExternalComposeProjectLbl: TLabel
           Left = 33
           Top = 1070
+          Width = 175
+          Height = 18
           Caption = 'Compose-Projektname'
         end
         object ExternalBackupFolderLbl: TLabel
           Left = 33
           Top = 1110
+          Width = 110
+          Height = 18
           Caption = 'Backupordner:'
           FocusControl = ExternalBackupFolderEdit
+        end
+        object ExternalKeyPassphraseLbl: TLabel
+          Left = 33
+          Top = 940
+          Width = 156
+          Height = 18
+          Caption = 'SSH-Key-Passphrase'
+          Enabled = False
+        end
+        object InstallationModeRadioGroup: TRadioGroup
+          Left = 33
+          Top = 75
+          Width = 782
+          Height = 65
+          Caption = 'Paperless-Installation'
+          Columns = 2
+          ItemIndex = 0
+          Items.Strings = (
+            'Lokale Installation'
+            'Externe Serverinstallation')
+          TabOrder = 1
+          OnClick = InstallationModeRadioGroupClick
+        end
+        object ExternalServerDividerPan: TPanel
+          Left = 0
+          Top = 630
+          Width = 815
+          Height = 10
+          BevelOuter = bvNone
+          Color = 2313489
+          ParentBackground = False
+          TabOrder = 31
+          StyleElements = [seFont, seBorder]
         end
         object Panel15: TPanel
           Left = 0
           Top = 0
-          Width = 825
+          Width = 819
           Height = 56
           Align = alTop
           BevelOuter = bvNone
@@ -139222,12 +139249,6 @@ object MainformFrm: TMainformFrm
           TabOrder = 11
           OnClick = CheckBox1Click
         end
-        object ExternalKeyPassphraseLbl: TLabel
-          Enabled = False
-          Left = 33
-          Top = 940
-          Caption = 'SSH-Key-Passphrase'
-        end
         object ExternalHostEdit: TEdit
           Left = 344
           Top = 692
@@ -139276,20 +139297,20 @@ object MainformFrm: TMainformFrm
           OnClick = ExternalAuthRadioGroupClick
         end
         object ExternalKeyEdit: TEdit
-          Enabled = False
           Left = 344
           Top = 897
           Width = 471
           Height = 26
+          Enabled = False
           TabOrder = 20
           OnChange = ExternalConnectionSettingsChanged
         end
         object ExternalKeyPassphraseEdit: TEdit
-          Enabled = False
           Left = 344
           Top = 937
           Width = 471
           Height = 26
+          Enabled = False
           PasswordChar = '*'
           TabOrder = 21
           OnChange = ExternalConnectionSettingsChanged
@@ -139364,8 +139385,8 @@ object MainformFrm: TMainformFrm
           Height = 60
           Caption = 'Serverdaten Speichern'
           Enabled = False
-          OnClick = SaveExternalServerBtnClick
           TabOrder = 29
+          OnClick = SaveExternalServerBtnClick
         end
         object InstallServerPaperlessBtn: TButton
           Left = 565
@@ -139373,8 +139394,8 @@ object MainformFrm: TMainformFrm
           Width = 250
           Height = 60
           Caption = 'Paperless installieren'
-          Visible = False
           TabOrder = 30
+          Visible = False
           OnClick = InstallServerPaperlessBtnClick
         end
       end

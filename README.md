@@ -1,5 +1,13 @@
 ﻿# Paperless Backup Programm
 
+## Ergänzungen vom 22.11.2026
+
+Serverinstallation und Serverupdate laufen als eigenständige Serveraufträge. Bei SSH-Unterbrechungen versucht die laufende Anwendung nach fünf Sekunden erneut zu verbinden und lädt neue Statusmeldungen nach. Die Reihenfolge down → pull → up bleibt erhalten. Root auf systemd verwendet einen transienten Systemdienst; der Ersatzweg über nohup/setsid benötigt eine gesonderte Prüfung bei serverseitiger Sitzungsbereinigung. Eine Wiederaufnahme nach Neustart des Windows-Programms ist nicht implementiert.
+
+Im Tab **Einstellungen** unterstützt die Scrollbox jetzt das Mausrad. Den Mauszeiger über den Einstellungsbereich bewegen und auf- oder abwärts scrollen. Die Windows-Scrolleinstellung wird berücksichtigt; Steuerelemente mit eigener Mausradbehandlung behalten diese.
+
+Der Quellstand ist statisch beziehungsweise für den SSH-Beobachter mit Simulationen geprüft. Aktueller Win64-IDE-Build und praktische GUI-/WLAN-Prüfungen stehen aus; Programmversion unverändert.
+
 ## Erststartdialoge – 17.11.2026
 
 Die Betriebsartauswahl verwendet **Lokal** und **Server**. Der Beschreibungstext lautet **„Server: Paperless auf einem Server installieren.“** Die Auswahl führt nach der Laufzeitpfadwahl zu den Servereinstellungen; die eigentliche Installation wird dort gesondert gestartet.

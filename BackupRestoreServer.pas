@@ -639,6 +639,13 @@ end;
 // Den gewählten Servervorgang mit dem gespeicherten SSH-Profil starten.
 // Send the Linux installer over SSH stdin. Credentials are created on Debian.
 // Das Linux-Installationsskript über SSH-stdin senden. Zugangsdaten entstehen auf Debian.
+procedure AddServerMaintenanceJob(const Lines: TStringList);
+begin
+{$I ServerMaintenanceJob.inc}
+end;
+
+// Prepare the complete installer before starting the independent server job.
+// Den vollständigen Installer vor dem unabhängigen Serverstart bereitstellen.
 procedure AddServerInstallation(const Lines: TStringList);
 var
   Versions: TDockerImageVersions;
@@ -673,10 +680,9 @@ begin
   Lines.Add('web_port=' + IntToStr(ServerInstallWebPort));
 {$I ServerInstallWorker.inc}
   Lines.Add('''@');
-  Lines.Add('  $bytes=[Text.Encoding]::UTF8.GetBytes($linuxScript.Replace([string][char]13,'''')+[char]10)');
   // Wait for the explicit completion marker from the installer.
   // Die ausdrückliche Abschlussmarkierung des Installationsskripts abwarten.
-  Lines.Add('  $null=Ssh ''bash -s 2>&1'' $bytes 7200000');
+  Lines.Add('  InvokeDetachedJob $linuxScript');
   Lines.Add('  if(-not $installReady){throw ''install_incomplete''}');
   Lines.Add('  $urlHost=$serverHost');
   Lines.Add('  $shareHost=$serverHost');
@@ -721,14 +727,13 @@ begin
   Lines.Add('  [void][IO.Directory]::CreateDirectory($logDir)');
   Lines.Add('  $log=[IO.StreamWriter]::new([IO.File]::Open($logPath,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::Read),[Text.UTF8Encoding]::new($false))');
   Lines.Add('  $log.AutoFlush=$true');
-  Lines.Add('  $remoteCommand=''bash -s -- ''+(ShArg $composeFile)+'' ''+(ShArg $project)');
+  Lines.Add('  $jobArguments=(ShArg $composeFile)+'' ''+(ShArg $project)');
   for Tag in VersionTags do
-    Lines.Add('  $remoteCommand+='' ''+(ShArg ' + PsLiteral(Tag) + ')');
+    Lines.Add('  $jobArguments+='' ''+(ShArg ' + PsLiteral(Tag) + ')');
   Lines.Add('  $linuxScript=@''');
 {$I ServerUpdateWorker.inc}
   Lines.Add('''@');
-  Lines.Add('  $bytes=[Text.Encoding]::UTF8.GetBytes($linuxScript.Replace([string][char]13,'''')+[char]10)');
-  Lines.Add('  $null=Ssh ($remoteCommand+'' 2>&1'') $bytes 7200000');
+  Lines.Add('  InvokeDetachedJob $linuxScript $jobArguments');
   Lines.Add('  if(-not $installReady){throw ''update_incomplete''}');
   Lines.Add('  $backupCompleted=$true');
   Lines.Add('  $title=''Paperless-Server wurde aktualisiert''');
@@ -983,6 +988,9 @@ begin
       // Den fehlgeschlagenen Schritt und bekannte Fehlercodes ohne Befehlsausgabe melden.
       Lines.Add('function CheckFailure([string]$step,[Exception]$errorInfo) {');
       Lines.Add(' $code=$errorInfo.Message');
+      Lines.Add(' if($code -match ''^job_exit_(\d+)$''){return "${step} (Server-Exitcode $($matches[1]))."}');
+      Lines.Add(' if($code -eq ''job_interrupted''){return ''Der Serverauftrag wurde auf dem Server unterbrochen. Bitte das Serverprotokoll prüfen.''}');
+      Lines.Add(' if($code -in @(''job_prepare'',''job_status'')){return ''Der Serverauftrag konnte nicht vorbereitet oder sein Status nicht sicher gelesen werden. Bitte das Protokoll prüfen.''}');
       Lines.Add(' if($code -match ''^ssh_exit_(-?\d+)$''){return "${step} (SSH-Exitcode $($matches[1]))."}');
       Lines.Add(' if($code -eq ''ssh_timeout''){return "${step} (Zeitlimit für SSH überschritten)."}');
       Lines.Add(' if($code -eq ''ssh_start'' -or $code -eq ''ssh_read''){return "${step} (SSH-Prozess konnte nicht gestartet oder ausgelesen werden)."}');
@@ -997,11 +1005,13 @@ begin
       if Action = sbaInstallPaperless then
       begin
         AddServerProgress(Lines);
+        AddServerMaintenanceJob(Lines);
         AddServerInstallation(Lines);
       end
       else if Action = sbaUpdateVersions then
       begin
         AddServerProgress(Lines);
+        AddServerMaintenanceJob(Lines);
         AddServerVersionUpdate(Lines, VersionTags);
       end
       else if Action = sbaUploadBackup then

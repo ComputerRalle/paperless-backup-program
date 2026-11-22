@@ -220,6 +220,8 @@ type
     procedure StartAndMonitorCmdScript;
     procedure ConsoleToFront(PID: DWORD);
     procedure TabControl1Change(Sender: TObject);
+    procedure SettingsMouseWheel(Sender: TObject; Shift: TShiftState;
+      WheelDelta: Integer; MousePos: TPoint; var Handled: Boolean);
     procedure FormCreate(Sender: TObject);
     procedure SaveScheduleSettings;
     procedure CreateBackupPlanBtnClick(Sender: TObject);
@@ -274,6 +276,7 @@ type
     function TryCompareProgramVersions(const LeftVersion, RightVersion: string; out Comparison: Integer): Boolean;
 
   private
+    FSettingsWheelRemainder: Integer;
     FServerBackupCheckActive: Boolean;
     FServerTransferCancelRequested: Boolean;
     FServerBackupProgressActive: Boolean;
@@ -4183,6 +4186,40 @@ begin
     Exit;
   end;
   CreateBackupScript(ComposePath);
+end;
+
+// Scroll only the settings area under the pointer, including wheel events bubbled from children.
+// Nur den Einstellungsbereich unter dem Mauszeiger scrollen, auch bei weitergereichten Kind-Ereignissen.
+procedure TMainformFrm.SettingsMouseWheel(Sender: TObject; Shift: TShiftState;
+  WheelDelta: Integer; MousePos: TPoint; var Handled: Boolean);
+var
+  ScrollLines: Cardinal;
+  Steps, StepSize: Integer;
+begin
+  if Handled or (TabControl1.TabIndex <> 4) or not SettingsPan.Visible or
+     not SettingsScrollBox.Enabled or
+     not PtInRect(SettingsScrollBox.ClientRect, SettingsScrollBox.ScreenToClient(MousePos)) then
+  begin
+    FSettingsWheelRemainder := 0;
+    Exit;
+  end;
+  ScrollLines := 3;
+  SystemParametersInfo(SPI_GETWHEELSCROLLLINES, 0, @ScrollLines, 0);
+  Handled := True;
+  if ScrollLines = 0 then Exit;
+  // Keep partial wheel deltas for high-resolution wheels and respect Windows scrolling settings.
+  // Teilbewegungen hochauflösender Mausräder sammeln und die Windows-Scrolleinstellung beachten.
+  Inc(FSettingsWheelRemainder, WheelDelta);
+  Steps := FSettingsWheelRemainder div WHEEL_DELTA;
+  FSettingsWheelRemainder := FSettingsWheelRemainder mod WHEEL_DELTA;
+  if Steps = 0 then Exit;
+  if ScrollLines = WHEEL_PAGESCROLL then
+    StepSize := SettingsScrollBox.ClientHeight
+  else
+    StepSize := Integer(Min(ScrollLines, Cardinal(100))) *
+      Max(1, Abs(SettingsScrollBox.Font.Height));
+  SettingsScrollBox.VertScrollBar.Position :=
+    SettingsScrollBox.VertScrollBar.Position - Steps * StepSize;
 end;
 
 // Switch between the main panels and refresh panel-specific settings.
