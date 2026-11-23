@@ -138855,11 +138855,54 @@ object MainformFrm: TMainformFrm
       ParentBackground = False
       ParentColor = True
       TabOrder = 4
-      object SettingsScrollBox: TScrollBox
+      object Panel15: TPanel
         Left = 0
         Top = 0
         Width = 836
-        Height = 559
+        Height = 56
+        Align = alTop
+        BevelOuter = bvNone
+        Color = 3767324
+        ParentBackground = False
+        TabOrder = 1
+        object Label27: TLabel
+          Left = 20
+          Top = 19
+          Width = 285
+          Height = 20
+          Caption = 'Paperless-ngx Backup Programm'
+          Color = clWhite
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWindowText
+          Font.Height = -17
+          Font.Name = 'Verdana'
+          Font.Style = []
+          ParentColor = False
+          ParentFont = False
+        end
+        object Label28: TLabel
+          Left = 569
+          Top = 101
+          Width = 246
+          Height = 16
+          Alignment = taRightJustify
+          AutoSize = False
+          Caption = 'Getestet mit: Paperless-ngx v2.18.3 '
+          Color = clWhite
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWindowText
+          Font.Height = -13
+          Font.Name = 'Verdana'
+          Font.Style = []
+          ParentColor = False
+          ParentFont = False
+        end
+      end
+      object SettingsScrollBox: TScrollBox
+        Left = 0
+        Top = 56
+        Width = 836
+        Height = 503
         HorzScrollBar.Visible = False
         VertScrollBar.Margin = 20
         VertScrollBar.Smooth = True
@@ -138870,21 +138913,21 @@ object MainformFrm: TMainformFrm
         TabOrder = 0
         object Label26: TLabel
           Left = 31
-          Top = 155
+          Top = 99
           Width = 95
           Height = 18
           Caption = 'Einstellungen'
         end
         object Label19: TLabel
           Left = 33
-          Top = 209
+          Top = 153
           Width = 290
           Height = 18
           Caption = 'Papierkorb Aufbewahrungszeit in Tagen'
         end
         object OnlyIntegerAllowedLbl: TLabel
           Left = 419
-          Top = 209
+          Top = 153
           Width = 126
           Height = 18
           Caption = 'Nur Ganz-Zahlen'
@@ -138892,7 +138935,7 @@ object MainformFrm: TMainformFrm
         end
         object SettingsSavedLbl: TLabel
           Left = 362
-          Top = 580
+          Top = 524
           Width = 185
           Height = 18
           Caption = 'Einstellungen gespeichert'
@@ -138900,84 +138943,84 @@ object MainformFrm: TMainformFrm
         end
         object Label38: TLabel
           Left = 33
-          Top = 253
+          Top = 197
           Width = 107
           Height = 18
           Caption = 'Redis-Version:'
         end
         object Label39: TLabel
           Left = 32
-          Top = 325
+          Top = 269
           Width = 137
           Height = 18
           Caption = 'PostreSQL-Verion:'
         end
         object Label40: TLabel
           Left = 33
-          Top = 397
+          Top = 341
           Width = 147
           Height = 18
           Caption = 'Gotenberg-Version:'
         end
         object Label41: TLabel
           Left = 33
-          Top = 470
+          Top = 414
           Width = 91
           Height = 18
           Caption = 'Tika-Version'
         end
         object Label42: TLabel
           Left = 344
-          Top = 253
+          Top = 197
           Width = 104
           Height = 18
           Caption = 'Alpine-Version'
         end
         object Label43: TLabel
           Left = 344
-          Top = 325
+          Top = 269
           Width = 125
           Height = 18
           Caption = 'Busybox-Version'
         end
         object Label44: TLabel
           Left = 344
-          Top = 397
+          Top = 341
           Width = 131
           Height = 18
           Caption = 'Paperless-Version'
         end
         object ExternalServerTitleLbl: TLabel
           Left = 33
-          Top = 655
+          Top = 599
           Width = 272
           Height = 18
           Caption = 'Servereinstellungen Paperless Extern'
         end
         object ExternalConnectionStatusLbl: TLabel
           Left = 344
-          Top = 655
+          Top = 599
           Width = 188
           Height = 18
           Caption = 'Verbindung nicht getestet'
         end
         object ExternalHostLbl: TLabel
           Left = 33
-          Top = 695
+          Top = 639
           Width = 174
           Height = 18
           Caption = 'IP-Adresse / Hostname'
         end
         object ExternalPortLbl: TLabel
           Left = 33
-          Top = 735
+          Top = 679
           Width = 69
           Height = 18
           Caption = 'SSH-Port'
         end
         object ExternalWebPortLbl: TLabel
           Left = 477
-          Top = 735
+          Top = 679
           Width = 140
           Height = 18
           Caption = 'Paperless-Webport'
@@ -138985,21 +139028,21 @@ object MainformFrm: TMainformFrm
         end
         object ExternalUserLbl: TLabel
           Left = 33
-          Top = 775
+          Top = 719
           Width = 109
           Height = 18
           Caption = 'Benutzername'
         end
         object ExternalPasswordLbl: TLabel
           Left = 33
-          Top = 980
+          Top = 924
           Width = 69
           Height = 18
           Caption = 'Passwort'
         end
         object ExternalKeyLbl: TLabel
           Left = 33
-          Top = 900
+          Top = 844
           Width = 154
           Height = 18
           Caption = 'SSH-Key (Dateipfad)'
@@ -139007,21 +139050,21 @@ object MainformFrm: TMainformFrm
         end
         object ExternalComposePathLbl: TLabel
           Left = 33
-          Top = 1030
+          Top = 974
           Width = 205
           Height = 18
           Caption = 'Pfad zum Compose-Ordner'
         end
         object ExternalComposeProjectLbl: TLabel
           Left = 33
-          Top = 1070
+          Top = 1014
           Width = 175
           Height = 18
           Caption = 'Compose-Projektname'
         end
         object ExternalBackupFolderLbl: TLabel
           Left = 33
-          Top = 1110
+          Top = 1054
           Width = 110
           Height = 18
           Caption = 'Backupordner:'
@@ -139029,7 +139072,7 @@ object MainformFrm: TMainformFrm
         end
         object ExternalKeyPassphraseLbl: TLabel
           Left = 33
-          Top = 940
+          Top = 884
           Width = 156
           Height = 18
           Caption = 'SSH-Key-Passphrase'
@@ -139037,7 +139080,7 @@ object MainformFrm: TMainformFrm
         end
         object InstallationModeRadioGroup: TRadioGroup
           Left = 33
-          Top = 75
+          Top = 19
           Width = 782
           Height = 65
           Caption = 'Paperless-Installation'
@@ -139051,7 +139094,7 @@ object MainformFrm: TMainformFrm
         end
         object ExternalServerDividerPan: TPanel
           Left = 0
-          Top = 630
+          Top = 574
           Width = 815
           Height = 10
           BevelOuter = bvNone
@@ -139060,53 +139103,10 @@ object MainformFrm: TMainformFrm
           TabOrder = 31
           StyleElements = [seFont, seBorder]
         end
-        object Panel15: TPanel
-          Left = 0
-          Top = 0
-          Width = 819
-          Height = 56
-          Align = alTop
-          BevelOuter = bvNone
-          Color = 3767324
-          ParentBackground = False
-          TabOrder = 0
-          object Label27: TLabel
-            Left = 20
-            Top = 19
-            Width = 285
-            Height = 20
-            Caption = 'Paperless-ngx Backup Programm'
-            Color = clWhite
-            Font.Charset = DEFAULT_CHARSET
-            Font.Color = clWindowText
-            Font.Height = -17
-            Font.Name = 'Verdana'
-            Font.Style = []
-            ParentColor = False
-            ParentFont = False
-          end
-          object Label28: TLabel
-            Left = 569
-            Top = 101
-            Width = 246
-            Height = 16
-            Alignment = taRightJustify
-            AutoSize = False
-            Caption = 'Getestet mit: Paperless-ngx v2.18.3 '
-            Color = clWhite
-            Font.Charset = DEFAULT_CHARSET
-            Font.Color = clWindowText
-            Font.Height = -13
-            Font.Name = 'Verdana'
-            Font.Style = []
-            ParentColor = False
-            ParentFont = False
-          end
-        end
         object SaveSettingsBtn: TButton
           AlignWithMargins = True
           Left = 565
-          Top = 560
+          Top = 504
           Width = 250
           Height = 60
           Margins.Left = 10
@@ -139120,7 +139120,7 @@ object MainformFrm: TMainformFrm
         end
         object PapierkorbAufbewahrungEdit: TEdit
           Left = 344
-          Top = 206
+          Top = 150
           Width = 69
           Height = 26
           TabOrder = 3
@@ -139129,7 +139129,7 @@ object MainformFrm: TMainformFrm
         end
         object redis_version_edit: TEdit
           Left = 31
-          Top = 277
+          Top = 221
           Width = 225
           Height = 26
           TabStop = False
@@ -139138,7 +139138,7 @@ object MainformFrm: TMainformFrm
         end
         object postgres_version_edit: TEdit
           Left = 32
-          Top = 349
+          Top = 293
           Width = 223
           Height = 26
           TabStop = False
@@ -139147,7 +139147,7 @@ object MainformFrm: TMainformFrm
         end
         object gotenberg_version_edit: TEdit
           Left = 31
-          Top = 421
+          Top = 365
           Width = 223
           Height = 26
           TabStop = False
@@ -139156,7 +139156,7 @@ object MainformFrm: TMainformFrm
         end
         object tika_version_edit: TEdit
           Left = 32
-          Top = 494
+          Top = 438
           Width = 225
           Height = 26
           TabStop = False
@@ -139165,7 +139165,7 @@ object MainformFrm: TMainformFrm
         end
         object alpine_version_edit: TEdit
           Left = 342
-          Top = 277
+          Top = 221
           Width = 208
           Height = 26
           TabStop = False
@@ -139174,7 +139174,7 @@ object MainformFrm: TMainformFrm
         end
         object busybox_version_edit: TEdit
           Left = 342
-          Top = 349
+          Top = 293
           Width = 208
           Height = 26
           TabStop = False
@@ -139183,7 +139183,7 @@ object MainformFrm: TMainformFrm
         end
         object paperless_version_edit: TEdit
           Left = 342
-          Top = 421
+          Top = 365
           Width = 208
           Height = 26
           TabStop = False
@@ -139192,7 +139192,7 @@ object MainformFrm: TMainformFrm
         end
         object Memo1: TMemo
           Left = 565
-          Top = 206
+          Top = 150
           Width = 250
           Height = 331
           TabStop = False
@@ -139219,7 +139219,7 @@ object MainformFrm: TMainformFrm
         end
         object ProtectCustomFilesCB: TCheckBox
           Left = 342
-          Top = 462
+          Top = 406
           Width = 210
           Height = 65
           Caption = 'Compose-Datei vor '#220'berschreiben sch'#252'tzen'
@@ -139229,7 +139229,7 @@ object MainformFrm: TMainformFrm
         end
         object OnlyPaperlessVersionCB: TCheckBox
           Left = 33
-          Top = 535
+          Top = 479
           Width = 343
           Height = 17
           Caption = 'Nur Paperless Version '#195'ndern'
@@ -139241,7 +139241,7 @@ object MainformFrm: TMainformFrm
         end
         object CheckBox1: TCheckBox
           Left = 33
-          Top = 565
+          Top = 509
           Width = 343
           Height = 17
           TabStop = False
@@ -139251,7 +139251,7 @@ object MainformFrm: TMainformFrm
         end
         object ExternalHostEdit: TEdit
           Left = 344
-          Top = 692
+          Top = 636
           Width = 471
           Height = 26
           TabOrder = 15
@@ -139259,7 +139259,7 @@ object MainformFrm: TMainformFrm
         end
         object ExternalPortEdit: TEdit
           Left = 344
-          Top = 732
+          Top = 676
           Width = 100
           Height = 26
           TabOrder = 16
@@ -139267,7 +139267,7 @@ object MainformFrm: TMainformFrm
         end
         object ExternalWebPortEdit: TEdit
           Left = 715
-          Top = 732
+          Top = 676
           Width = 100
           Height = 26
           MaxLength = 5
@@ -139276,7 +139276,7 @@ object MainformFrm: TMainformFrm
         end
         object ExternalUserEdit: TEdit
           Left = 344
-          Top = 772
+          Top = 716
           Width = 471
           Height = 26
           TabOrder = 18
@@ -139284,7 +139284,7 @@ object MainformFrm: TMainformFrm
         end
         object ExternalAuthRadioGroup: TRadioGroup
           Left = 33
-          Top = 805
+          Top = 749
           Width = 782
           Height = 75
           Caption = 'SSH-Anmeldung'
@@ -139298,7 +139298,7 @@ object MainformFrm: TMainformFrm
         end
         object ExternalKeyEdit: TEdit
           Left = 344
-          Top = 897
+          Top = 841
           Width = 471
           Height = 26
           Enabled = False
@@ -139307,7 +139307,7 @@ object MainformFrm: TMainformFrm
         end
         object ExternalKeyPassphraseEdit: TEdit
           Left = 344
-          Top = 937
+          Top = 881
           Width = 471
           Height = 26
           Enabled = False
@@ -139317,7 +139317,7 @@ object MainformFrm: TMainformFrm
         end
         object ExternalPasswordEdit: TEdit
           Left = 344
-          Top = 977
+          Top = 921
           Width = 471
           Height = 26
           PasswordChar = '*'
@@ -139326,7 +139326,7 @@ object MainformFrm: TMainformFrm
         end
         object ExternalComposePathEdit: TEdit
           Left = 344
-          Top = 1027
+          Top = 971
           Width = 471
           Height = 26
           TabOrder = 23
@@ -139334,7 +139334,7 @@ object MainformFrm: TMainformFrm
         end
         object ExternalComposeProjectEdit: TEdit
           Left = 344
-          Top = 1067
+          Top = 1011
           Width = 471
           Height = 26
           TabOrder = 24
@@ -139343,7 +139343,7 @@ object MainformFrm: TMainformFrm
         end
         object ExternalBackupFolderEdit: TEdit
           Left = 344
-          Top = 1107
+          Top = 1051
           Width = 471
           Height = 26
           TabOrder = 25
@@ -139351,7 +139351,7 @@ object MainformFrm: TMainformFrm
         end
         object UseSavedSshCredentialCB: TCheckBox
           Left = 33
-          Top = 1135
+          Top = 1079
           Width = 500
           Height = 20
           Caption = 'Gespeicherte Zugangsdaten verwenden'
@@ -139362,7 +139362,7 @@ object MainformFrm: TMainformFrm
         end
         object TestExternalConnectionBtn: TButton
           Left = 33
-          Top = 1160
+          Top = 1104
           Width = 250
           Height = 60
           Caption = 'Verbindung testen'
@@ -139371,7 +139371,7 @@ object MainformFrm: TMainformFrm
         end
         object CreateExternalBackupFolderBtn: TButton
           Left = 299
-          Top = 1160
+          Top = 1104
           Width = 250
           Height = 60
           Caption = 'Backupordner anlegen'
@@ -139380,7 +139380,7 @@ object MainformFrm: TMainformFrm
         end
         object SaveExternalServerBtn: TButton
           Left = 565
-          Top = 1160
+          Top = 1104
           Width = 250
           Height = 60
           Caption = 'Serverdaten Speichern'
@@ -139390,7 +139390,7 @@ object MainformFrm: TMainformFrm
         end
         object InstallServerPaperlessBtn: TButton
           Left = 565
-          Top = 1232
+          Top = 1176
           Width = 250
           Height = 60
           Caption = 'Paperless installieren'

@@ -1,5 +1,17 @@
 ﻿# Paperless Backup Programm
 
+## Fester Statusbalken und aktualisierte Anleitung – 23.11.2026
+
+Der grüne Statusbalken im Einstellungstab bleibt oberhalb der Scrollbox sichtbar. Nur die darunterliegenden Einstellungen scrollen. Die ODT-Anleitung beschreibt die lokale Nachinstallation, getrennte Installationsstände, den Erhalt der Serverversionen, Mausradbedienung und SSH-Wiederverbindung bei Serverinstallation und Update.
+
+Inhaltsverzeichnis-Seitenzahlen und sichtbare Layoutprüfung bleiben offen. Die PDF-Dateien wurden nicht verändert. Win64-IDE-Build und Praxistests stehen weiterhin aus.
+
+## Lokale Installation nachträglich einrichten – 23.11.2026
+
+Nach einem Erststart im Servermodus können Sie unter Einstellungen „Lokale Installation“ wählen. Fehlt eine vollständige lokale Einrichtung, bietet das Programm deren Installation über das Setupfenster an. Docker Desktop muss installiert und gestartet sein. Der bestehende Windows-Laufzeitordner wird verwendet. Bei Ablehnung, Abbruch oder Fehler bleibt der Servermodus erhalten; nach erfolgreicher Installation und Vorbereitung wird Lokal gespeichert. Serverdaten und vorhandene Server-Imageversionen bleiben erhalten.
+
+Lokaler und serverseitiger Installationsabschluss werden getrennt in der Einstellungen.ini gespeichert. Ältere lokale Abschlusswerte bleiben nutzbar. Für ältere Serverprofile ohne gespeicherten Installationserfolg lautet der neue Status „Unbekannt“; dies sperrt keine bestehende Serverinstallation. Aktueller Stand statisch geprüft, Win64-IDE-Build und praktische Prüfung stehen aus.
+
 ## Ergänzungen vom 22.11.2026
 
 Serverinstallation und Serverupdate laufen als eigenständige Serveraufträge. Bei SSH-Unterbrechungen versucht die laufende Anwendung nach fünf Sekunden erneut zu verbinden und lädt neue Statusmeldungen nach. Die Reihenfolge down → pull → up bleibt erhalten. Root auf systemd verwendet einen transienten Systemdienst; der Ersatzweg über nohup/setsid benötigt eine gesonderte Prüfung bei serverseitiger Sitzungsbereinigung. Eine Wiederaufnahme nach Neustart des Windows-Programms ist nicht implementiert.
@@ -42,7 +54,7 @@ Der aktuelle Projektstand ist **6.26.11.100** (Win64 Debug). Das Hauptfenster un
 
 Beim ersten Start ohne bestätigten Laufzeitordner wählen Sie **Lokal** oder **Server**. **Lokal** führt zur Einrichtung mit Docker Desktop. Bei **Server** wählen Sie den Windows-Laufzeitordner. Anschließend öffnet das Programm **Einstellungen**, scrollt zu **Servereinstellungen Paperless Extern** und setzt den Fokus ins Hostfeld. Schließen Sie den Auswahldialog, endet der Start.
 
-Beim Umschalten von **Lokal** auf **Server** übernimmt das Programm die sieben gespeicherten lokalen Image-Tags in das Serverprofil. Beim Erststart mit **Server** sind alle Felder mit Programmvorgaben ausgefüllt. In vorhandenen Profilen ergänzen die Vorgaben leere Felder.
+Beim Umschalten von **Lokal** auf **Server** bleibt ein vorhandenes Server-Versionsprofil erhalten. Nur ein noch nicht angelegtes Server-Versionsprofil wird mit den gespeicherten lokalen Image-Tags vorbelegt. Beim Erststart mit **Server** sind alle Felder mit Programmvorgaben ausgefüllt. In vorhandenen Profilen ergänzen die Vorgaben leere Felder.
 
 | Docker-Image | Standard-Tag |
 |---|---|

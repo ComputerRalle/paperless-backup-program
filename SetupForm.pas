@@ -69,9 +69,14 @@ type
     procedure InstallationCancelBtnClick(Sender: TObject);
 
   private
+    FInstallationRunning: Boolean;
     { Private declarations }
     { Private Deklarationen }
   public
+    // Additional setup returns to server mode instead of closing the application.
+    // Nachträgliches Setup kehrt zum Servermodus zurück, statt die Anwendung zu beenden.
+    AdditionalLocalInstallation: Boolean;
+    InstallationSucceeded: Boolean;
     { Public declarations }
     { Öffentliche Deklarationen }
   end;
@@ -256,6 +261,15 @@ end;
 // ApplicationClosing stoppt weitere Startschritte sofort, ohne auf die verzögerte Application.Terminated-Auswertung zu warten.
 procedure TSetupFrm.FormClose(Sender: TObject; var Action: TCloseAction);
 begin
+  if AdditionalLocalInstallation then
+  begin
+    if FInstallationRunning then
+    begin
+      Action := caNone;
+      ModalResult := mrNone;
+    end;
+    Exit;
+  end;
   if TerminateApplicationOnClose then
   begin
     ApplicationClosing := True;
@@ -281,8 +295,11 @@ procedure TSetupFrm.FormShow(Sender: TObject);
 begin
   if ApplicationClosing or Application.Terminated then Exit;
   CenterFormOnPrimaryMonitor(Self);
-  TerminateApplicationOnClose := True;
+  TerminateApplicationOnClose := not AdditionalLocalInstallation;
   WantsInstall := False;
+  InstallationSucceeded := False;
+  PaperlessContainerExists := False;
+  PaperlessContainerRunning := False;
   DockerAvailable := False;
   ShouldOpenPaperless := False;
    Panel14.ParentBackground := False;
@@ -302,6 +319,8 @@ begin
   ProgressBar2.Visible := False;
   InstallationCancelBtn.Visible := False;
   InstallationCancelBtn.Enabled := False;
+  if AdditionalLocalInstallation then
+    HinweisVerstandenBtn.Caption := 'Zurück zum Serverbetrieb';
   // Make link labels readable in dark mode.
   // Link-Beschriftungen im dunklen Modus lesbar machen.
   with LinkKlickLbl do
@@ -318,7 +337,7 @@ begin
     Font.Color := clYellow;
   end;
 
-  if FileExists(NoticeFilePath) then
+  if FileExists(NoticeFilePath) and not AdditionalLocalInstallation then
   begin
      PaperlessInstallierenBtn.Enabled := False;
   end
@@ -330,7 +349,11 @@ begin
   // Check whether Docker and Paperless are already available.
   // Prüfen, ob Docker und Paperless bereits verfügbar sind.
   CheckDockerAvailable;
-  if not DockerAvailable then Exit;
+  if not DockerAvailable then
+  begin
+    if AdditionalLocalInstallation then ModalResult := mrCancel;
+    Exit;
+  end;
   if DockerAvailable = True then
   begin
     if NoticeReminderMode then
@@ -355,7 +378,9 @@ begin
   end;
 
   CheckPaperlessContainerStatus;
-  if PaperlessContainerExists = True then
+  // An incomplete additional installation can already have containers; allow a retry.
+  // Eine unvollständige Nachinstallation kann bereits Container haben; erneuten Versuch erlauben.
+  if (PaperlessContainerExists = True) and not AdditionalLocalInstallation then
   begin
     // Paperless is installed, so the user can open it directly.
     // Paperless ist installiert, daher kann der Benutzer es direkt öffnen.
@@ -377,7 +402,7 @@ begin
     HinweisVerstandenBtn.SetFocus;
   end;
 
-  if PaperlessContainerRunning = True then
+  if (PaperlessContainerRunning = True) and not AdditionalLocalInstallation then
   begin
     // Paperless is running, so the user can open it directly.
     // Paperless läuft, daher kann der Benutzer es direkt öffnen.
@@ -403,8 +428,13 @@ procedure TSetupFrm.NoticeAcceptedBtnClick(Sender: TObject);
 var
   Ini: TAppSettingsIni;
 begin
-  if ApplicationClosing or Application.Terminated then Exit;
+  if ApplicationClosing or Application.Terminated or FInstallationRunning then Exit;
   TerminateApplicationOnClose := False;
+  if AdditionalLocalInstallation and not InstallationSucceeded then
+  begin
+    Close;
+    Exit;
+  end;
   if not InstallationPathReady then
   begin
     NoticeAcceptedBeforeInstallation := True;
@@ -434,6 +464,7 @@ end;
 procedure TSetupFrm.InstallPaperlessBtnClick(Sender: TObject);
 var
   ExitCode: Cardinal;
+  Ini: TAppSettingsIni;
 begin
   // Route the setup button through the same server installation as the settings button.
   // Den Einrichtungsbutton im Servermodus über denselben Ablauf wie in den Einstellungen führen.
@@ -442,7 +473,9 @@ begin
     MainformFrm.InstallServerPaperlessBtnClick(Sender);
     Exit;
   end;
-  if ApplicationClosing or Application.Terminated then Exit;
+  if ApplicationClosing or Application.Terminated or FInstallationRunning then Exit;
+  FInstallationRunning := True;
+  try
   WantsInstall := False;
   if not MainformFrm.SelectInstallationFolder then Exit;
   WantsInstall := True;
@@ -508,7 +541,7 @@ begin
       WillkommenLbl.Visible := False;
       LinkKlickLbl.Visible := False;
       ShellExecute(0, 'open', DockerDesktopUrl, nil, nil, SW_SHOWNORMAL);
-      Application.Terminate;
+      if not AdditionalLocalInstallation then Application.Terminate;
       // Keep this Exit in case code is added below later.
       // Dieses Exit beibehalten, falls später darunter Code ergänzt wird.
       Exit;
@@ -520,12 +553,36 @@ begin
   end;
 
   if ApplicationClosing or Application.Terminated then Exit;
+  if AdditionalLocalInstallation then
+  begin
+    // A failed retry must not inherit the completion flag of an older installation.
+    // Ein fehlgeschlagener neuer Versuch darf keinen alten Installationsabschluss übernehmen.
+    Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
+    try
+      Ini.WriteString('Einrichtung', 'Installation abgeschlossen', 'Nein');
+      Ini.WriteString('Einrichtung', 'Lokale Installation abgeschlossen', 'Nein');
+    finally
+      Ini.Free;
+    end;
+  end;
   CreateDockerComposeFile;
   InstallationCancelBtn.Visible := False;
   InstallationCancelBtn.Enabled := False;
   IsPaperlessInstallation:= False;
   BorderIcons := [biSystemMenu, biMinimize, biMaximize];
   BorderStyle := bsSizeable;
+  finally
+    FInstallationRunning := False;
+    if AdditionalLocalInstallation then
+    begin
+      IsPaperlessInstallation := False;
+      BorderIcons := [biSystemMenu, biMinimize, biMaximize];
+      BorderStyle := bsSizeable;
+      HinweisVerstandenBtn.Enabled := True;
+      PaperlessInstallierenBtn.Enabled := not InstallationSucceeded;
+      if not InstallationSucceeded then ModalResult := mrCancel;
+    end;
+  end;
 end;
 // Eine laufende Erstinstallation abbrechen und bereits von Compose geladene Images entfernen.
 procedure TSetupFrm.InstallationCancelBtnClick(Sender: TObject);
@@ -560,7 +617,7 @@ begin
       WillkommenLbl.Visible := False;
       LinkKlickLbl.Visible := False;
       ShellExecute(0, 'open', DockerDesktopUrl, nil, nil, SW_SHOWNORMAL);
-      Application.Terminate;
+      if not AdditionalLocalInstallation then Application.Terminate;
       // Keep this Exit in case code is added below later.
       // Dieses Exit beibehalten, falls später darunter Code ergänzt wird.
       Exit;
@@ -764,7 +821,21 @@ begin
 
   // Write the compose path marker file. It is migrated into the INI on startup.
   // Die Markerdatei für den Compose-Pfad schreiben. Sie wird beim Start in die INI migriert.
-  TFile.WriteAllText(IncludeTrailingPathDelimiter(AppDataFolder) + ComposePathFileName, ComposePath);
+  if AdditionalLocalInstallation then
+  begin
+    // A mode switch does not rerun startup migration; publish the local path directly.
+    // Ein Moduswechsel wiederholt die Startmigration nicht; den lokalen Pfad direkt speichern.
+    Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
+    try
+      Ini.WriteString('Pfade', 'DockerComposePfad', ComposePath);
+    finally
+      Ini.Free;
+    end;
+    if FileExists(IncludeTrailingPathDelimiter(AppDataFolder) + ComposePathFileName) then
+      TFile.Delete(IncludeTrailingPathDelimiter(AppDataFolder) + ComposePathFileName);
+  end
+  else
+    TFile.WriteAllText(IncludeTrailingPathDelimiter(AppDataFolder) + ComposePathFileName, ComposePath);
 
 
   // Do not start here when the main form only needs to create a new compose file.

@@ -332,6 +332,8 @@ type
     procedure LoadExternalServerSettings;
     procedure PrepareLocalAfterExternalStart;
     function LocalInstallationAvailable: Boolean;
+    procedure InitializeInstallationStates;
+    function InstallLocalAfterServer: Boolean;
     procedure UpdateServerBackupButtons;
     procedure UpdateInstallationModeHeaders;
     procedure CaptureVersionSnapshot;
@@ -775,6 +777,7 @@ begin
     Ini.WriteString(IniSectionVersions, IniKeyAlpineVersion, DefaultAlpineVersion);
     Ini.WriteString(IniSectionVersions, IniKeyBusyboxVersion, DefaultBusyboxVersion);
     Ini.WriteString('Einrichtung', 'Installation abgeschlossen', 'Ja');
+    Ini.WriteString('Einrichtung', 'Lokale Installation abgeschlossen', 'Ja');
     Ini.UpdateFile;
   finally
     Ini.Free;
@@ -839,6 +842,7 @@ begin
   Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
     Ini.WriteString('Einrichtung', 'Installation abgeschlossen', 'Nein');
+    Ini.WriteString('Einrichtung', 'Lokale Installation abgeschlossen', 'Nein');
     Ini.UpdateFile;
   finally
     Ini.Free;
@@ -1670,6 +1674,124 @@ begin
     raise Exception.Create('Unbekannte Betriebsart in der Einstellungen.ini.');
 end;
 
+// Keep installation history separate from the selected operating mode.
+// Installationsstände getrennt von der ausgewählten Betriebsart speichern.
+procedure TMainformFrm.InitializeInstallationStates;
+var
+  Ini: TAppSettingsIni;
+  LocalState: string;
+begin
+  Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
+  try
+    if not Ini.ValueExists('Einrichtung', 'Lokale Installation abgeschlossen') then
+    begin
+      LocalState := Ini.ReadString('Einrichtung', 'Installation abgeschlossen', 'Nein');
+      if FileExists(IncludeTrailingPathDelimiter(AppDataFolder) + InstallationCompletedFileName) then
+        LocalState := 'Ja';
+      Ini.WriteString('Einrichtung', 'Lokale Installation abgeschlossen', LocalState);
+    end;
+    // A saved server profile alone does not prove a completed installation.
+    // Ein gespeichertes Serverprofil allein belegt keine abgeschlossene Installation.
+    if not Ini.ValueExists('Paperless Extern', 'Installation abgeschlossen') then
+      Ini.WriteString('Paperless Extern', 'Installation abgeschlossen', 'Unbekannt');
+  finally
+    Ini.Free;
+  end;
+end;
+
+// Temporarily enter local setup; commit the mode only in the caller after success.
+// Vorübergehend lokal einrichten; die Betriebsart erst nach Erfolg im Aufrufer speichern.
+function TMainformFrm.InstallLocalAfterServer: Boolean;
+var
+  PreviousSetup: TSetupFrm;
+  PreviousReminder, PreviousTerminate, PreviousBackup, PreviousUpdate,
+    PreviousWriteCompose, PreviousInstallation, PreviousWantsInstall,
+    PreviousOpenPaperless: Boolean;
+  PreviousCompose, PreviousNewCompose, PreviousCommand: string;
+  Values, Snapshot: array[0..6] of string;
+  I: Integer;
+begin
+  Result := False;
+  if CenteredMessageDlg('Es wurde keine vollständige lokale Paperless-Installation gefunden.' +
+    sLineBreak + sLineBreak + 'Möchten Sie Paperless jetzt zusätzlich auf diesem Computer installieren?' +
+    sLineBreak + 'Dafür muss Docker Desktop installiert und gestartet sein.' +
+    sLineBreak + 'Ihre Servereinstellungen bleiben erhalten.', mtConfirmation, [mbYes, mbNo], 0) <> mrYes then Exit;
+  Values[0] := paperless_version_edit.Text;
+  Values[1] := redis_version_edit.Text;
+  Values[2] := postgres_version_edit.Text;
+  Values[3] := gotenberg_version_edit.Text;
+  Values[4] := tika_version_edit.Text;
+  Values[5] := alpine_version_edit.Text;
+  Values[6] := busybox_version_edit.Text;
+  for I := 0 to 6 do Snapshot[I] := FVersionSnapshot[I];
+  PreviousSetup := SetupFrm;
+  PreviousReminder := NoticeReminderMode;
+  PreviousTerminate := TerminateApplicationOnClose;
+  PreviousBackup := IsBackup;
+  PreviousUpdate := IsUpdate;
+  PreviousWriteCompose := ShouldWriteNewCompose;
+  PreviousInstallation := IsPaperlessInstallation;
+  PreviousWantsInstall := WantsInstall;
+  PreviousOpenPaperless := ShouldOpenPaperless;
+  PreviousCompose := ComposePath;
+  PreviousNewCompose := NewComposePath;
+  PreviousCommand := CmdTargetPath;
+  FChangingInstallationMode := True;
+  try
+    ExternalInstallationSelected := False;
+    LocalInstallationSelected := True;
+    InstallationModeRadioGroup.ItemIndex := 0;
+    IsBackup := False;
+    IsUpdate := False;
+    ShouldWriteNewCompose := False;
+    IsPaperlessInstallation := False;
+    NoticeReminderMode := False;
+    LoadVersionsForMode(False);
+    InitLogger(AppDataFolder);
+    SaveEmptyEnvFile;
+    SetupFrm := TSetupFrm.Create(Self);
+    try
+      SetupFrm.AdditionalLocalInstallation := True;
+      SetupFrm.ShowModal;
+      Result := SetupFrm.InstallationSucceeded and LocalInstallationAvailable;
+      if Result then
+      begin
+        // Complete the same local metadata preparation as after first startup.
+        // Dieselben lokalen Metadaten wie nach der Ersteinrichtung vorbereiten.
+        WriteComposeContainerAndVolumeInfo(AppDataFolder);
+        ReadContainerNamesFromFile;
+      end;
+    finally
+      SetupFrm.Free;
+    end;
+  finally
+    SetupFrm := PreviousSetup;
+    NoticeReminderMode := PreviousReminder;
+    TerminateApplicationOnClose := PreviousTerminate;
+    IsBackup := PreviousBackup;
+    IsUpdate := PreviousUpdate;
+    ShouldWriteNewCompose := PreviousWriteCompose;
+    IsPaperlessInstallation := PreviousInstallation;
+    WantsInstall := PreviousWantsInstall;
+    ShouldOpenPaperless := PreviousOpenPaperless;
+    ComposePath := PreviousCompose;
+    NewComposePath := PreviousNewCompose;
+    CmdTargetPath := PreviousCommand;
+    ExternalInstallationSelected := True;
+    LocalInstallationSelected := False;
+    InstallationModeRadioGroup.ItemIndex := 1;
+    paperless_version_edit.Text := Values[0];
+    redis_version_edit.Text := Values[1];
+    postgres_version_edit.Text := Values[2];
+    gotenberg_version_edit.Text := Values[3];
+    tika_version_edit.Text := Values[4];
+    alpine_version_edit.Text := Values[5];
+    busybox_version_edit.Text := Values[6];
+    for I := 0 to 6 do FVersionSnapshot[I] := Snapshot[I];
+    FChangingInstallationMode := False;
+  end;
+end;
+
 // Check the registered local installation without starting Docker.
 // Die registrierte lokale Installation ohne Dockerstart prüfen.
 function TMainformFrm.LocalInstallationAvailable: Boolean;
@@ -1681,7 +1803,8 @@ begin
   if not InstallationPathReady or not System.SysUtils.DirectoryExists(AppDataFolder) then Exit;
   Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
-    if not SameText(Ini.ReadString('Einrichtung', 'Installation abgeschlossen', ''), 'Ja') then Exit;
+    if not SameText(Ini.ReadString('Einrichtung', 'Lokale Installation abgeschlossen',
+      Ini.ReadString('Einrichtung', 'Installation abgeschlossen', '')), 'Ja') then Exit;
     LocalCompose := Ini.ReadString('Pfade', 'DockerComposePfad', '').Trim;
     Result := (LocalCompose <> '') and FileExists(LocalCompose);
   finally
@@ -1700,7 +1823,8 @@ begin
     raise Exception.Create('Der lokale Installationsordner ist nicht verfügbar.');
   Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
   try
-    Installed := Ini.ReadString('Einrichtung', 'Installation abgeschlossen', '');
+    Installed := Ini.ReadString('Einrichtung', 'Lokale Installation abgeschlossen',
+      Ini.ReadString('Einrichtung', 'Installation abgeschlossen', ''));
     LocalCompose := Ini.ReadString('Pfade', 'DockerComposePfad', '').Trim;
   finally
     Ini.Free;
@@ -1841,35 +1965,20 @@ begin
     Exit;
   end;
   if NewExternal = ExternalInstallationSelected then Exit;
-  // Refuse a local switch before asking to save or changing any profile data.
-  // Vor Speichern oder Profilwechsel eine fehlende lokale Installation abfangen.
-  if not NewExternal then
+  // A modal setup must not overlap a running server check or data operation.
+  // Ein modales Setup darf nicht mit Serverprüfung oder Datenvorgang überlappen.
+  if ScriptBusy or FServerBackupCheckActive or (FStartupCheckHandle <> 0) or
+     (FExternalTestResultPath <> '') then
   begin
+    FChangingInstallationMode := True;
     try
-      if not LocalInstallationAvailable then
-      begin
-        FChangingInstallationMode := True;
-        try
-          InstallationModeRadioGroup.ItemIndex := 1;
-        finally
-          FChangingInstallationMode := False;
-        end;
-        CenteredMessageDlg('Es wurde keine vollständige lokale Installation mit Compose-Datei gefunden. Der Wechsel ist nicht möglich.', mtWarning, [mbOK], 0);
-        Exit;
-      end;
-    except
-      on E: Exception do
-      begin
-        FChangingInstallationMode := True;
-        try
-          InstallationModeRadioGroup.ItemIndex := 1;
-        finally
-          FChangingInstallationMode := False;
-        end;
-        CenteredMessageDlg('Die lokale Installation konnte nicht geprüft werden: ' + E.Message, mtWarning, [mbOK], 0);
-        Exit;
-      end;
+      if ExternalInstallationSelected then InstallationModeRadioGroup.ItemIndex := 1
+      else InstallationModeRadioGroup.ItemIndex := 0;
+    finally
+      FChangingInstallationMode := False;
     end;
+    CenteredShowMessage('Bitte warten Sie, bis der laufende Vorgang abgeschlossen ist.');
+    Exit;
   end;
   OldValues[0] := paperless_version_edit.Text;
   OldValues[1] := redis_version_edit.Text;
@@ -1911,12 +2020,36 @@ begin
         SaveVersionsForMode(False);
       end;
     end;
+    if not NewExternal and not LocalInstallationAvailable then
+    begin
+      FChangingInstallationMode := True;
+      try
+        InstallationModeRadioGroup.ItemIndex := 1;
+      finally
+        FChangingInstallationMode := False;
+      end;
+      if not InstallLocalAfterServer then Exit;
+      FLocalStartupPending := True;
+    end;
     if not NewExternal and FLocalStartupPending then
       PrepareLocalAfterExternalStart;
-    // Start the server profile with the saved local tags, including any just accepted edits.
-    // Das Serverprofil mit den gespeicherten lokalen Tags füllen, einschließlich gerade bestätigter Änderungen.
+    // Initialize new server profiles from local tags; retain existing independent profiles.
+    // Neue Serverprofile mit lokalen Tags vorbelegen; vorhandene getrennte Profile erhalten.
     LoadVersionsForMode(False);
-    if NewExternal then SaveVersionsForMode(True);
+    if NewExternal then
+    begin
+      // Preserve an existing server version profile when returning from local mode.
+      // Ein vorhandenes Server-Versionsprofil bei der Rückkehr aus Lokal erhalten.
+      Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
+      try
+        if Ini.ValueExists('Versionen Extern', IniKeyPaperlessVersion) then
+          LoadVersionsForMode(True)
+        else
+          SaveVersionsForMode(True);
+      finally
+        Ini.Free;
+      end;
+    end;
     Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
     try
       if NewExternal then Ini.WriteString('Paperless Extern', 'Betriebsart', 'Extern')
@@ -1926,6 +2059,13 @@ begin
     end;
     ExternalInstallationSelected := NewExternal;
     LocalInstallationSelected := not NewExternal;
+    FChangingInstallationMode := True;
+    try
+      if NewExternal then InstallationModeRadioGroup.ItemIndex := 1
+      else InstallationModeRadioGroup.ItemIndex := 0;
+    finally
+      FChangingInstallationMode := False;
+    end;
     CancelExternalStartupCheck;
     FExternalConnectionHeader := 'nicht verbunden';
     if LocalInstallationSelected then FLocalStartupPending := False;
@@ -2598,6 +2738,13 @@ begin
     WriteServerSecret(SettingsPath, 'Passphrase', ExternalKeyPassphraseEdit.Text);
     Ini := TAppSettingsIni.Create(SettingsPath);
     try
+      // Invalidate installation history when the saved server target changes.
+      // Den Installationsstand bei einem geänderten Serverziel zurücksetzen.
+      if not SameText(Trim(Ini.ReadString('Paperless Extern', 'Host', '')), Trim(ExternalHostEdit.Text)) or
+         (Trim(Ini.ReadString('Paperless Extern', 'SSH-Port', '')) <> Trim(ExternalPortEdit.Text)) or
+         (Trim(Ini.ReadString('Paperless Extern', 'Compose-Datei', '')) <> Trim(ExternalComposePathEdit.Text)) or
+         (Ini.ReadString('Paperless Extern', IniKeyServerComposeProject, '') <> Project) then
+        Ini.WriteString('Paperless Extern', 'Installation abgeschlossen', 'Unbekannt');
       Ini.WriteString('Paperless Extern', 'Host', ExternalHostEdit.Text);
       Ini.WriteString('Paperless Extern', 'SSH-Port', ExternalPortEdit.Text);
       Ini.WriteString('Paperless Extern', IniKeyServerWebPort, IntToStr(WebPort));
@@ -2964,6 +3111,7 @@ begin
               Ini.WriteString('Paperless Extern', 'Compose-Datei', ServerInstallFolder);
               Ini.WriteString('Paperless Extern', IniKeyServerComposeProject, ComposeProjectName);
               Ini.WriteString('Paperless Extern', IniKeyServerWebPort, IntToStr(ServerInstallWebPort));
+              Ini.WriteString('Paperless Extern', 'Installation abgeschlossen', 'Ja');
               Ini.UpdateFile;
             finally
               Ini.Free;
@@ -3791,6 +3939,7 @@ begin
   // Create the section after the installation path is ready.
   // Den Abschnitt erst nach bestätigtem Installationspfad anlegen.
   EnsureExternalPaperlessSection(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
+  InitializeInstallationStates;
   try
     LoadExternalServerSettings;
     BeginExternalStartupCheck;
@@ -3979,6 +4128,7 @@ begin
       Ini := TAppSettingsIni.Create(IncludeTrailingPathDelimiter(AppDataFolder) + SettingsFileName);
       try
         Ini.WriteString('Einrichtung', 'Installation abgeschlossen', 'Ja');
+        Ini.WriteString('Einrichtung', 'Lokale Installation abgeschlossen', 'Ja');
         Ini.UpdateFile;
       finally
         Ini.Free;
@@ -5707,6 +5857,7 @@ begin
           if IsPaperlessInstallation = True then
           begin
             WriteStandardVersionAfterInstallation;
+            if Assigned(SetupFrm) then SetupFrm.InstallationSucceeded := True;
             CenteredMessageBox('Paperless wurde erfolgreich installiert und gestartet.' + #13#10 +
               'Nach Bestätigung wird die ComputerRalle-Website im Browser geöffnet (https://computerralle.de).' + #13#10 +
               'Paperless erreichen Sie unter http://localhost:8001. Geben Sie Paperless ein wenig Zeit zum Starten.',
@@ -5738,6 +5889,8 @@ begin
             IsPaperlessInstallation := False;
             SetupFrm.InstallationCancelBtn.Visible := False;
             SetupFrm.HinweisVerstandenBtn.Enabled := True;
+            if SetupFrm.AdditionalLocalInstallation then
+              SetupFrm.HinweisVerstandenBtn.Caption := 'Lokale Installation verwenden';
           end
           else if IsBackup = True then
           begin
